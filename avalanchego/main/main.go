@@ -16,10 +16,6 @@ import (
 )
 
 func main() {
-	if os.Getenv("GOPATH") == "" {
-		fmt.Printf("GOPATH is not set\n")
-		os.Exit(1)
-	}
 
 	fs := config.BuildFlagSet()
 	v, err := config.BuildViper(fs, os.Args[1:])
