@@ -28,8 +28,8 @@ package tracetest
 
 import (
 	"encoding/json"
+	"io/ioutil"
 	"math/big"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -49,7 +49,8 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
 
-	// Force-load native, to trigger registration
+	// Force-load native and js pacakges, to trigger registration
+	_ "github.com/ava-labs/coreth/eth/tracers/js"
 	_ "github.com/ava-labs/coreth/eth/tracers/native"
 )
 
@@ -133,12 +134,18 @@ type callTracerTest struct {
 	Result  *callTrace    `json:"result"`
 }
 
+// Iterates over all the input-output datasets in the tracer test harness and
+// runs the JavaScript tracers against them.
+func TestCallTracerLegacy(t *testing.T) {
+	testCallTracer("callTracerLegacy", "call_tracer_legacy", t)
+}
+
 func TestCallTracerNative(t *testing.T) {
 	testCallTracer("callTracer", "call_tracer", t)
 }
 
 func testCallTracer(tracerName string, dirPath string, t *testing.T) {
-	files, err := os.ReadDir(filepath.Join("testdata", dirPath))
+	files, err := ioutil.ReadDir(filepath.Join("testdata", dirPath))
 	if err != nil {
 		t.Fatalf("failed to retrieve tracer test suite: %v", err)
 	}
@@ -155,7 +162,7 @@ func testCallTracer(tracerName string, dirPath string, t *testing.T) {
 				tx   = new(types.Transaction)
 			)
 			// Call tracer test found, read if from disk
-			if blob, err := os.ReadFile(filepath.Join("testdata", dirPath, file.Name())); err != nil {
+			if blob, err := ioutil.ReadFile(filepath.Join("testdata", dirPath, file.Name())); err != nil {
 				t.Fatalf("failed to read testcase: %v", err)
 			} else if err := json.Unmarshal(blob, test); err != nil {
 				t.Fatalf("failed to parse testcase: %v", err)
@@ -244,7 +251,7 @@ func camel(str string) string {
 }
 
 func BenchmarkTracers(b *testing.B) {
-	files, err := os.ReadDir(filepath.Join("testdata", "call_tracer"))
+	files, err := ioutil.ReadDir(filepath.Join("testdata", "call_tracer"))
 	if err != nil {
 		b.Fatalf("failed to retrieve tracer test suite: %v", err)
 	}
@@ -254,7 +261,7 @@ func BenchmarkTracers(b *testing.B) {
 		}
 		file := file // capture range variable
 		b.Run(camel(strings.TrimSuffix(file.Name(), ".json")), func(b *testing.B) {
-			blob, err := os.ReadFile(filepath.Join("testdata", "call_tracer", file.Name()))
+			blob, err := ioutil.ReadFile(filepath.Join("testdata", "call_tracer", file.Name()))
 			if err != nil {
 				b.Fatalf("failed to read testcase: %v", err)
 			}
@@ -262,7 +269,7 @@ func BenchmarkTracers(b *testing.B) {
 			if err := json.Unmarshal(blob, test); err != nil {
 				b.Fatalf("failed to parse testcase: %v", err)
 			}
-			benchTracer("callTracer", test, b)
+			benchTracer("callTracerNative", test, b)
 		})
 	}
 }

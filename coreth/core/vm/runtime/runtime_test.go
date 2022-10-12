@@ -47,6 +47,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/asm"
 
 	// force-load native tracers to trigger registration
+	_ "github.com/ava-labs/coreth/eth/tracers/js"
 	_ "github.com/ava-labs/coreth/eth/tracers/native"
 )
 
