@@ -1,0 +1,50 @@
+name: ci
+
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+    - uses: actions/checkout@v3
+
+    - run: echo "IMAGE_TAG=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+      on:
+        push:
+          tags: [ "v*" ]
+    - run: echo "IMAGE_TAG=latest" >> $GITHUB_ENV
+      on:
+        push:
+          branches: [ "main" ]
+
+    - name: Build image
+      run: build . --file dockerfile -t go-flare
+    
+    - name: Push image to ghcr.io
+      run: |
+        echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+        docker tag go-flare ghcr.io/${{ env.GITHUB_REPOSITORY }}
+        docker push go-flare ghcr.io/${{ env.GITHUB_REPOSITORY }}
+
+
+    # - name: Log in to ghcr.io
+    #   uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
+    #   with:
+    #     registry: ${{ env.REGISTRY }}
+    #     username: ${{ github.actor }}
+    #     password: ${{ secrets.GITHUB_TOKEN }}
+
+    # - name: Extract metadata (tags, labels) for Docker
+    #   id: meta
+    #   uses: docker/metadata-action@98669ae865ea3cffbcbaa878cf57c20bbf1c6c38
+    #   with:
+    #     images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
