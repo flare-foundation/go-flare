@@ -31,5 +31,6 @@ jobs:
     - name: Build and push image
       uses: docker/build-push-action@v2
       with:
+        push: true
         tags: | 
           ghcr.io/${{ github.repository }}/go-flare:${{ env.IMAGE_TAG }}
