@@ -49,7 +49,7 @@ hgcr.io/flare-foundation/go-flare
 ### Container builds in CI
 
 CI builds on each:
-- push on `main` branch, pushes image tagged as "latest"
+- push on `main` branch, pushes image tagged as "dev"
 - creation of a tag, pushes images tagged as the tag itself
 
 Builds: \

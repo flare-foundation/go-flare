@@ -15,17 +15,12 @@ FROM ubuntu:20.04
 
 WORKDIR /app
 
-# Can be one of following: leveldb, rocksdb, memdb. memdb
-# docs: https://docs.avax.network/nodes/maintain/avalanchego-config-flags#database
-ARG DB_TYPE=leveldb
-
-ENV FBA_VALs=/app/conf/coston/fba_validators.json \
-    HTTP_HOST=0.0.0.0 \
+ENV HTTP_HOST=0.0.0.0 \
     HTTP_PORT=9650 \
     STAKING_PORT=9651 \
     PUBLIC_IP= \
     DB_DIR=/app/db \
-    DB_TYPE=${DB_TYPE} \
+    DB_TYPE=leveldb \
     BOOTSTRAP_IPS= \
     BOOTSTRAP_IDS= \
     CHAIN_CONFIG_DIR=/app/conf \
