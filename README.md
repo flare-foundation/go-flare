@@ -54,25 +54,3 @@ CI builds on each:
 
 Builds: \
 two images, `go-flare:<TAG>` one with `leveldb`
-
-
-### Runtime environment variables
-
-| Varible name | Default value | description |
-|---|---|---|
-| `HTTP_HOST` | `0.0.0.0` | Should always be `0.0.0.0` as it's a container |
-| `HTTP_PORT` | `9650` | |
-| `STAKING_PORT` | `9651` | |
-| `PUBLIC_IP` | ` ` | can be autoconfigured by having `AUTOCONFIGURE_PUBLIC_IP` enabled |
-| `DB_TYPE` | `leveldb` | One of `leveldb \| memdb \| memdb`. |
-| `DB_DIR` | `/app/db` | |
-| `BOOTSTRAP_IPS` | ` ` | [--bootstrap-ids-string](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#--bootstrap-ids-string), can be autoconfigured by enabling `AUTOCONFIGURE_BOOTSTRAP` |
-| `BOOTSTRAP_IDS` | ` ` | [--bootstrap-ips-string](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#--bootstrap-ips-string), can be autoconfigured by enabling `AUTOCONFIGURE_BOOTSTRAP` |
-| `CHAIN_CONFIG_DIR` | `/app/conf` | |
-| `LOG_DIR` | `/app/logs` | |
-| `LOG_LEVEL` | `info` | |
-| `NETWORK_ID` | `coston2` | One of `flare \| costwo`. Define the [target network](https://docs.flare.network/dev/reference/network-configs/) to work with |
-| `AUTOCONFIGURE_PUBLIC_IP` | `1` | Autoconfigure PUBLIC_IP, skipped if PUBLIC_IP is set |
-| `AUTOCONFIGURE_BOOTSTRAP` | `1` | Enables auto-fetch of [--bootstrap-ids-string](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#--bootstrap-ids-string) and [--bootstrap-ips-string](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#--bootstrap-ips-string) values from `AUTOCONFIGURE_BOOTSTRAP_ENDPOINT` |
-| `AUTOCONFIGURE_BOOTSTRAP_ENDPOINT` | `https://coston2.flare.network/ext/info` | Endpoint used for [bootstrapping](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#bootstrapping) info fetch |
-| `EXTRA_ARGUMENTS` | ` ` | Extra arguments passed to flare binary when running it from `entrypoint.sh` |
