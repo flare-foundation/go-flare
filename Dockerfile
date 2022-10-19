@@ -6,8 +6,8 @@ RUN apt-get update -y && \
 WORKDIR /app/
 
 COPY . ./
-RUN git init
 RUN ls -la && ls -la .git
+RUN git init
 
 WORKDIR /app/avalanchego/
 
