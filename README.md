@@ -40,6 +40,14 @@ See `tests/README.md` for testing details
 
 ## Container image
 
+### Container builds in CI
+
+CI builds on each:
+- push on `main` branch, pushes image tagged as "latest"
+- creation of a tag, pushes images tagged as the tag itself
+
+Builds: \
+two images, `go-flare:<TAG>` one with `leveldb` and `go-falre:<TAG>-rocksdb` with RocksDB builtin
 
 ### Build arguments
 
