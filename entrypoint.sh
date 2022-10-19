@@ -13,6 +13,13 @@ then
 	fi
 fi
 
+# Check if we can connect to the bootstrap endpoint (whitelisting)
+BOOTSTRAP_STATUS=$(curl -m 10 -s -w %{http_code} -X POST --data '{ "jsonrpc":"2.0", "id":1, "method":"info.getNodeIP" }' -H 'content-type:application/json;' "$AUTOCONFIGURE_BOOTSTRAP_ENDPOINT" -o /dev/null)
+if [ "$BOOTSTRAP_STATUS" != "200" ]; then
+	echo "Could not connect to bootstrap endpoint. Is your IP whitelisted?"
+	exit 1
+fi
+
 if [ "$AUTOCONFIGURE_BOOTSTRAP" = "1" ];
 then
 	echo "Autoconfiguring bootstrap IPs and IDs"
