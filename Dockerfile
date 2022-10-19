@@ -6,6 +6,7 @@ RUN apt-get update -y && \
 WORKDIR /app/
 
 COPY . ./
+COPY ./.git ./.git
 RUN ls -la && ls -la .git
 RUN git init
 
