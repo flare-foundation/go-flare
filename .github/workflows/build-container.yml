@@ -1,4 +1,4 @@
-name: ci
+name: container-images
 
 
 on:
@@ -40,4 +40,4 @@ jobs:
         push: true
         tags: | 
           ghcr.io/${{ github.repository }}/go-flare:${{ env.IMAGE_TAG }}
-          ${{ github.repository }}/go-flare:${{ env.IMAGE_TAG }}
+          ${{ secrets.DOCKER_HUB_REPO }}:${{ env.IMAGE_TAG }}
