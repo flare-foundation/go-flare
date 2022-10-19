@@ -37,3 +37,20 @@ This guide explains how to deploy your own observation node: https://docs.flare.
 ## Tests
 
 See `tests/README.md` for testing details
+
+## Container image
+
+Public container images are hosted on [Docker HUB](https://hub.docker.com/r/flarefoundation/go-flare) and [Github Packages](https://github.com/orgs/flare-foundation/packages?repo_name=go-flare);
+```
+docker.io/flarefoundation/go-flare
+hgcr.io/flare-foundation/go-flare
+```
+
+### Container builds in CI
+
+CI builds on each:
+- push on `main` branch, pushes image tagged as "dev"
+- creation of a tag, pushes images tagged as the tag itself
+
+Builds: \
+two images, `go-flare:<TAG>` one with `leveldb`
