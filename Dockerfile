@@ -5,14 +5,7 @@ RUN apt-get update -y && \
 
 WORKDIR /app/
 
-# <<< start warn /!\
-# - clone is a TEMPORARY stage until automated container builds are implemented in the source
-#   https://github.com/flare-foundation/go-flare repository
-# 
-# - When setup in source repo, this step will not be needed, as the source code will be just
-#   passed along with in build context directory to build stage
-RUN git clone https://github.com/flare-foundation/go-flare . && git config advice.detachedHead false && git checkout v0.7.0
-# >>> end warn
+COPY . .
 
 WORKDIR /app/avalanchego/
 
