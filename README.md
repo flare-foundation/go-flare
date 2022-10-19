@@ -40,6 +40,12 @@ See `tests/README.md` for testing details
 
 ## Container image
 
+Public container images are hosted on Docker HUB and Github Packages;
+```
+docker.io/flarenetwork/go-flare
+hgcr.io/flare-foundation/go-flare
+```
+
 ### Container builds in CI
 
 CI builds on each:
