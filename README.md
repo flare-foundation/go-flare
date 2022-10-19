@@ -47,13 +47,7 @@ CI builds on each:
 - creation of a tag, pushes images tagged as the tag itself
 
 Builds: \
-two images, `go-flare:<TAG>` one with `leveldb` and `go-falre:<TAG>-rocksdb` with RocksDB builtin
-
-### Build arguments
-
-| Argument name | Default value | description |
-|---|---|---|
-| `DB_TYPE` | `leveldb` | if `rocksdb` the image will be built with rocksdb support; ref [docs.avax.network](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#database) |
+two images, `go-flare:<TAG>` one with `leveldb`
 
 
 ### Runtime environment variables
@@ -64,7 +58,7 @@ two images, `go-flare:<TAG>` one with `leveldb` and `go-falre:<TAG>-rocksdb` wit
 | `HTTP_PORT` | `9650` | |
 | `STAKING_PORT` | `9651` | |
 | `PUBLIC_IP` | ` ` | can be autoconfigured by having `AUTOCONFIGURE_PUBLIC_IP` enabled |
-| `DB_TYPE` | `leveldb` | One of `leveldb \| rocksdb \| memdb \| memdb`. Rocksdb can only be used with images whose tags end with `-rocksdb`. |
+| `DB_TYPE` | `leveldb` | One of `leveldb \| memdb \| memdb`. |
 | `DB_DIR` | `/app/db` | |
 | `BOOTSTRAP_IPS` | ` ` | [--bootstrap-ids-string](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#--bootstrap-ids-string), can be autoconfigured by enabling `AUTOCONFIGURE_BOOTSTRAP` |
 | `BOOTSTRAP_IDS` | ` ` | [--bootstrap-ips-string](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#--bootstrap-ips-string), can be autoconfigured by enabling `AUTOCONFIGURE_BOOTSTRAP` |

@@ -43,16 +43,5 @@ jobs:
         context: . # Because GH actions are for kids and put protection on everything; https://stackoverflow.com/a/71159809/11276254
         push: true
         tags: |
-          ghcr.io/${{ github.repository }}/go-flare:${{ env.IMAGE_TAG }}
+          ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }}
           ${{ secrets.DOCKER_HUB_REPO }}:${{ env.IMAGE_TAG }}
-
-    - name: Build and push rocksdb image
-      uses: docker/build-push-action@v3.2.0
-      with:
-        context: . # Because GH actions are for kids and put protection on everything; https://stackoverflow.com/a/71159809/11276254
-        push: true
-        tags: |
-          ghcr.io/${{ github.repository }}/go-flare:${{ env.IMAGE_TAG }}-rocksdb
-          ${{ secrets.DOCKER_HUB_REPO }}:${{ env.IMAGE_TAG }}-rocksdb
-        build-args: |
-          DB_TYPE=rocksdb

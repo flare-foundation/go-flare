@@ -9,17 +9,7 @@ COPY . ./
 
 WORKDIR /app/avalanchego/
 
-# Can be one of following: leveldb, rocksdb, memdb. memdb
-# docs: https://docs.avax.network/nodes/maintain/avalanchego-config-flags#database
-ARG DB_TYPE=leveldb
-
-# Build with RocksDB if enabled in build time
-RUN if [ "$DB_TYPE" = "rocksdb" ]; \
-        then export ROCKSDBALLOWED=1; \
-        else unset ROCKSDBALLOWED; \
-    fi; \
-    /app/avalanchego/scripts/build.sh
-
+RUN /app/avalanchego/scripts/build.sh
 
 FROM ubuntu:20.04
 
