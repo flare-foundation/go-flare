@@ -19,7 +19,8 @@ jobs:
       with:
         fetch-depth: 0
     - run: ls -lah && ls -lah .git
-    
+    - run: git symbolic-ref -q --short HEAD || git describe --tags --exact-match || true
+
     - run: echo "IMAGE_TAG=latest" >> $GITHUB_ENV
       if: ${{ github.ref_name }} == 'main'
     - run: echo "IMAGE_TAG=${GITHUB_REF##*/}" >> $GITHUB_ENV
