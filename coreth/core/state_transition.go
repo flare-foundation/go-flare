@@ -398,6 +398,13 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 						log.Warn("Error setting governance timelock", "error", err)
 					}
 				}
+			} else if GetInitialAirdropChangeIsActivatedAndCalled(chainID, timestamp, *msg.To()) && len(st.data) == 4 {
+				if bytes.Equal(st.data[0:4], UpdateInitialAirdropAddressSelector(chainID, timestamp)) {
+					err = st.UpdateInitialAirdropAddress(chainID, timestamp)
+					if err != nil {
+						log.Warn("Error updating initialAirdrop contract", "error", err)
+					}
+				}
 			}
 		}
 	}

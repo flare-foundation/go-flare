@@ -18,6 +18,10 @@ var (
 	costwoGovActivationTime     = big.NewInt(time.Date(2022, time.September, 8, 0, 0, 0, 0, time.UTC).Unix())
 	stagingGovActivationTime    = big.NewInt(time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC).Unix())
 	localFlareGovActivationTime = big.NewInt(time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC).Unix())
+
+	flareInitialAirdropChangeActivationTime      = big.NewInt(time.Date(2022, time.November, 10, 15, 0, 0, 0, time.UTC).Unix())
+	costwoInitialAirdropChangeActivationTime     = big.NewInt(time.Date(2022, time.October, 27, 20, 0, 0, 0, time.UTC).Unix())
+	localFlareInitialAirdropChangeActivationTime = big.NewInt(time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC).Unix())
 )
 
 func GetGovernanceSettingIsActivatedAndCalled(chainID *big.Int, blockTime *big.Int, to common.Address) bool {
@@ -47,6 +51,28 @@ func GetGovernanceSettingIsActivatedAndCalled(chainID *big.Int, blockTime *big.I
 	}
 }
 
+func GetInitialAirdropChangeIsActivatedAndCalled(chainID *big.Int, blockTime *big.Int, to common.Address) bool {
+	switch {
+	case chainID.Cmp(params.FlareChainID) == 0 && blockTime.Cmp(flareInitialAirdropChangeActivationTime) >= 0:
+		switch blockTime {
+		default:
+			return to == common.HexToAddress("0x4AeE563140E36abA778944E2Ca68c3988CAd5730")
+		}
+	case chainID.Cmp(params.CostwoChainID) == 0 && blockTime.Cmp(costwoInitialAirdropChangeActivationTime) >= 0:
+		switch blockTime {
+		default:
+			return to == common.HexToAddress("0x28561B938342efD0677f60Fd0912e1931367a612")
+		}
+	case chainID.Cmp(params.LocalFlareChainID) == 0 && blockTime.Cmp(localFlareInitialAirdropChangeActivationTime) >= 0:
+		switch blockTime {
+		default:
+			return to == common.HexToAddress("0x1000000000000000000000000000000000000008")
+		}
+	default:
+		return false
+	}
+}
+
 // Signalling block.coinbase value
 // address public constant SIGNAL_COINBASE = address(0x00000000000000000000000000000000000DEaD0);
 //https://gitlab.com/flarenetwork/flare-smart-contracts/-/blob/4bb79bfe7266b43ea46e681f8a86ab8b9ef36446/contracts/genesis/implementation/GovernanceSettings.sol#L17
@@ -55,6 +81,13 @@ func GetGovernanceSettingsCoinbaseSignalAddr(chainID *big.Int, blockTime *big.In
 	switch {
 	default:
 		return common.HexToAddress("0x00000000000000000000000000000000000DEaD0")
+	}
+}
+
+func GetInitialAirdropChangeCoinbaseSignalAddr(chainID *big.Int, blockTime *big.Int) common.Address {
+	switch {
+	default:
+		return common.HexToAddress("0x00000000000000000000000000000000000dead2")
 	}
 }
 
@@ -78,6 +111,16 @@ func SetTimelockSelector(chainID *big.Int, blockTime *big.Int) []byte {
 	}
 }
 
+// function updateInitialAirdropAddress() external
+// https://flare-explorer.flare.network/address/0x4AeE563140E36abA778944E2Ca68c3988CAd5730/contracts#address-tabs
+
+func UpdateInitialAirdropAddressSelector(chainID *big.Int, blockTime *big.Int) []byte {
+	switch {
+	default:
+		return []byte{0x7d, 0x1f, 0x99, 0x46}
+	}
+}
+
 func NewGovernanceAddressIsPermitted(chainID *big.Int, blockTime *big.Int, newGovernanceAddress common.Address) bool {
 	switch {
 	case chainID.Cmp(params.FlareChainID) == 0:
@@ -98,7 +141,7 @@ func NewGovernanceAddressIsPermitted(chainID *big.Int, blockTime *big.Int, newGo
 	case chainID.Cmp(params.LocalFlareChainID) == 0:
 		switch {
 		case blockTime.Cmp(big.NewInt(time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC).Unix())) >= 0:
-			return newGovernanceAddress == common.HexToAddress("0x1000000000000000000000000000000000000008")
+			return newGovernanceAddress == common.HexToAddress("0x1000000000000000000000000000000000000009")
 		default:
 			return false
 		}
@@ -142,6 +185,30 @@ func NewTimelockIsPermitted(chainID *big.Int, blockTime *big.Int, newTimelock ui
 	}
 }
 
+func GetInitialAirdropContractAddress(chainID *big.Int, blockTime *big.Int) common.Address {
+	switch {
+	default:
+		return common.HexToAddress("0x1000000000000000000000000000000000000006")
+	}
+}
+
+func GetTargetAirdropContractAddress(chainID *big.Int, blockTime *big.Int) common.Address {
+	switch {
+	case chainID.Cmp(params.FlareChainID) == 0:
+		switch {
+		default:
+			return common.HexToAddress("0xbe653C54DF337F13Fcb726101388F4a4803049F3")
+		}
+	case chainID.Cmp(params.CostwoChainID) == 0:
+		switch {
+		default:
+			return common.HexToAddress("0xC83Ec6a4aFf2099942836860A28C7e248Fabc32C")
+		}
+	default:
+		return common.HexToAddress("0x000000000000000000000000000000000000dEaD")
+	}
+}
+
 func (st *StateTransition) SetGovernanceAddress(chainID *big.Int, timestamp *big.Int, newGovernanceAddress []byte) error {
 	if NewGovernanceAddressIsPermitted(chainID, timestamp, common.BytesToAddress(newGovernanceAddress)) {
 		coinbaseSignal := GetGovernanceSettingsCoinbaseSignalAddr(chainID, timestamp)
@@ -171,5 +238,24 @@ func (st *StateTransition) SetTimelock(chainID *big.Int, timestamp *big.Int, new
 			return err
 		}
 	}
+	return nil
+}
+
+func (st *StateTransition) UpdateInitialAirdropAddress(chainID *big.Int, timestamp *big.Int) error {
+	coinbaseSignal := GetInitialAirdropChangeCoinbaseSignalAddr(chainID, timestamp)
+	originalCoinbase := st.evm.Context.Coinbase
+	defer func() {
+		st.evm.Context.Coinbase = originalCoinbase
+	}()
+	st.evm.Context.Coinbase = coinbaseSignal
+	_, _, err := st.evm.Call(vm.AccountRef(coinbaseSignal), st.to(), st.data, st.evm.Context.GasLimit, big.NewInt(0))
+	if err != nil {
+		return err
+	}
+	initialAirdropAddress := GetInitialAirdropContractAddress(chainID, timestamp)
+	targetAidropAddress := GetTargetAirdropContractAddress(chainID, timestamp)
+	airdropBalance := st.state.GetBalance(initialAirdropAddress)
+	st.state.SubBalance(initialAirdropAddress, airdropBalance)
+	st.state.AddBalance(targetAidropAddress, airdropBalance)
 	return nil
 }
