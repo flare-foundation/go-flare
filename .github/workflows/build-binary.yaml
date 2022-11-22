@@ -26,7 +26,9 @@ jobs:
     - run: sudo apt-get update -y && sudo apt-get install -y rsync
     - name: build
       id: build
-      run: ./avalanchego/scripts/build.sh
+      run: |
+        cd avalanchego
+        ./scripts/build.sh
 
     - name: Archive production artifacts
       uses: actions/upload-artifact@v3
