@@ -46,9 +46,9 @@ COPY entrypoint.sh /app/entrypoint.sh
 EXPOSE ${STAKING_PORT}
 EXPOSE ${HTTP_PORT}
 
-VOLUME [ ${DB_DIR} ]
-VOLUME [ ${LOG_DIR} ]
-VOLUME [ ${CHAIN_CONFIG_DIR} ]
+VOLUME [ "${DB_DIR}" ]
+VOLUME [ "${LOG_DIR}" ]
+VOLUME [ "${CHAIN_CONFIG_DIR}" ]
 
 HEALTHCHECK CMD curl --fail http://localhost:${HTTP_PORT}/ext/health || exit 1
 
