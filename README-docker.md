@@ -30,7 +30,7 @@ docker run -d \
 	-v /tmp/conf:/app/conf \
 	-p 9650:9650 \
 	-e AUTOCONFIGURE_BOOTSTRAP=1 \
-	flarefoundation/go-songbird:latest
+	flarefoundation/go-flare:latest
 ```
 
 ## Container Configuration
