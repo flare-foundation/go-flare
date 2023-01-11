@@ -33,7 +33,8 @@ ENV HTTP_HOST=0.0.0.0 \
     AUTOCONFIGURE_PUBLIC_IP=1 \
     AUTOCONFIGURE_BOOTSTRAP=1 \
     AUTOCONFIGURE_BOOTSTRAP_ENDPOINT=https://coston2.flare.network/ext/info \
-    EXTRA_ARGUMENTS=""
+    EXTRA_ARGUMENTS="" \
+    BOOTSTRAP_BEACON_CONNECTION_TIMEOUT="1m"
 
 RUN apt-get update -y && \
     apt-get install -y curl jq
