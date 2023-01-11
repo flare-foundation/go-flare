@@ -53,7 +53,8 @@ These are the environment variables you can edit and their default values:
 | `NETWORK_ID` | `costwo` | The network id. The common ids are `flare \| costwo` |
 | `AUTOCONFIGURE_PUBLIC_IP` | `0` | Set to `1` to autoconfigure `PUBLIC_IP`, skipped if PUBLIC_IP is set |
 | `AUTOCONFIGURE_BOOTSTRAP` | `0` | Set to `1` to autoconfigure `BOOTSTRAP_IPS` and `BOOTSTRAP_IDS` |
-| `AUTOCONFIGURE_BOOTSTRAP_ENDPOINT` | `https://coston2.flare.network/ext/info` <b>or</b> `https://flare.flare.network/ext/info` | Endpoint used for [bootstrapping](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#bootstrapping) when `AUTOCONFIGURE_BOOTSTRAP` is enabled. For the `flare` network id, this has to be set to `https://flare.flare.network/ext/info` |
+| `AUTOCONFIGURE_BOOTSTRAP_ENDPOINT` | `https://coston2.flare.network/ext/info` or<br> `https://flare.flare.network/ext/info` | Endpoint used for [bootstrapping](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#bootstrapping) when `AUTOCONFIGURE_BOOTSTRAP` is enabled. For the `flare` network id, this has to be set to `https://flare.flare.network/ext/info` |
+| `BOOTSTRAP_BEACON_CONNECTION_TIMEOUT` | `1m` | Set the duration value (eg. `45s` / `5m` / `1h`) for [--bootstrap-beacon-connection-timeout](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#--bootstrap-beacon-connection-timeout-duration) AvalancheGo flag. | 
 | `EXTRA_ARGUMENTS` | | Extra arguments passed to flare binary |
 
 
