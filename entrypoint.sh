@@ -37,6 +37,7 @@ fi
 	--db-type=$DB_TYPE \
 	--bootstrap-ips=$BOOTSTRAP_IPS \
 	--bootstrap-ids=$BOOTSTRAP_IDS \
+	--bootstrap-beacon-connection-timeout=$BOOTSTRAP_BEACON_CONNECTION_TIMEOUT \
 	--chain-config-dir=$CHAIN_CONFIG_DIR \
 	--log-dir=$LOG_DIR \
 	--log-level=$LOG_LEVEL \
