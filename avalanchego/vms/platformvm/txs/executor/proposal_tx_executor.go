@@ -16,8 +16,6 @@ import (
 
 	"github.com/ava-labs/avalanchego/utils/math"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
-	"github.com/ava-labs/avalanchego/vms/components/verify"
-	"github.com/ava-labs/avalanchego/vms/platformvm/reward"
 	"github.com/ava-labs/avalanchego/vms/platformvm/state"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
 	"github.com/ava-labs/avalanchego/vms/platformvm/utxo"
@@ -796,30 +794,6 @@ func (e *ProposalTxExecutor) RewardValidatorTx(tx *txs.RewardValidatorTx) error 
 			e.OnAbort.AddUTXO(utxo)
 		}
 
-		// Provide the reward here
-		if stakerToRemove.PotentialReward > 0 {
-			outIntf, err := e.Fx.CreateOutput(stakerToRemove.PotentialReward, uStakerTx.RewardsOwner)
-			if err != nil {
-				return fmt.Errorf("failed to create output: %w", err)
-			}
-			out, ok := outIntf.(verify.State)
-			if !ok {
-				return errInvalidState
-			}
-
-			utxo := &avax.UTXO{
-				UTXOID: avax.UTXOID{
-					TxID:        tx.TxID,
-					OutputIndex: uint32(len(uStakerTx.Outs) + len(uStakerTx.Stake)),
-				},
-				Asset: avax.Asset{ID: e.Ctx.AVAXAssetID},
-				Out:   out,
-			}
-
-			e.OnCommit.AddUTXO(utxo)
-			e.OnCommit.AddRewardUTXO(tx.TxID, utxo)
-		}
-
 		// Handle reward preferences
 		nodeID = uStakerTx.Validator.ID()
 		startTime = uStakerTx.StartTime()
@@ -864,66 +838,6 @@ func (e *ProposalTxExecutor) RewardValidatorTx(tx *txs.RewardValidatorTx) error 
 		vdrTx, ok := vdrTxIntf.Unsigned.(*txs.AddValidatorTx)
 		if !ok {
 			return errWrongTxType
-		}
-
-		// Calculate split of reward between delegator/delegatee
-		// The delegator gives stake to the validatee
-		delegatorShares := reward.PercentDenominator - uint64(vdrTx.Shares)                               // parentTx.Shares <= reward.PercentDenominator so no underflow
-		delegatorReward := delegatorShares * (stakerToRemove.PotentialReward / reward.PercentDenominator) // delegatorShares <= reward.PercentDenominator so no overflow
-		// Delay rounding as long as possible for small numbers
-		if optimisticReward, err := math.Mul64(delegatorShares, stakerToRemove.PotentialReward); err == nil {
-			delegatorReward = optimisticReward / reward.PercentDenominator
-		}
-		delegateeReward := stakerToRemove.PotentialReward - delegatorReward // delegatorReward <= reward so no underflow
-
-		offset := 0
-
-		// Reward the delegator here
-		if delegatorReward > 0 {
-			outIntf, err := e.Fx.CreateOutput(delegatorReward, uStakerTx.RewardsOwner)
-			if err != nil {
-				return fmt.Errorf("failed to create output: %w", err)
-			}
-			out, ok := outIntf.(verify.State)
-			if !ok {
-				return errInvalidState
-			}
-			utxo := &avax.UTXO{
-				UTXOID: avax.UTXOID{
-					TxID:        tx.TxID,
-					OutputIndex: uint32(len(uStakerTx.Outs) + len(uStakerTx.Stake)),
-				},
-				Asset: avax.Asset{ID: e.Ctx.AVAXAssetID},
-				Out:   out,
-			}
-
-			e.OnCommit.AddUTXO(utxo)
-			e.OnCommit.AddRewardUTXO(tx.TxID, utxo)
-
-			offset++
-		}
-
-		// Reward the delegatee here
-		if delegateeReward > 0 {
-			outIntf, err := e.Fx.CreateOutput(delegateeReward, vdrTx.RewardsOwner)
-			if err != nil {
-				return fmt.Errorf("failed to create output: %w", err)
-			}
-			out, ok := outIntf.(verify.State)
-			if !ok {
-				return errInvalidState
-			}
-			utxo := &avax.UTXO{
-				UTXOID: avax.UTXOID{
-					TxID:        tx.TxID,
-					OutputIndex: uint32(len(uStakerTx.Outs) + len(uStakerTx.Stake) + offset),
-				},
-				Asset: avax.Asset{ID: e.Ctx.AVAXAssetID},
-				Out:   out,
-			}
-
-			e.OnCommit.AddUTXO(utxo)
-			e.OnCommit.AddRewardUTXO(tx.TxID, utxo)
 		}
 
 		nodeID = uStakerTx.Validator.ID()

@@ -74,10 +74,10 @@ func VerifyLocalFlare(currentTimestamp time.Time, validatorConfigHash string) bo
 		return CompareValidatorConfigs(
 			validatorConfigHash,
 			[]string{
-				"28db06ceca182e433d236d09eeec11141f2dcbb14679d0fb0bc4869b79accbb4",
-				"4c5a2b0f87d45be2cfd44ac5af4e454716a0bd9cd74f0046d2dcd22203bbdc25",
-				"3d06d854ebc7e101b7f0673a388153c8dceb26f84106eea17043bbd8c16a4dc7",
-				"297ab94e9c6d94e9df2628d6a2b5e6b6dca4b41550675147bbe17c7d75fda61f",
+				"3b66ad21620fe6d0dd1665b89b7c5f7a3b18e34d7d18ca56b732f833b8259108",
+				"0f750b09f2702ecea445657120e7dcb0cdb46a8c87d1eae9a508fa4e3bfa5a32",
+				"39e596bdd2e00f5cb7fd86069c94159b98bdd79a4ed8684a88c0faf49f63bfab",
+				"aa43e6ef2d60823406e7e3cb6fcdb148fdd3ffcd137a261457f9ee6d541f9ca9",
 			},
 		)
 	default:
