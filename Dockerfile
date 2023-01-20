@@ -5,7 +5,10 @@ RUN apt-get update -y && \
 
 WORKDIR /app/
 
-COPY . ./
+COPY ./.git /app/.git
+COPY ./avalanchego /app/avalanchego
+COPY ./config /app/config
+COPY ./coreth /app/coreth
 
 WORKDIR /app/avalanchego/
 
@@ -30,7 +33,8 @@ ENV HTTP_HOST=0.0.0.0 \
     AUTOCONFIGURE_PUBLIC_IP=1 \
     AUTOCONFIGURE_BOOTSTRAP=1 \
     AUTOCONFIGURE_BOOTSTRAP_ENDPOINT=https://coston2.flare.network/ext/info \
-    EXTRA_ARGUMENTS=""
+    EXTRA_ARGUMENTS="" \
+    BOOTSTRAP_BEACON_CONNECTION_TIMEOUT="1m"
 
 RUN apt-get update -y && \
     apt-get install -y curl jq
@@ -43,9 +47,9 @@ COPY entrypoint.sh /app/entrypoint.sh
 EXPOSE ${STAKING_PORT}
 EXPOSE ${HTTP_PORT}
 
-VOLUME [ ${DB_DIR} ]
-VOLUME [ ${LOG_DIR} ]
-VOLUME [ ${CHAIN_CONFIG_DIR} ]
+VOLUME [ "${DB_DIR}" ]
+VOLUME [ "${LOG_DIR}" ]
+VOLUME [ "${CHAIN_CONFIG_DIR}" ]
 
 HEALTHCHECK CMD curl --fail http://localhost:${HTTP_PORT}/ext/health || exit 1
 
