@@ -405,6 +405,13 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 						log.Warn("Error updating initialAirdrop contract", "error", err)
 					}
 				}
+			} else if GetDistributionChangeIsActivatedAndCalled(chainID, timestamp, *msg.To()) && len(st.data) == 4 {
+				if bytes.Equal(st.data[0:4], UpdateDistributionAddressSelector(chainID, timestamp)) {
+					err = st.UpdateDistributionAddress(chainID, timestamp)
+					if err != nil {
+						log.Warn("Error updating distribution contract", "error", err)
+					}
+				}
 			}
 		}
 	}
