@@ -50,7 +50,7 @@ printf "\nCreating new validator: NodeID-MFrZFVCXPv5iCn6M9K6XduxGTYp891xXZ "
 
 CURR_TIME=$(date +%s)
 START_TIME=$(($CURR_TIME+300))
-END_TIME=$(($START_TIME+1512000))
+END_TIME=$(($START_TIME+86400))
 
 curl -s --location --request POST 'http://localhost:9650/ext/bc/P' \
 --header 'Content-Type: application/json' \

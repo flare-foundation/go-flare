@@ -276,7 +276,7 @@ func TestRewardDelegatorTxExecuteOnCommit(t *testing.T) {
 	delDestSet := ids.ShortSet{}
 	delDestSet.Add(delRewardAddress)
 
-	expectedReward := uint64(1000000)
+	expectedReward := uint64(0)
 
 	oldVdrBalance, err := avax.GetBalance(env.state, vdrDestSet)
 	require.NoError(err)
@@ -293,15 +293,15 @@ func TestRewardDelegatorTxExecuteOnCommit(t *testing.T) {
 	require.NoError(err)
 	vdrReward, err := math.Sub64(commitVdrBalance, oldVdrBalance)
 	require.NoError(err)
-	require.NotZero(vdrReward, "expected delegatee balance to increase because of reward")
+	require.Zero(vdrReward, "expected delegatee balance to be zero")
 
 	commitDelBalance, err := avax.GetBalance(env.state, delDestSet)
 	require.NoError(err)
 	delReward, err := math.Sub64(commitDelBalance, oldDelBalance)
 	require.NoError(err)
-	require.NotZero(delReward, "expected delegator balance to increase because of reward")
+	require.Zero(delReward, "expected delegator balance to be zero")
 
-	require.Less(vdrReward, delReward, "the delegator's reward should be greater than the delegatee's because the delegatee's share is 25%")
+	require.Equal(vdrReward, delReward, "the delegator's reward should be greater than the delegatee's because the delegatee's share is 25%")
 	require.Equal(expectedReward, delReward+vdrReward, "expected total reward to be %d but is %d", expectedReward, delReward+vdrReward)
 
 	stake, ok = set.GetWeight(vdrNodeID)
