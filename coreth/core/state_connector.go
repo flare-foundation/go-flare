@@ -176,7 +176,7 @@ func GetLocalAttestors() []common.Address {
 }
 
 func (st *StateTransition) GetAttestation(attestor common.Address, instructions []byte) (string, error) {
-	merkleRootHash, _, err := st.evm.Call(vm.AccountRef(attestor), st.to(), instructions, params.TxGas, big.NewInt(0))
+	_, merkleRootHash, _, err := st.evm.DaemonCall(vm.AccountRef(attestor), st.to(), instructions, params.TxGas)
 	return hex.EncodeToString(merkleRootHash), err
 }
 
