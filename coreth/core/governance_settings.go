@@ -23,7 +23,7 @@ var (
 	costwoInitialAirdropChangeActivationTime     = big.NewInt(time.Date(2022, time.October, 27, 20, 0, 0, 0, time.UTC).Unix())
 	localFlareInitialAirdropChangeActivationTime = big.NewInt(time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC).Unix())
 
-	flareDistributionChangeActivationTime      = big.NewInt(time.Date(2023, time.February, 16, 15, 0, 0, 0, time.UTC).Unix())
+	flareDistributionChangeActivationTime      = big.NewInt(time.Date(2023, time.March, 1, 15, 0, 0, 0, time.UTC).Unix())
 	costwoDistributionChangeActivationTime     = big.NewInt(time.Date(2023, time.January, 26, 15, 0, 0, 0, time.UTC).Unix())
 	localFlareDistributionChangeActivationTime = big.NewInt(time.Date(2023, time.January, 1, 0, 0, 0, 0, time.UTC).Unix())
 )
