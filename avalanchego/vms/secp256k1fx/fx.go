@@ -8,7 +8,6 @@ import (
 	"fmt"
 
 	"github.com/ava-labs/avalanchego/cache"
-	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/crypto"
 	"github.com/ava-labs/avalanchego/utils/hashing"
 	"github.com/ava-labs/avalanchego/utils/wrappers"
@@ -205,26 +204,6 @@ func (fx *Fx) VerifyCredentials(utx UnsignedTx, in *Input, cred *Credential, out
 	}
 
 	return nil
-}
-
-func (fx *Fx) GetPublicKeyForValidatorFilter(txIntf, credIntf interface{}) (ids.ShortID, error) {
-	utx, ok := txIntf.(UnsignedTx)
-	if !ok {
-		return ids.ShortID{}, errWrongTxType
-	}
-	cred, ok := credIntf.(*Credential)
-	if !ok {
-		return ids.ShortID{}, errWrongCredentialType
-	}
-	if len(cred.Sigs) != 1 {
-		return ids.ShortID{}, fmt.Errorf("invalid number of signatures, should only have one")
-	}
-	sig := cred.Sigs[0]
-	pk, err := fx.SECPFactory.RecoverPublicKey(utx.Bytes(), sig[:])
-	if err != nil {
-		return ids.ShortID{}, err
-	}
-	return pk.Address(), nil
 }
 
 // CreateOutput creates a new output with the provided control group worth
