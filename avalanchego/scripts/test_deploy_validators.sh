@@ -138,6 +138,27 @@ curl -s --location --request POST 'http://localhost:9650/ext/bc/P' \
 
 sleep 5
 
+printf "\nAdding new delegator "
+
+curl -s --location --request POST 'http://localhost:9650/ext/bc/P' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "jsonrpc": "2.0",
+    "method": "platform.addDelegator",
+    "params": {
+        "nodeId":"NodeID-MFrZFVCXPv5iCn6M9K6XduxGTYp891xXZ",
+        "startTime":'$START_TIME',
+        "endTime":'$END_TIME',
+        "stakeAmount":1000000000000,
+        "rewardAddress": "P-localflare1pz6dhzxvfmztknw35ukl8fav6gzjt9xwmkngua",
+        "username": "user1234",
+        "password": "b39d642078d2ca0517cafe008ddc9326fa1c4d71248078c67bf0d508993720e4"
+    },
+    "id": 1
+}' | jq .
+
+sleep 5
+
 printf "\nGet pending validators:\n"
 
 curl -s --location --request POST 'http://localhost:9650/ext/bc/P' \
