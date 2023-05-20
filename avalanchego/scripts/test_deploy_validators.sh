@@ -49,7 +49,7 @@ sleep 5
 printf "\nCreating new validator: NodeID-MFrZFVCXPv5iCn6M9K6XduxGTYp891xXZ "
 
 CURR_TIME=$(date +%s)
-START_TIME=$(($CURR_TIME+300))
+START_TIME=$(($CURR_TIME+1123200))
 END_TIME=$(($START_TIME+1209600))
 
 curl -s --location --request POST 'http://localhost:9650/ext/bc/P' \

@@ -68,20 +68,20 @@ func (*ProposalTxExecutor) CreateSubnetTx(*txs.CreateSubnetTx) error { return er
 func (*ProposalTxExecutor) ImportTx(*txs.ImportTx) error             { return errWrongTxType }
 func (*ProposalTxExecutor) ExportTx(*txs.ExportTx) error             { return errWrongTxType }
 
-// minValidatorStake, maxValidatorStake, minDelegatorStake, minDelegationFee, minStakeDuration, maxStakeDuration, minStakeStartTime
+// minValidatorStake, maxValidatorStake, minDelegatorStake, minDelegationFee, minStakeDuration, maxStakeDuration, minFutureStartTimeOffset, minStakeStartTime
 // The values in this function are not finalised and are placeholders for now
-func (e *ProposalTxExecutor) getCurrentInflationSettings(currentTimestamp time.Time) (uint64, uint64, uint64, uint32, time.Duration, time.Duration, time.Time) {
+func (e *ProposalTxExecutor) getCurrentInflationSettings(currentTimestamp time.Time) (uint64, uint64, uint64, uint32, time.Duration, time.Duration, time.Duration, time.Time) {
 	switch e.Backend.Ctx.NetworkID {
 	case constants.FlareID:
-		return 50 * units.KiloAvax, 50 * units.MegaAvax, 1 * units.KiloAvax, 0, 2 * 7 * 24 * time.Hour, 365 * 24 * time.Hour, time.Date(2023, time.June, 28, 15, 0, 0, 0, time.UTC)
+		return 50 * units.KiloAvax, 50 * units.MegaAvax, 1 * units.KiloAvax, 0, 2 * 7 * 24 * time.Hour, 365 * 24 * time.Hour, 24 * time.Hour, time.Date(2023, time.June, 28, 15, 0, 0, 0, time.UTC)
 	case constants.CostwoID:
-		return 50 * units.KiloAvax, 50 * units.MegaAvax, 1 * units.KiloAvax, 0, 2 * 7 * 24 * time.Hour, 365 * 24 * time.Hour, time.Date(2023, time.May, 17, 15, 0, 0, 0, time.UTC)
+		return 50 * units.KiloAvax, 50 * units.MegaAvax, 1 * units.KiloAvax, 0, 2 * 7 * 24 * time.Hour, 365 * 24 * time.Hour, 24 * time.Hour, time.Date(2023, time.May, 17, 15, 0, 0, 0, time.UTC)
 	case constants.StagingID:
-		return 50 * units.KiloAvax, 50 * units.MegaAvax, 1 * units.KiloAvax, 0, 2 * 7 * 24 * time.Hour, 365 * 24 * time.Hour, time.Date(2023, time.May, 10, 15, 0, 0, 0, time.UTC)
+		return 50 * units.KiloAvax, 50 * units.MegaAvax, 1 * units.KiloAvax, 0, 2 * 7 * 24 * time.Hour, 365 * 24 * time.Hour, 24 * time.Hour, time.Date(2023, time.May, 10, 15, 0, 0, 0, time.UTC)
 	case constants.LocalFlareID:
-		return 1, 50 * units.MegaAvax, 1, 0, 2 * 7 * 24 * time.Hour, 365 * 24 * time.Hour, time.Date(2023, time.April, 10, 15, 0, 0, 0, time.UTC)
+		return 1, 50 * units.MegaAvax, 1, 0, 2 * 7 * 24 * time.Hour, 365 * 24 * time.Hour, 24 * time.Hour, time.Date(2023, time.April, 10, 15, 0, 0, 0, time.UTC)
 	default:
-		return e.Config.MinValidatorStake, e.Config.MaxValidatorStake, e.Config.MinDelegatorStake, e.Config.MinDelegationFee, e.Config.MinStakeDuration, e.Config.MaxStakeDuration, time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC)
+		return e.Config.MinValidatorStake, e.Config.MaxValidatorStake, e.Config.MinDelegatorStake, e.Config.MinDelegationFee, e.Config.MinStakeDuration, e.Config.MaxStakeDuration, MaxFutureStartTime, time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC)
 	}
 }
 
@@ -97,7 +97,7 @@ func (e *ProposalTxExecutor) AddValidatorTx(tx *txs.AddValidatorTx) error {
 	}
 	currentTimestamp := parentState.GetTimestamp()
 
-	minValidatorStake, maxValidatorStake, _, minDelegationFee, minStakeDuration, maxStakeDuration, minStakeStartTime := e.getCurrentInflationSettings(currentTimestamp)
+	minValidatorStake, maxValidatorStake, _, minDelegationFee, minStakeDuration, maxStakeDuration, minFutureStartTimeOffset, minStakeStartTime := e.getCurrentInflationSettings(currentTimestamp)
 	switch {
 	case tx.Validator.Wght < minValidatorStake:
 		// Ensure validator is staking at least the minimum amount
@@ -186,6 +186,14 @@ func (e *ProposalTxExecutor) AddValidatorTx(tx *txs.AddValidatorTx) error {
 		maxStartTime := currentTimestamp.Add(MaxFutureStartTime)
 		if startTime.After(maxStartTime) {
 			return errFutureStakeTime
+		}
+		minStartTime := maxStartTime.Add(-minFutureStartTimeOffset)
+		if startTime.Before(minStartTime) {
+			return fmt.Errorf(
+				"validator's start time (%s) at or before minStartTime (%s)",
+				startTime,
+				minStartTime,
+			)
 		}
 	}
 
@@ -391,7 +399,7 @@ func (e *ProposalTxExecutor) AddDelegatorTx(tx *txs.AddDelegatorTx) error {
 	}
 	currentTimestamp := parentState.GetTimestamp()
 
-	_, maxValidatorStake, minDelegatorStake, _, minStakeDuration, maxStakeDuration, _ := e.getCurrentInflationSettings(currentTimestamp)
+	_, maxValidatorStake, minDelegatorStake, _, minStakeDuration, maxStakeDuration, _, _ := e.getCurrentInflationSettings(currentTimestamp)
 
 	duration := tx.Validator.Duration()
 	switch {
