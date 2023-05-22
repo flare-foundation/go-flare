@@ -73,7 +73,7 @@ func (*ProposalTxExecutor) ExportTx(*txs.ExportTx) error             { return er
 func (e *ProposalTxExecutor) getCurrentInflationSettings(currentTimestamp time.Time) (uint64, uint64, uint64, uint32, time.Duration, time.Duration, time.Duration, time.Time) {
 	switch e.Backend.Ctx.NetworkID {
 	case constants.FlareID:
-		return 50 * units.KiloAvax, 50 * units.MegaAvax, 1 * units.KiloAvax, 0, 2 * 7 * 24 * time.Hour, 365 * 24 * time.Hour, 24 * time.Hour, time.Date(2023, time.June, 21, 15, 0, 0, 0, time.UTC)
+		return 50 * units.KiloAvax, 50 * units.MegaAvax, 1 * units.KiloAvax, 0, 2 * 7 * 24 * time.Hour, 365 * 24 * time.Hour, 24 * time.Hour, time.Date(2023, time.July, 5, 15, 0, 0, 0, time.UTC)
 	case constants.CostwoID:
 		return 50 * units.KiloAvax, 50 * units.MegaAvax, 1 * units.KiloAvax, 0, 2 * 7 * 24 * time.Hour, 365 * 24 * time.Hour, MaxFutureStartTime, time.Date(2023, time.May, 25, 15, 0, 0, 0, time.UTC)
 	case constants.StagingID:
