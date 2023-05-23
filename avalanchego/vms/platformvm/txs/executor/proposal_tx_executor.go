@@ -68,20 +68,53 @@ func (*ProposalTxExecutor) CreateSubnetTx(*txs.CreateSubnetTx) error { return er
 func (*ProposalTxExecutor) ImportTx(*txs.ImportTx) error             { return errWrongTxType }
 func (*ProposalTxExecutor) ExportTx(*txs.ExportTx) error             { return errWrongTxType }
 
-// minValidatorStake, maxValidatorStake, minDelegatorStake, minDelegationFee, minStakeDuration, maxStakeDuration, minFutureStartTimeOffset, minStakeStartTime
-// The values in this function are not finalised and are placeholders for now
 func (e *ProposalTxExecutor) getCurrentInflationSettings(currentTimestamp time.Time) (uint64, uint64, uint64, uint32, time.Duration, time.Duration, time.Duration, time.Time) {
 	switch e.Backend.Ctx.NetworkID {
 	case constants.FlareID:
-		return 100 * units.KiloAvax, 50 * units.MegaAvax, 1 * units.KiloAvax, 0, 2 * 7 * 24 * time.Hour, 365 * 24 * time.Hour, 24 * time.Hour, time.Date(2023, time.July, 5, 15, 0, 0, 0, time.UTC)
+		return 100 * units.KiloAvax, // minValidatorStake
+			50 * units.MegaAvax, // maxValidatorStake
+			1 * units.KiloAvax, // minDelegatorStake
+			0, // minDelegationFee
+			2 * 7 * 24 * time.Hour, // minStakeDuration
+			365 * 24 * time.Hour, // maxStakeDuration
+			24 * time.Hour, // minFutureStartTimeOffset
+			time.Date(2023, time.July, 5, 15, 0, 0, 0, time.UTC) // minStakeStartTime
 	case constants.CostwoID:
-		return 100 * units.KiloAvax, 50 * units.MegaAvax, 1 * units.KiloAvax, 0, 2 * 7 * 24 * time.Hour, 365 * 24 * time.Hour, MaxFutureStartTime, time.Date(2023, time.May, 25, 15, 0, 0, 0, time.UTC)
+		return 100 * units.KiloAvax,
+			50 * units.MegaAvax,
+			1 * units.KiloAvax,
+			0,
+			2 * 7 * 24 * time.Hour,
+			365 * 24 * time.Hour,
+			MaxFutureStartTime,
+			time.Date(2023, time.May, 25, 15, 0, 0, 0, time.UTC)
 	case constants.StagingID:
-		return 100 * units.KiloAvax, 50 * units.MegaAvax, 1 * units.KiloAvax, 0, 2 * 7 * 24 * time.Hour, 365 * 24 * time.Hour, MaxFutureStartTime, time.Date(2023, time.May, 10, 15, 0, 0, 0, time.UTC)
+		return 100 * units.KiloAvax,
+			50 * units.MegaAvax,
+			1 * units.KiloAvax,
+			0,
+			2 * 7 * 24 * time.Hour,
+			365 * 24 * time.Hour,
+			MaxFutureStartTime,
+			time.Date(2023, time.May, 10, 15, 0, 0, 0, time.UTC)
 	case constants.LocalFlareID:
-		return 1, 50 * units.MegaAvax, 1, 0, 2 * 7 * 24 * time.Hour, 365 * 24 * time.Hour, 24 * time.Hour, time.Date(2023, time.April, 10, 15, 0, 0, 0, time.UTC)
+		return 1,
+			50 * units.MegaAvax,
+			1,
+			0,
+			2 * 7 * 24 * time.Hour,
+			365 * 24 * time.Hour,
+			24 * time.Hour,
+			time.Date(2023, time.April, 10, 15, 0, 0, 0, time.UTC)
 	default:
-		return e.Config.MinValidatorStake, e.Config.MaxValidatorStake, e.Config.MinDelegatorStake, e.Config.MinDelegationFee, e.Config.MinStakeDuration, e.Config.MaxStakeDuration, MaxFutureStartTime, time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC)
+		return e.Config.MinValidatorStake,
+			e.Config.MaxValidatorStake,
+			e.Config.MinDelegatorStake,
+			e.Config.MinDelegationFee,
+			e.Config.MinStakeDuration,
+			e.Config.MaxStakeDuration,
+			MaxFutureStartTime,
+			time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC)
 	}
 }
 
