@@ -432,7 +432,7 @@ func (e *ProposalTxExecutor) AddDelegatorTx(tx *txs.AddDelegatorTx) error {
 	}
 	currentTimestamp := parentState.GetTimestamp()
 
-	_, maxValidatorStake, minDelegatorStake, _, minStakeDuration, maxStakeDuration, _, _ := e.getCurrentInflationSettings(currentTimestamp)
+	_, maxValidatorStake, minDelegatorStake, _, minStakeDuration, maxStakeDuration, minFutureStartTimeOffset, _ := e.getCurrentInflationSettings(currentTimestamp)
 
 	duration := tx.Validator.Duration()
 	switch {
@@ -516,6 +516,14 @@ func (e *ProposalTxExecutor) AddDelegatorTx(tx *txs.AddDelegatorTx) error {
 		maxStartTime := currentTimestamp.Add(MaxFutureStartTime)
 		if validatorStartTime.After(maxStartTime) {
 			return errFutureStakeTime
+		}
+		minStartTime := maxStartTime.Add(-minFutureStartTimeOffset)
+		if validatorStartTime.Before(minStartTime) {
+			return fmt.Errorf(
+				"validator's start time (%s) at or before minStartTime (%s)",
+				validatorStartTime,
+				minStartTime,
+			)
 		}
 	}
 
