@@ -138,11 +138,6 @@ type Verifier interface {
 		creds []verify.Verifiable,
 		unlockedProduced map[ids.ID]uint64,
 	) error
-
-	GetPublicKeyForValidatorFilter(
-		tx txs.UnsignedTx,
-		creds []verify.Verifiable,
-	) (ids.ShortID, error)
 }
 
 type Handler interface {
@@ -687,14 +682,4 @@ func (h *handler) VerifySpendUTXOs(
 		}
 	}
 	return nil
-}
-
-func (h *handler) GetPublicKeyForValidatorFilter(
-	tx txs.UnsignedTx,
-	creds []verify.Verifiable,
-) (ids.ShortID, error) {
-	if len(creds) != 1 {
-		return ids.ShortID{}, fmt.Errorf("invalid number of credentials, should only have one")
-	}
-	return h.fx.GetPublicKeyForValidatorFilter(tx, creds[0])
 }
