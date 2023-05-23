@@ -4,7 +4,6 @@
 package fx
 
 import (
-	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/vms/components/verify"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
@@ -38,9 +37,6 @@ type Fx interface {
 	// CreateOutput creates a new output with the provided control group worth
 	// the specified amount
 	CreateOutput(amount uint64, controlGroup interface{}) (interface{}, error)
-
-	// Returns the public key that signed an AddValidatorTx
-	GetPublicKeyForValidatorFilter(tx, cred interface{}) (ids.ShortID, error)
 }
 
 type Owner interface {

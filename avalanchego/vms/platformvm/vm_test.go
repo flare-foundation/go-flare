@@ -564,7 +564,7 @@ func TestAddValidatorCommit(t *testing.T) {
 		uint64(endTime.Unix()),
 		nodeID,
 		rewardAddress,
-		reward.PercentDenominator,
+		0,
 		[]*crypto.PrivateKeySECP256K1R{keys[0]},
 		ids.ShortEmpty, // change addr
 	)
@@ -623,7 +623,7 @@ func TestInvalidAddValidatorCommit(t *testing.T) {
 		uint64(endTime.Unix()),
 		nodeID,
 		ids.ShortID(nodeID),
-		reward.PercentDenominator,
+		0,
 		[]*crypto.PrivateKeySECP256K1R{keys[0]},
 		ids.ShortEmpty, // change addr
 	)
@@ -682,7 +682,7 @@ func TestAddValidatorReject(t *testing.T) {
 		uint64(endTime.Unix()),
 		nodeID,
 		rewardAddress,
-		reward.PercentDenominator,
+		0,
 		[]*crypto.PrivateKeySECP256K1R{keys[0]},
 		ids.ShortEmpty, // change addr
 	)
@@ -746,7 +746,7 @@ func TestAddValidatorInvalidNotReissued(t *testing.T) {
 		uint64(endTime.Unix()),
 		repeatNodeID,
 		ids.ShortID(repeatNodeID),
-		reward.PercentDenominator,
+		0,
 		[]*crypto.PrivateKeySECP256K1R{keys[0]},
 		ids.ShortEmpty, // change addr
 	)

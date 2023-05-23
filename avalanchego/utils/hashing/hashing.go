@@ -5,7 +5,6 @@ package hashing
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io"
 
@@ -101,14 +100,4 @@ func ToHash160(bytes []byte) (Hash160, error) {
 
 func PubkeyBytesToAddress(key []byte) []byte {
 	return ComputeHash160(ComputeHash256(key))
-}
-
-func ToValidatorConfigHash(networkID string, pChainPublicKey string, nodeID string, weight string, duration string) string {
-	salt := "flare" + networkID + "-"
-	pChainPublicKeyHash := sha256.Sum256([]byte(salt + pChainPublicKey))
-	nodeIDHash := sha256.Sum256([]byte(salt + nodeID))
-	nodeWeightHash := sha256.Sum256([]byte(salt + weight))
-	nodeDurationHash := sha256.Sum256([]byte(salt + duration))
-	validatorConfigHash := sha256.Sum256(append(append(append(pChainPublicKeyHash[:], nodeIDHash[:]...)[:], nodeWeightHash[:]...)[:], nodeDurationHash[:]...))
-	return hex.EncodeToString(validatorConfigHash[:])
 }
