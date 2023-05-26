@@ -42,6 +42,7 @@ RUN apt-get update -y && \
 RUN mkdir -p /app/conf/coston /app/conf/C /app/logs /app/db
 
 COPY --from=build /app/avalanchego/build /app/build
+COPY --from=build /app/avalanchego/staking /app/staking
 COPY entrypoint.sh /app/entrypoint.sh
 
 EXPOSE ${STAKING_PORT}
