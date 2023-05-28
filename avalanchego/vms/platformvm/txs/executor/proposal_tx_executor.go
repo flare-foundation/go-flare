@@ -78,7 +78,7 @@ func (e *ProposalTxExecutor) getCurrentInflationSettings(currentTimestamp time.T
 			0, // minDelegationFee
 			2 * 7 * 24 * time.Hour, // minStakeDuration
 			365 * 24 * time.Hour, // maxStakeDuration
-			24 * time.Hour, // minFutureStartTimeOffset
+			3 * 24 * time.Hour, // minFutureStartTimeOffset
 			time.Date(2023, time.July, 5, 15, 0, 0, 0, time.UTC) // minStakeStartTime
 	case constants.CostwoID:
 		return 100 * units.KiloAvax,
