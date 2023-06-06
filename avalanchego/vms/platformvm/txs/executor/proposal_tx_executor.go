@@ -68,16 +68,17 @@ func (*ProposalTxExecutor) CreateSubnetTx(*txs.CreateSubnetTx) error { return er
 func (*ProposalTxExecutor) ImportTx(*txs.ImportTx) error             { return errWrongTxType }
 func (*ProposalTxExecutor) ExportTx(*txs.ExportTx) error             { return errWrongTxType }
 
+// The value of currentTimestamp is used to return new inflation settings over time
 func (e *ProposalTxExecutor) getCurrentInflationSettings(currentTimestamp time.Time) (uint64, uint64, uint64, uint32, time.Duration, time.Duration, time.Duration, time.Time) {
 	switch e.Backend.Ctx.NetworkID {
 	case constants.FlareID:
-		return 100 * units.KiloAvax, // minValidatorStake
+		return 10 * units.MegaAvax, // minValidatorStake
 			50 * units.MegaAvax, // maxValidatorStake
 			1 * units.KiloAvax, // minDelegatorStake
 			0, // minDelegationFee
 			2 * 7 * 24 * time.Hour, // minStakeDuration
 			365 * 24 * time.Hour, // maxStakeDuration
-			24 * time.Hour, // minFutureStartTimeOffset
+			3 * 24 * time.Hour, // minFutureStartTimeOffset
 			time.Date(2023, time.July, 5, 15, 0, 0, 0, time.UTC) // minStakeStartTime
 	case constants.CostwoID:
 		return 100 * units.KiloAvax,
@@ -98,9 +99,9 @@ func (e *ProposalTxExecutor) getCurrentInflationSettings(currentTimestamp time.T
 			MaxFutureStartTime,
 			time.Date(2023, time.May, 10, 15, 0, 0, 0, time.UTC)
 	case constants.LocalFlareID:
-		return 1,
+		return 10 * units.KiloAvax,
 			50 * units.MegaAvax,
-			1,
+			10 * units.KiloAvax,
 			0,
 			2 * 7 * 24 * time.Hour,
 			365 * 24 * time.Hour,
@@ -432,7 +433,7 @@ func (e *ProposalTxExecutor) AddDelegatorTx(tx *txs.AddDelegatorTx) error {
 	}
 	currentTimestamp := parentState.GetTimestamp()
 
-	_, maxValidatorStake, minDelegatorStake, _, minStakeDuration, maxStakeDuration, _, _ := e.getCurrentInflationSettings(currentTimestamp)
+	_, maxValidatorStake, minDelegatorStake, _, minStakeDuration, maxStakeDuration, minFutureStartTimeOffset, _ := e.getCurrentInflationSettings(currentTimestamp)
 
 	duration := tx.Validator.Duration()
 	switch {
@@ -516,6 +517,14 @@ func (e *ProposalTxExecutor) AddDelegatorTx(tx *txs.AddDelegatorTx) error {
 		maxStartTime := currentTimestamp.Add(MaxFutureStartTime)
 		if validatorStartTime.After(maxStartTime) {
 			return errFutureStakeTime
+		}
+		minStartTime := maxStartTime.Add(-minFutureStartTimeOffset)
+		if validatorStartTime.Before(minStartTime) {
+			return fmt.Errorf(
+				"validator's start time (%s) at or before minStartTime (%s)",
+				validatorStartTime,
+				minStartTime,
+			)
 		}
 	}
 
