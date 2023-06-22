@@ -2,9 +2,9 @@
 
 set -eo pipefail
 
-if [ "$AUTOCONFIGURE_PUBLIC_IP" = "1" ];
+if [[ "$AUTOCONFIGURE_PUBLIC_IP" = "1" ]];
 then
-	if [ "$PUBLIC_IP" = "" ];
+	if [[ "$PUBLIC_IP" = "" ]];
 	then
 		echo "Autoconfiguring public IP"
 		PUBLIC_IP=$(curl https://api.ipify.org/)
@@ -14,11 +14,11 @@ then
 fi
 
 
-if [ "$AUTOCONFIGURE_BOOTSTRAP" = "1" ];
+if [[ "$AUTOCONFIGURE_BOOTSTRAP" = "1" ]];
 then
 	# Check if we can connect to the bootstrap endpoint (whitelisting)
 	BOOTSTRAP_STATUS=$(curl -m 10 -s -w %{http_code} -X POST --data '{ "jsonrpc":"2.0", "id":1, "method":"info.getNodeIP" }' -H 'content-type:application/json;' "$AUTOCONFIGURE_BOOTSTRAP_ENDPOINT" -o /dev/null)
-	if [ "$BOOTSTRAP_STATUS" != "200" ]; then
+	if [[ "$BOOTSTRAP_STATUS" != "200" ]]; then
 		echo "Could not connect to bootstrap endpoint. Is your IP whitelisted?"
 		exit 1
 	fi
@@ -29,7 +29,7 @@ then
 	BOOTSTRAP_IDS=$(curl -m 10 -sX POST --data '{ "jsonrpc":"2.0", "id":1, "method":"info.getNodeID" }' -H 'content-type:application/json;' "$AUTOCONFIGURE_BOOTSTRAP_ENDPOINT" | jq -r ".result.nodeID")
 fi
 
-if [ -z "$EXTRA_ARGUMENTS" ];
+if [[ ! -z "$EXTRA_ARGUMENTS" ]];
 then
 	echo "Environment variable EXTRA_ARGUMENTS is deprecated and will be removed in the future. Please define the extra arguments as the container's start COMMAND argument."
 	sleep 15
