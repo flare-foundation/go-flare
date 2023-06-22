@@ -49,6 +49,8 @@ services:
       PUBLIC_IP: 10.20.30.1
     ports:
     - 5001:9650
+    - 9650:9650
+    - 9651:9651
     networks:
       nodes:
         ipv4_address: 10.20.30.1

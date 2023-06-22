@@ -73,6 +73,7 @@ docker-compose -f docker-compose.localflare.yaml up
 HTTP API ports are exposed on the host with the following pattern (where indexes are in range `1-5`):
 - validators: RPC `500${index}`
 - general nodes: RPC `501${index}`
+- validator1 has ports `9650` and `9651` forwarded
 
 ### Using "standalone" containers
 
