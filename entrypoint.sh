@@ -29,6 +29,12 @@ then
 	BOOTSTRAP_IDS=$(curl -m 10 -sX POST --data '{ "jsonrpc":"2.0", "id":1, "method":"info.getNodeID" }' -H 'content-type:application/json;' "$AUTOCONFIGURE_BOOTSTRAP_ENDPOINT" | jq -r ".result.nodeID")
 fi
 
+if [ -z "$EXTRA_ARGUMENTS" ];
+then
+	echo "Environment variable EXTRA_ARGUMENTS is deprecated and will be removed in the future. Please define the extra arguments as the container's start COMMAND argument."
+	sleep 15
+fi
+
 exec /app/build/avalanchego \
 	--http-host=$HTTP_HOST \
 	--http-port=$HTTP_PORT \
@@ -43,4 +49,5 @@ exec /app/build/avalanchego \
 	--log-dir=$LOG_DIR \
 	--log-level=$LOG_LEVEL \
 	--network-id=$NETWORK_ID \
-	$EXTRA_ARGUMENTS
+	$EXTRA_ARGUMENTS \
+	$@

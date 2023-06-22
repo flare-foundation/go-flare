@@ -55,7 +55,7 @@ These are the environment variables you can edit and their default values:
 | `AUTOCONFIGURE_BOOTSTRAP` | `1` | Set to `0` to disable autoconfigure `BOOTSTRAP_IPS` and `BOOTSTRAP_IDS` |
 | `AUTOCONFIGURE_BOOTSTRAP_ENDPOINT` | `https://coston2.flare.network/ext/info` | Endpoint used for [bootstrapping](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#bootstrapping) when `AUTOCONFIGURE_BOOTSTRAP` is enabled. Possible values are `https://coston2.flare.network/ext/info` or `https://flare.flare.network/ext/info`. |
 | `BOOTSTRAP_BEACON_CONNECTION_TIMEOUT` | `1m` | Set the duration value (eg. `45s` / `5m` / `1h`) for [--bootstrap-beacon-connection-timeout](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#--bootstrap-beacon-connection-timeout-duration) AvalancheGo flag. | 
-| `EXTRA_ARGUMENTS` | | Extra arguments passed to flare binary |
+| ⚠️ `EXTRA_ARGUMENTS` | | Extra arguments passed to avalanchego binary. **Deprecated** Pass extra arguments as container's startup command ([docker](https://docs.docker.com/engine/reference/commandline/run), [docker-compose](https://docs.docker.com/compose/compose-file/compose-file-v3/#command), [k8s (use `args`)](https://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/#define-a-command-and-arguments-when-you-create-a-pod)) |
 
 ## Running localflare
 
@@ -82,7 +82,7 @@ HTTP API ports are exposed on the host with the following pattern (where indexes
 docker build --tag go-flare .
 ```
 
-#### Validators
+#### Validator
 
 *Do not forget to change the `PUBLIC_IP=172.17.0.1` to an address that all nodes can reach (most likely your host's address or the docker interface's internal address.*
 
@@ -92,18 +92,15 @@ export STAKER_INDEX=1
 ```
 
 ``` sh
-docker run -ti --rm -p 9650:9650 -p 9651:9651 -e AUTOCONFIGURE_PUBLIC_IP=0 -e AUTOCONFIGURE_BOOTSTRAP=0 -e NETWORK_ID=localflare -e PUBLIC_IP -e EXTRA_ARGUMENTS="--staking-tls-cert-file=/app/staking/local/staker${STAKER_INDEX}.crt --staking-tls-key-file=/app/staking/local/staker${STAKER_INDEX}.key --network-health-min-conn-peers=1 --snow-sample-size=2 --snow-quorum-size=2 --snow-mixed-query-num-push-vdr=1" go-flare
+docker run -ti --rm -p 9650:9650 -p 9651:9651 -e AUTOCONFIGURE_PUBLIC_IP=0 -e AUTOCONFIGURE_BOOTSTRAP=0 -e NETWORK_ID=localflare -e PUBLIC_IP go-flare --staking-tls-cert-file=/app/staking/local/staker${STAKER_INDEX}.crt --staking-tls-key-file=/app/staking/local/staker${STAKER_INDEX}.key --network-health-min-conn-peers=1 --snow-sample-size=2 --snow-quorum-size=2 --snow-mixed-query-num-push-vdr=1
 ```
 
 #### General nodes
 
-*Change the `AUTOCONFIGURE_BOOTSTRAP_ENDPOINT=http://172.17.0.1:9650/ext/info` to an address where your master node is reachable.*
-``` sh
-export AUTOCONFIGURE_ADDR=172.17.0.1
-```
+*Change the `AUTOCONFIGURE_BOOTSTRAP_ENDPOINT=http://172.17.0.1:9650/ext/info` to an address where your main validator node is reachable.*
 
 ``` sh
-docker run -ti --rm -e AUTOCONFIGURE_PUBLIC_IP=0 -e AUTOCONFIGURE_BOOTSTRAP_ENDPOINT=http://${AUTOCONFIGURE_ADDR}:9650/ext/info -e NETWORK_ID=localflare go-flare
+docker run -ti --rm -e AUTOCONFIGURE_PUBLIC_IP=0 -e AUTOCONFIGURE_BOOTSTRAP_ENDPOINT=http://172.17.0.1:9650/ext/info -e NETWORK_ID=localflare go-flare
 ```
 
 #### Check healthyness

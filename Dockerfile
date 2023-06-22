@@ -48,6 +48,8 @@ COPY ./avalanchego/staking/local /app/staking/local
 COPY ./config /app/config
 COPY entrypoint.sh /app/entrypoint.sh
 
+RUN chmod +x /app/entrypoint.sh
+
 EXPOSE ${STAKING_PORT}
 EXPOSE ${HTTP_PORT}
 
@@ -57,9 +59,5 @@ VOLUME [ "${CHAIN_CONFIG_DIR}" ]
 
 HEALTHCHECK CMD curl --fail http://localhost:${HTTP_PORT}/ext/health || exit 1
 
-ENTRYPOINT [ "/usr/bin/bash" ]
-CMD [ "/app/entrypoint.sh" ]
-
-
-# ENTRYPOINT [ "/usr/bin/bash /app/entrypoint.sh" ]
-# CMD [ "" ]
+ENTRYPOINT [ "/app/entrypoint.sh" ]
+CMD [ "" ]

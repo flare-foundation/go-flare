@@ -11,7 +11,9 @@ x-validator: &validator
     AUTOCONFIGURE_PUBLIC_IP: 0
     AUTOCONFIGURE_BOOTSTRAP: 1
     AUTOCONFIGURE_BOOTSTRAP_ENDPOINT: http://10.20.30.1:9650/ext/info
-    EXTRA_ARGUMENTS: "--staking-tls-cert-file=/app/staking/local/staker$${STAKER_INDEX}.crt --staking-tls-key-file=/app/staking/local/staker$${STAKER_INDEX}.key"
+  command:
+  - --staking-tls-cert-file=/app/staking/local/staker$${STAKER_INDEX}.crt
+  - --staking-tls-key-file=/app/staking/local/staker$${STAKER_INDEX}.key
 
   expose:
   - 9650
