@@ -1,0 +1,170 @@
+version: '3.8'
+
+x-validator: &validator
+  build:
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  healthcheck:
+    start_period: 30s
+  environment: &validator-environment
+    NETWORK_ID: localflare
+    AUTOCONFIGURE_PUBLIC_IP: 0
+    AUTOCONFIGURE_BOOTSTRAP: 1
+    AUTOCONFIGURE_BOOTSTRAP_ENDPOINT: http://10.20.30.1:9650/ext/info
+    EXTRA_ARGUMENTS: "--staking-tls-cert-file=/app/staking/local/staker$${STAKER_INDEX}.crt --staking-tls-key-file=/app/staking/local/staker$${STAKER_INDEX}.key"
+
+  expose:
+  - 9650
+  - 9651
+
+
+
+
+x-node: &node
+  build:
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  healthcheck:
+    start_period: 30s
+  environment: &node-environment
+    NETWORK_ID: localflare
+    AUTOCONFIGURE_PUBLIC_IP: 0
+    AUTOCONFIGURE_BOOTSTRAP: 1
+    AUTOCONFIGURE_BOOTSTRAP_ENDPOINT: http://10.20.30.1:9650/ext/info
+  expose:
+  - 9650
+  - 9651
+
+
+
+
+services:
+  
+  validator1:
+    <<: *validator
+    environment:
+      <<: *validator-environment
+      AUTOCONFIGURE_BOOTSTRAP: 0
+      STAKER_INDEX: 1
+      PUBLIC_IP: 10.20.30.1
+    ports:
+    - 5001:9650
+    networks:
+      nodes:
+        ipv4_address: 10.20.30.1
+  
+  validator2:
+    <<: *validator
+    environment:
+      <<: *validator-environment
+      STAKER_INDEX: 2
+      PUBLIC_IP: 10.20.30.2
+    ports:
+    - 5002:9650
+    networks:
+      nodes:
+        ipv4_address: 10.20.30.2
+  
+  validator3:
+    <<: *validator
+    environment:
+      <<: *validator-environment
+      STAKER_INDEX: 3
+      PUBLIC_IP: 10.20.30.3
+    ports:
+    - 5003:9650
+    networks:
+      nodes:
+        ipv4_address: 10.20.30.3
+  
+  validator4:
+    <<: *validator
+    environment:
+      <<: *validator-environment
+      STAKER_INDEX: 4
+      PUBLIC_IP: 10.20.30.4
+    ports:
+    - 5004:9650
+    networks:
+      nodes:
+        ipv4_address: 10.20.30.4
+  
+  validator5:
+    <<: *validator
+    environment:
+      <<: *validator-environment
+      STAKER_INDEX: 5
+      PUBLIC_IP: 10.20.30.5
+    ports:
+    - 5005:9650
+    networks:
+      nodes:
+        ipv4_address: 10.20.30.5
+
+
+  
+  node1:
+    <<: *node
+    environment:
+      <<: *node-environment
+      PUBLIC_IP: 10.20.30.11
+    ports:
+    - 5011:9650
+    networks:
+      nodes:
+        ipv4_address: 10.20.30.11
+
+  node2:
+    <<: *node
+    environment:
+      <<: *node-environment
+      PUBLIC_IP: 10.20.30.12
+    ports:
+    - 5012:9650
+    networks:
+      nodes:
+        ipv4_address: 10.20.30.12
+
+  node3:
+    <<: *node
+    environment:
+      <<: *node-environment
+      PUBLIC_IP: 10.20.30.13
+    ports:
+    - 5013:9650
+    networks:
+      nodes:
+        ipv4_address: 10.20.30.13
+
+  node4:
+    <<: *node
+    environment:
+      <<: *node-environment
+      PUBLIC_IP: 10.20.30.14
+    ports:
+    - 5014:9650
+    networks:
+      nodes:
+        ipv4_address: 10.20.30.14
+
+  node5:
+    <<: *node
+    environment:
+      <<: *node-environment
+      PUBLIC_IP: 10.20.30.15
+    ports:
+    - 5015:9650
+    networks:
+      nodes:
+        ipv4_address: 10.20.30.15
+
+
+
+
+networks:
+  nodes:
+    driver: bridge
+    ipam:
+      config:
+      - subnet: 10.20.30.0/24
+        gateway: 10.20.30.254

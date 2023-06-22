@@ -50,13 +50,67 @@ These are the environment variables you can edit and their default values:
 | `CHAIN_CONFIG_DIR` | `/app/conf` | Configuration directory |
 | `LOG_DIR` | `/app/logs` | Logging directory |
 | `LOG_LEVEL` | `info` | Logging level set with AvalancheGo flag [`--log-level`](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#--log-level-string-verbo-debug-trace-info-warn-error-fatal-off). |
-| `NETWORK_ID` | `costwo` | The network id. The common ids are `flare \| costwo` |
+| `NETWORK_ID` | `costwo` | The network id. The common ids are `flare \| costwo \| localflare` |
 | `AUTOCONFIGURE_PUBLIC_IP` | `1` | Set to `0` to disable autoconfigure `PUBLIC_IP`, skipped if `PUBLIC_IP` is set |
 | `AUTOCONFIGURE_BOOTSTRAP` | `1` | Set to `0` to disable autoconfigure `BOOTSTRAP_IPS` and `BOOTSTRAP_IDS` |
 | `AUTOCONFIGURE_BOOTSTRAP_ENDPOINT` | `https://coston2.flare.network/ext/info` | Endpoint used for [bootstrapping](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#bootstrapping) when `AUTOCONFIGURE_BOOTSTRAP` is enabled. Possible values are `https://coston2.flare.network/ext/info` or `https://flare.flare.network/ext/info`. |
 | `BOOTSTRAP_BEACON_CONNECTION_TIMEOUT` | `1m` | Set the duration value (eg. `45s` / `5m` / `1h`) for [--bootstrap-beacon-connection-timeout](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#--bootstrap-beacon-connection-timeout-duration) AvalancheGo flag. | 
 | `EXTRA_ARGUMENTS` | | Extra arguments passed to flare binary |
 
+## Running localflare
+
+You will be running multiple containers: validators and general node containers.
+
+### Using docker-compose
+
+Just build the images and start up the container stack.
+
+``` sh
+docker-compose -f docker-compose.localflare.yaml build
+docker-compose -f docker-compose.localflare.yaml up
+```
+
+HTTP API ports are exposed on the host with the following pattern (where indexes are in range `1-5`):
+- validators: RPC `500${index}`
+- general nodes: RPC `501${index}`
+
+### Using "standalone" containers
+
+#### Build the general image
+
+``` sh
+docker build --tag go-flare .
+```
+
+#### Validators
+
+*Do not forget to change the `PUBLIC_IP=172.17.0.1` to an address that all nodes can reach (most likely your host's address or the docker interface's internal address.*
+
+``` sh
+export PUBLIC_IP=172.17.0.1
+export STAKER_INDEX=1
+```
+
+``` sh
+docker run -ti --rm -p 9650:9650 -p 9651:9651 -e AUTOCONFIGURE_PUBLIC_IP=0 -e AUTOCONFIGURE_BOOTSTRAP=0 -e NETWORK_ID=localflare -e PUBLIC_IP -e EXTRA_ARGUMENTS="--staking-tls-cert-file=/app/staking/local/staker${STAKER_INDEX}.crt --staking-tls-key-file=/app/staking/local/staker${STAKER_INDEX}.key --network-health-min-conn-peers=1 --snow-sample-size=2 --snow-quorum-size=2 --snow-mixed-query-num-push-vdr=1" go-flare
+```
+
+#### General nodes
+
+*Change the `AUTOCONFIGURE_BOOTSTRAP_ENDPOINT=http://172.17.0.1:9650/ext/info` to an address where your master node is reachable.*
+``` sh
+export AUTOCONFIGURE_ADDR=172.17.0.1
+```
+
+``` sh
+docker run -ti --rm -e AUTOCONFIGURE_PUBLIC_IP=0 -e AUTOCONFIGURE_BOOTSTRAP_ENDPOINT=http://${AUTOCONFIGURE_ADDR}:9650/ext/info -e NETWORK_ID=localflare go-flare
+```
+
+#### Check healthyness
+
+``` sh
+curl http://localhost:9650/ext/health
+```
 
 ## Node Configuration
 
