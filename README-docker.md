@@ -63,10 +63,10 @@ You will be running multiple containers: validators and general node containers.
 
 ### Using docker-compose
 
-Just build the images and start up the container stack.
+Just build the base image and start up the container stack.
 
 ``` sh
-docker-compose -f docker-compose.localflare.yaml build
+docker build --tag go-flare .
 docker-compose -f docker-compose.localflare.yaml up
 ```
 
@@ -76,7 +76,7 @@ HTTP API ports are exposed on the host with the following pattern (where indexes
 
 ### Using "standalone" containers
 
-#### Build the general image
+#### Build the base image
 
 ``` sh
 docker build --tag go-flare .

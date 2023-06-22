@@ -1,8 +1,7 @@
 version: '3.8'
 
 x-validator: &validator
-  build:
-    dockerfile: Dockerfile
+  image: go-flare
   restart: unless-stopped
   healthcheck:
     start_period: 30s
@@ -23,8 +22,7 @@ x-validator: &validator
 
 
 x-node: &node
-  build:
-    dockerfile: Dockerfile
+  image: go-flare
   restart: unless-stopped
   healthcheck:
     start_period: 30s
