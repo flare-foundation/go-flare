@@ -2146,7 +2146,7 @@ type GetMinStakeReply struct {
 // GetMinStake returns the minimum staking amount in nAVAX.
 func (service *Service) GetMinStake(_ *http.Request, _ *struct{}, reply *GetMinStakeReply) error {
 	timestamp := service.vm.state.GetTimestamp()
-	minValidatorStake, _, minDelegatorStake, _, _, _, _, _ := executor.GetCurrentInflationSettings(timestamp, service.vm.ctx.NetworkID, &service.vm.Config)
+	minValidatorStake, _, minDelegatorStake, _, _, _, _, _, _ := executor.GetCurrentInflationSettings(timestamp, service.vm.ctx.NetworkID, &service.vm.Config)
 	reply.MinValidatorStake = json.Uint64(minValidatorStake)
 	reply.MinDelegatorStake = json.Uint64(minDelegatorStake)
 	return nil

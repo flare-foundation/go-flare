@@ -78,8 +78,9 @@ func (e *ProposalTxExecutor) AddValidatorTx(tx *txs.AddValidatorTx) error {
 		return state.ErrMissingParentState
 	}
 	currentTimestamp := parentState.GetTimestamp()
+	e.Ctx.Log.Info("Current timestamp: " + currentTimestamp.String())
 
-	minValidatorStake, maxValidatorStake, _, minDelegationFee, minStakeDuration, maxStakeDuration, minFutureStartTimeOffset, minStakeStartTime := GetCurrentInflationSettings(currentTimestamp, e.Backend.Ctx.NetworkID, e.Config)
+	minValidatorStake, maxValidatorStake, _, minDelegationFee, minStakeDuration, maxStakeDuration, minFutureStartTimeOffset, _, minStakeStartTime := GetCurrentInflationSettings(currentTimestamp, e.Backend.Ctx.NetworkID, e.Config)
 	switch {
 	case tx.Validator.Wght < minValidatorStake:
 		// Ensure validator is staking at least the minimum amount
@@ -381,7 +382,7 @@ func (e *ProposalTxExecutor) AddDelegatorTx(tx *txs.AddDelegatorTx) error {
 	}
 	currentTimestamp := parentState.GetTimestamp()
 
-	_, maxValidatorStake, minDelegatorStake, _, minStakeDuration, maxStakeDuration, minFutureStartTimeOffset, _ := GetCurrentInflationSettings(currentTimestamp, e.Backend.Ctx.NetworkID, e.Config)
+	_, maxValidatorStake, minDelegatorStake, _, minStakeDuration, maxStakeDuration, minFutureStartTimeOffset, maxValidatorWeightFactor, _ := GetCurrentInflationSettings(currentTimestamp, e.Backend.Ctx.NetworkID, e.Config)
 
 	duration := tx.Validator.Duration()
 	switch {
@@ -428,7 +429,7 @@ func (e *ProposalTxExecutor) AddDelegatorTx(tx *txs.AddDelegatorTx) error {
 			)
 		}
 
-		maximumWeight, err := math.Mul64(MaxValidatorWeightFactor, primaryNetworkValidator.Weight)
+		maximumWeight, err := math.Mul64(maxValidatorWeightFactor, primaryNetworkValidator.Weight)
 		if err != nil {
 			return errStakeOverflow
 		}

@@ -8,8 +8,21 @@ import (
 	"github.com/ava-labs/avalanchego/vms/platformvm/config"
 )
 
+var (
+	PhaseTwoStakingStartTime = time.Date(2023, time.September, 15, 0, 0, 0, 0, time.UTC)
+)
+
 // The value of currentTimestamp is used to return new inflation settings over time
-func GetCurrentInflationSettings(currentTimestamp time.Time, networkID uint32, config *config.Config) (uint64, uint64, uint64, uint32, time.Duration, time.Duration, time.Duration, time.Time) {
+func GetCurrentInflationSettings(currentTimestamp time.Time, networkID uint32, config *config.Config) (uint64, uint64, uint64, uint32, time.Duration, time.Duration, time.Duration, uint64, time.Time) {
+	switch {
+	case currentTimestamp.Before(PhaseTwoStakingStartTime):
+		return getPhaseOneInflationSettings(networkID, config)
+	default:
+		return getPhaseTwoInflationSettings(networkID, config)
+	}
+}
+
+func getPhaseOneInflationSettings(networkID uint32, config *config.Config) (uint64, uint64, uint64, uint32, time.Duration, time.Duration, time.Duration, uint64, time.Time) {
 	switch networkID {
 	case constants.FlareID:
 		return 10 * units.MegaAvax, // minValidatorStake
@@ -19,6 +32,7 @@ func GetCurrentInflationSettings(currentTimestamp time.Time, networkID uint32, c
 			2 * 7 * 24 * time.Hour, // minStakeDuration
 			365 * 24 * time.Hour, // maxStakeDuration
 			3 * 24 * time.Hour, // minFutureStartTimeOffset
+			MaxValidatorWeightFactor, // maxValidatorWeightFactor
 			time.Date(2023, time.July, 5, 15, 0, 0, 0, time.UTC) // minStakeStartTime
 	case constants.CostwoID:
 		return 100 * units.KiloAvax,
@@ -28,6 +42,7 @@ func GetCurrentInflationSettings(currentTimestamp time.Time, networkID uint32, c
 			2 * 7 * 24 * time.Hour,
 			365 * 24 * time.Hour,
 			MaxFutureStartTime,
+			MaxValidatorWeightFactor,
 			time.Date(2023, time.May, 25, 15, 0, 0, 0, time.UTC)
 	case constants.StagingID:
 		return 100 * units.KiloAvax,
@@ -37,6 +52,7 @@ func GetCurrentInflationSettings(currentTimestamp time.Time, networkID uint32, c
 			2 * 7 * 24 * time.Hour,
 			365 * 24 * time.Hour,
 			MaxFutureStartTime,
+			MaxValidatorWeightFactor,
 			time.Date(2023, time.May, 10, 15, 0, 0, 0, time.UTC)
 	case constants.LocalFlareID:
 		return 10 * units.KiloAvax,
@@ -46,6 +62,7 @@ func GetCurrentInflationSettings(currentTimestamp time.Time, networkID uint32, c
 			2 * 7 * 24 * time.Hour,
 			365 * 24 * time.Hour,
 			24 * time.Hour,
+			MaxValidatorWeightFactor,
 			time.Date(2023, time.April, 10, 15, 0, 0, 0, time.UTC)
 	default:
 		return config.MinValidatorStake,
@@ -55,6 +72,24 @@ func GetCurrentInflationSettings(currentTimestamp time.Time, networkID uint32, c
 			config.MinStakeDuration,
 			config.MaxStakeDuration,
 			MaxFutureStartTime,
+			MaxValidatorWeightFactor,
 			time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC)
+	}
+}
+
+func getPhaseTwoInflationSettings(networkID uint32, config *config.Config) (uint64, uint64, uint64, uint32, time.Duration, time.Duration, time.Duration, uint64, time.Time) {
+	switch networkID {
+	case constants.FlareID:
+		return 100 * units.KiloAvax, // minValidatorStake
+			200 * units.MegaAvax, // maxValidatorStake
+			10 * units.KiloAvax, // minDelegatorStake
+			0, // minDelegationFee
+			2 * 7 * 24 * time.Hour, // minStakeDuration
+			365 * 24 * time.Hour, // maxStakeDuration
+			MaxFutureStartTime, // minFutureStartTimeOffset
+			15, // maxValidatorWeightFactor
+			time.Date(2023, time.July, 5, 15, 0, 0, 0, time.UTC) // minStakeStartTime
+	default:
+		return getPhaseOneInflationSettings(networkID, config)
 	}
 }
