@@ -381,8 +381,9 @@ func (e *ProposalTxExecutor) AddDelegatorTx(tx *txs.AddDelegatorTx) error {
 		return state.ErrMissingParentState
 	}
 	currentTimestamp := parentState.GetTimestamp()
+	now := e.Clk.Time()
 
-	_, maxValidatorStake, minDelegatorStake, _, _, minDelegateDuration, maxStakeDuration, minFutureStartTimeOffset, maxValidatorWeightFactor, _ := GetCurrentInflationSettings(currentTimestamp, e.Backend.Ctx.NetworkID, e.Config)
+	_, maxValidatorStake, minDelegatorStake, _, _, minDelegateDuration, maxStakeDuration, minFutureStartTimeOffset, maxValidatorWeightFactor, _ := GetCurrentInflationSettings(now, e.Backend.Ctx.NetworkID, e.Config)
 
 	duration := tx.Validator.Duration()
 	switch {
