@@ -9,19 +9,35 @@ import (
 )
 
 // The value of currentTimestamp is used to return new inflation settings over time
-func GetCurrentInflationSettings(currentTimestamp time.Time, networkID uint32, config *config.Config) (uint64, uint64, uint64, uint32, time.Duration, time.Duration, time.Duration, time.Duration, uint64, time.Time) {
+func GetCurrentInflationSettings(startTime time.Time, networkID uint32, config *config.Config) (uint64, uint64, uint64, uint32, time.Duration, time.Duration, time.Duration, time.Duration, uint64, time.Time) {
 	switch {
-	case currentTimestamp.Before(getPhaseTwoStakingStartTime(networkID)):
+	case startTime.Before(getPhaseTwoStakingStartTime(networkID)):
 		return getPhaseOneInflationSettings(networkID, config)
 	default:
 		return getPhaseTwoInflationSettings(networkID, config)
 	}
 }
 
+func GetMinStake(networkID uint32, config *config.Config) (minValidatorStake, minDelegatorStake uint64) {
+	minValidatorStake1, _, minDelegatorStake1, _, _, _, _, _, _, _ := getPhaseOneInflationSettings(networkID, config)
+	minValidatorStake2, _, minDelegatorStake2, _, _, _, _, _, _, _ := getPhaseTwoInflationSettings(networkID, config)
+	if minValidatorStake1 < minValidatorStake2 {
+		minValidatorStake = minValidatorStake1
+	} else {
+		minValidatorStake = minValidatorStake2
+	}
+	if minDelegatorStake1 < minDelegatorStake2 {
+		minDelegatorStake = minDelegatorStake1
+	} else {
+		minDelegatorStake = minDelegatorStake2
+	}
+	return
+}
+
 func getPhaseTwoStakingStartTime(networkID uint32) time.Time {
 	switch networkID {
 	case constants.FlareID:
-		return time.Date(2023, time.September, 15, 0, 0, 0, 0, time.UTC)
+		return time.Date(2023, time.October, 1, 0, 0, 0, 0, time.UTC)
 	case constants.CostwoID:
 		return time.Date(2023, time.August, 15, 0, 0, 0, 0, time.UTC)
 	default:
