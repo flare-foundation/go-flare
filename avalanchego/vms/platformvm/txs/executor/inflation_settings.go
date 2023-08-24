@@ -117,7 +117,7 @@ func getPhaseTwoInflationSettings(networkID uint32, config *config.Config) (uint
 			365 * 24 * time.Hour, // maxStakeDuration
 			MaxFutureStartTime, // minFutureStartTimeOffset
 			15, // maxValidatorWeightFactor
-			time.Date(2023, time.September, 15, 0, 0, 0, 0, time.UTC) // minStakeStartTime
+			time.Date(2023, time.October, 1, 0, 0, 0, 0, time.UTC) // minStakeStartTime
 	case constants.CostwoID:
 		return 1 * units.MegaAvax,
 			200 * units.MegaAvax,
