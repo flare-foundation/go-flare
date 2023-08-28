@@ -39,7 +39,7 @@ func getPhaseTwoStakingStartTime(networkID uint32) time.Time {
 	case constants.FlareID:
 		return time.Date(2023, time.October, 1, 0, 0, 0, 0, time.UTC)
 	case constants.CostwoID:
-		return time.Date(2023, time.August, 15, 0, 0, 0, 0, time.UTC)
+		return time.Date(2023, time.September, 1, 0, 0, 0, 0, time.UTC)
 	default:
 		return time.Date(2023, time.August, 1, 0, 0, 0, 0, time.UTC)
 	}
