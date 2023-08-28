@@ -37,9 +37,9 @@ func GetMinStake(networkID uint32, config *config.Config) (minValidatorStake, mi
 func getPhaseTwoStakingStartTime(networkID uint32) time.Time {
 	switch networkID {
 	case constants.FlareID:
-		return time.Date(2023, time.October, 1, 0, 0, 0, 0, time.UTC)
+		return time.Date(2023, time.October, 15, 0, 0, 0, 0, time.UTC)
 	case constants.CostwoID:
-		return time.Date(2023, time.September, 1, 0, 0, 0, 0, time.UTC)
+		return time.Date(2023, time.September, 15, 0, 0, 0, 0, time.UTC)
 	default:
 		return time.Date(2023, time.August, 1, 0, 0, 0, 0, time.UTC)
 	}
