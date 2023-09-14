@@ -2,6 +2,7 @@ name: container-images
 
 
 on:
+  workflow_dispatch:
   push:
     branches: [ "main" ]
     tags: [ "v*" ]
