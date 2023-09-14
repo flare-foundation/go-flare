@@ -14,6 +14,8 @@ WORKDIR /app/avalanchego/
 
 RUN /app/avalanchego/scripts/build.sh
 
+
+
 FROM ubuntu@sha256:b25ef49a40b7797937d0d23eca3b0a41701af6757afca23d504d50826f0b37ce
 
 WORKDIR /app
@@ -42,7 +44,11 @@ RUN apt-get update -y && \
 RUN mkdir -p /app/conf/coston /app/conf/C /app/logs /app/db
 
 COPY --from=build /app/avalanchego/build /app/build
+COPY ./avalanchego/staking/local /app/staking/local
+COPY ./config /app/config
 COPY entrypoint.sh /app/entrypoint.sh
+
+RUN chmod +x /app/entrypoint.sh
 
 EXPOSE ${STAKING_PORT}
 EXPOSE ${HTTP_PORT}
@@ -53,5 +59,5 @@ VOLUME [ "${CHAIN_CONFIG_DIR}" ]
 
 HEALTHCHECK CMD curl --fail http://localhost:${HTTP_PORT}/ext/health || exit 1
 
-ENTRYPOINT [ "/usr/bin/bash" ]
-CMD [ "/app/entrypoint.sh" ]
+ENTRYPOINT [ "/app/entrypoint.sh" ]
+CMD [ "" ]
