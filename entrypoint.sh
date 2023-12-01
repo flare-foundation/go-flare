@@ -49,8 +49,6 @@ then
 	echo "  Got bootstrap ids: '${BOOTSTRAP_IDS}'"
 fi
 
-exit 0
-
 /app/build/avalanchego \
 	--http-host=$HTTP_HOST \
 	--http-port=$HTTP_PORT \
