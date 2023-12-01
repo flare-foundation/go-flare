@@ -29,7 +29,7 @@ then
             __BOOTSTRAP_ENDPOINT="$__ENDPOINT"
             break
         else
-			echo "    Failed! The endpoint is unreachable or your IP is not whitelisted."
+			echo "    Failed! The endpoint is unreachable."
             continue
         fi
     done
