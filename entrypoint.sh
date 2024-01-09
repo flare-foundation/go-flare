@@ -4,7 +4,7 @@ set -eo pipefail
 
 if [ "$AUTOCONFIGURE_PUBLIC_IP" = "1" ];
 then
-	if [ "$PUBLIC_IP" = "" ];
+	if [ -z "$PUBLIC_IP" ];
 	then
 		echo "Autoconfiguring public IP"
 		PUBLIC_IP=$(curl -s -m 10 https://flare.network/cdn-cgi/trace | grep 'ip=' | cut -d'=' -f2)
