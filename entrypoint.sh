@@ -7,7 +7,8 @@ then
 	if [ "$PUBLIC_IP" = "" ];
 	then
 		echo "Autoconfiguring public IP"
-		PUBLIC_IP=$(curl https://api.ipify.org/)
+		PUBLIC_IP=$(curl -s -m 10 https://flare.network/cdn-cgi/trace | grep 'ip=' | cut -d'=' -f2)
+		echo "  Got public address '${PUBLIC_IP}'" 
 	else
 		echo "/!\\ AUTOCONFIGURE_PUBLIC_IP is enabled, but PUBLIC_IP is already set to '$PUBLIC_IP'! Skipping autoconfigure and using current PUBLIC_IP value!"
 	fi
@@ -28,7 +29,7 @@ then
 	BOOTSTRAP_IDS=$(curl -m 10 -sX POST --data '{ "jsonrpc":"2.0", "id":1, "method":"info.getNodeID" }' -H 'content-type:application/json;' "$AUTOCONFIGURE_BOOTSTRAP_ENDPOINT" | jq -r ".result.nodeID")
 fi
 
-/app/build/avalanchego \
+exec /app/build/avalanchego \
 	--http-host=$HTTP_HOST \
 	--http-port=$HTTP_PORT \
 	--staking-port=$STAKING_PORT \
