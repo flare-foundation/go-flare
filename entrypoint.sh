@@ -4,10 +4,10 @@ set -eo pipefail
 
 if [ "$AUTOCONFIGURE_PUBLIC_IP" = "1" ];
 then
-	if [ "$PUBLIC_IP" = "" ];
+	if [ -z "$PUBLIC_IP" ];
 	then
 		echo "Autoconfiguring public IP"
-		PUBLIC_IP=$(curl -s https://api.ipify.org/)
+		PUBLIC_IP=$(curl -s -m 10 https://flare.network/cdn-cgi/trace | grep 'ip=' | cut -d'=' -f2)
 		echo "  Got public address '${PUBLIC_IP}'" 
 	else
 		echo "/!\\ AUTOCONFIGURE_PUBLIC_IP is enabled, but PUBLIC_IP is already set to '$PUBLIC_IP'! Skipping autoconfigure and using current PUBLIC_IP value!"
@@ -49,7 +49,7 @@ then
 	echo "  Got bootstrap ids: '${BOOTSTRAP_IDS}'"
 fi
 
-/app/build/avalanchego \
+exec /app/build/avalanchego \
 	--http-host=$HTTP_HOST \
 	--http-port=$HTTP_PORT \
 	--staking-port=$STAKING_PORT \
