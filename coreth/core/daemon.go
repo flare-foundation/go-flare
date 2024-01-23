@@ -80,6 +80,26 @@ func GetPrioritisedFTSOContract(blockTime *big.Int) string {
 	}
 }
 
+func GetPrioritisedSubmitterContract(blockTime *big.Int) string {
+	switch {
+	default:
+		return "0xEC1C93A9f6a9e18E97784c76aC52053587FcDB89"
+	}
+}
+
+func IsPrioritisedContractCall(to *common.Address, ret []byte, blockTime *big.Int) bool {
+	switch {
+	case to == nil:
+		return false
+	case *to == common.HexToAddress(GetPrioritisedFTSOContract(blockTime)):
+		return true
+	case *to == common.HexToAddress(GetPrioritisedSubmitterContract(blockTime)):
+		return !isZeroSlice(ret)
+	default:
+		return false
+	}
+}
+
 func GetMaximumMintRequest(blockTime *big.Int) *big.Int {
 	switch {
 	default:
@@ -156,4 +176,13 @@ func atomicDaemonAndMint(evm EVMCaller, log log.Logger) {
 	} else {
 		log.Warn("Daemon error", "error", daemonErr)
 	}
+}
+
+func isZeroSlice(s []byte) bool {
+	for i := len(s) - 1; i >= 0; i-- {
+		if s[i] != 0 {
+			return false
+		}
+	}
+	return true
 }
