@@ -419,8 +419,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	}
 
 	st.refundGas(rules.IsApricotPhase1)
-	// if vmerr == nil && msg.To() != nil && *msg.To() == common.HexToAddress(GetPrioritisedFTSOContract(timestamp)) && st.initialGas <= GetMaxFTSOGasLimit(timestamp) {
-	if vmerr == nil && IsPrioritisedContractCall(msg.To(), ret, timestamp) && st.initialGas <= GetMaxFTSOGasLimit(timestamp) {
+	if vmerr == nil && IsPrioritisedContractCall(chainID, msg.To(), ret, timestamp) && st.initialGas <= GetMaxFTSOGasLimit(timestamp) {
 		nominalGasUsed := uint64(params.TxGas)                    // 21000
 		nominalGasPrice := uint64(params.ApricotPhase4MinBaseFee) // 25_000_000_000; the max base fee is 1_000_000_000_000
 		nominalFee := new(big.Int).Mul(new(big.Int).SetUint64(nominalGasUsed), new(big.Int).SetUint64(nominalGasPrice))

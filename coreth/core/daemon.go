@@ -6,11 +6,27 @@ package core
 import (
 	"fmt"
 	"math/big"
+	"os"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ava-labs/coreth/core/vm"
+	"github.com/ava-labs/coreth/params"
+)
+
+var (
+	// Define activation times for submitter contract
+	submitterContractActivationTimeFlare  = big.NewInt(time.Date(2024, time.March, 1, 12, 0, 0, 0, time.UTC).Unix())
+	submitterContractActivationTimeCostwo = big.NewInt(time.Date(2024, time.January, 31, 12, 0, 0, 0, time.UTC).Unix())
+
+	// Define ftso and submitter contract addresses
+	prioritisedFTSOContractAddress = common.HexToAddress("0x1000000000000000000000000000000000000003")
+
+	prioritisedSubmitterContractAddressFlare  = common.HexToAddress("0xEC1C93A9f6a9e18E97784c76aC52053587FcDB89")
+	prioritisedSubmitterContractAddressCostwo = common.HexToAddress("0xEC1C93A9f6a9e18E97784c76aC52053587FcDB89")
+	prioritisedSubmitterContractAddressEnv    = common.HexToAddress(os.Getenv("SUBMITTER_CONTRACT_ADDRESS")) // for local and staging chains
 )
 
 // Define errors
@@ -73,27 +89,35 @@ func GetDaemonSelector(blockTime *big.Int) []byte {
 	}
 }
 
-func GetPrioritisedFTSOContract(blockTime *big.Int) string {
+func isPrioritisedFTSOContract(to *common.Address, blockTime *big.Int) bool {
 	switch {
 	default:
-		return "0x1000000000000000000000000000000000000003"
+		return *to == prioritisedFTSOContractAddress
 	}
 }
 
-func GetPrioritisedSubmitterContract(blockTime *big.Int) string {
+func isPrioritisedSubmitterContract(chainID *big.Int, to *common.Address, blockTime *big.Int) bool {
 	switch {
+	case chainID.Cmp(params.FlareChainID) == 0:
+		return *to == prioritisedSubmitterContractAddressFlare &&
+			blockTime.Cmp(submitterContractActivationTimeFlare) >= 0
+	case chainID.Cmp(params.CostwoChainID) == 0:
+		return *to == prioritisedSubmitterContractAddressCostwo &&
+			blockTime.Cmp(submitterContractActivationTimeCostwo) >= 0
+	case chainID.Cmp(params.LocalFlareChainID) == 0 || chainID.Cmp(params.StagingChainID) == 0:
+		return *to == prioritisedSubmitterContractAddressEnv
 	default:
-		return "0xEC1C93A9f6a9e18E97784c76aC52053587FcDB89"
-	}
-}
-
-func IsPrioritisedContractCall(to *common.Address, ret []byte, blockTime *big.Int) bool {
-	switch {
-	case to == nil:
 		return false
-	case *to == common.HexToAddress(GetPrioritisedFTSOContract(blockTime)):
+	}
+}
+
+func IsPrioritisedContractCall(chainID *big.Int, to *common.Address, ret []byte, blockTime *big.Int) bool {
+	switch {
+	case to == nil || chainID == nil || blockTime == nil:
+		return false
+	case isPrioritisedFTSOContract(to, blockTime):
 		return true
-	case *to == common.HexToAddress(GetPrioritisedSubmitterContract(blockTime)):
+	case isPrioritisedSubmitterContract(chainID, to, blockTime):
 		return !isZeroSlice(ret)
 	default:
 		return false
