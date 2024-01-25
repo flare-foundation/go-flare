@@ -24,8 +24,8 @@ var (
 	// Define ftso and submitter contract addresses
 	prioritisedFTSOContractAddress = common.HexToAddress("0x1000000000000000000000000000000000000003")
 
-	prioritisedSubmitterContractAddressFlare  = common.HexToAddress("0xEC1C93A9f6a9e18E97784c76aC52053587FcDB89")
-	prioritisedSubmitterContractAddressCostwo = common.HexToAddress("0xEC1C93A9f6a9e18E97784c76aC52053587FcDB89")
+	prioritisedSubmitterContractAddressFlare  = common.HexToAddress("0x200000000000000000000000000000000000000a")
+	prioritisedSubmitterContractAddressCostwo = common.HexToAddress("0x300000000000000000000000000000000000000b")
 	prioritisedSubmitterContractAddressEnv    = common.HexToAddress(os.Getenv("SUBMITTER_CONTRACT_ADDRESS")) // for local and staging chains
 )
 
@@ -89,15 +89,14 @@ func GetDaemonSelector(blockTime *big.Int) []byte {
 	}
 }
 
-func isPrioritisedFTSOContract(to *common.Address, blockTime *big.Int) bool {
-	switch {
-	default:
-		return *to == prioritisedFTSOContractAddress
-	}
+func isPrioritisedFTSOContract(to *common.Address) bool {
+	return to != nil && *to == prioritisedFTSOContractAddress
 }
 
 func isPrioritisedSubmitterContract(chainID *big.Int, to *common.Address, blockTime *big.Int) bool {
 	switch {
+	case to == nil || chainID == nil || blockTime == nil:
+		return false
 	case chainID.Cmp(params.FlareChainID) == 0:
 		return *to == prioritisedSubmitterContractAddressFlare &&
 			blockTime.Cmp(submitterContractActivationTimeFlare) >= 0
@@ -113,9 +112,7 @@ func isPrioritisedSubmitterContract(chainID *big.Int, to *common.Address, blockT
 
 func IsPrioritisedContractCall(chainID *big.Int, to *common.Address, ret []byte, blockTime *big.Int) bool {
 	switch {
-	case to == nil || chainID == nil || blockTime == nil:
-		return false
-	case isPrioritisedFTSOContract(to, blockTime):
+	case isPrioritisedFTSOContract(to):
 		return true
 	case isPrioritisedSubmitterContract(chainID, to, blockTime):
 		return !isZeroSlice(ret)
