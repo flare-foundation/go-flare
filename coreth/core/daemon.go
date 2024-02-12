@@ -99,10 +99,10 @@ func isPrioritisedSubmitterContract(chainID *big.Int, to *common.Address, blockT
 		return false
 	case chainID.Cmp(params.FlareChainID) == 0:
 		return *to == prioritisedSubmitterContractAddressFlare &&
-			blockTime.Cmp(submitterContractActivationTimeFlare) >= 0
+			blockTime.Cmp(submitterContractActivationTimeFlare) > 0
 	case chainID.Cmp(params.CostwoChainID) == 0:
 		return *to == prioritisedSubmitterContractAddressCostwo &&
-			blockTime.Cmp(submitterContractActivationTimeCostwo) >= 0
+			blockTime.Cmp(submitterContractActivationTimeCostwo) > 0
 	case chainID.Cmp(params.LocalFlareChainID) == 0 || chainID.Cmp(params.StagingChainID) == 0:
 		return *to == prioritisedSubmitterContractAddressEnv
 	default:
