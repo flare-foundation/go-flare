@@ -481,8 +481,8 @@ func TestDaemonShouldNotMintMoreThanLimit(t *testing.T) {
 
 func TestPrioritisedContract(t *testing.T) {
 	address := common.HexToAddress("0x123456789aBCdEF123456789aBCdef123456789A")
-	preForkTime := big.NewInt(time.Date(2024, time.February, 1, 12, 0, 0, 0, time.UTC).Unix())
-	postForkTime := big.NewInt(time.Date(2024, time.March, 2, 12, 0, 0, 0, time.UTC).Unix())
+	preForkTime := big.NewInt(time.Date(2024, time.March, 20, 12, 0, 0, 0, time.UTC).Unix())
+	postForkTime := big.NewInt(time.Date(2024, time.March, 27, 12, 0, 0, 0, time.UTC).Unix())
 	ret0 := [32]byte{}
 	ret1 := [32]byte{}
 	ret1[31] = 1
