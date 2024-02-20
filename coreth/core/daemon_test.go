@@ -493,16 +493,16 @@ func TestPrioritisedContract(t *testing.T) {
 	if !IsPrioritisedContractCall(params.FlareChainID, &prioritisedFTSOContractAddress, nil, preForkTime) {
 		t.Errorf("Expected true for FTSO contract")
 	}
-	if IsPrioritisedContractCall(params.FlareChainID, &prioritisedSubmitterContractAddressFlare, ret1[:], preForkTime) {
+	if IsPrioritisedContractCall(params.FlareChainID, &prioritisedSubmitterContractAddress, ret1[:], preForkTime) {
 		t.Errorf("Expected false for submitter contract before activation")
 	}
-	if !IsPrioritisedContractCall(params.FlareChainID, &prioritisedSubmitterContractAddressFlare, ret1[:], postForkTime) {
+	if !IsPrioritisedContractCall(params.FlareChainID, &prioritisedSubmitterContractAddress, ret1[:], postForkTime) {
 		t.Errorf("Expected true for submitter contract after activation")
 	}
-	if IsPrioritisedContractCall(params.FlareChainID, &prioritisedSubmitterContractAddressFlare, ret0[:], postForkTime) {
+	if IsPrioritisedContractCall(params.FlareChainID, &prioritisedSubmitterContractAddress, ret0[:], postForkTime) {
 		t.Errorf("Expected false for submitter contract with wrong return value")
 	}
-	if IsPrioritisedContractCall(params.FlareChainID, &prioritisedSubmitterContractAddressFlare, nil, postForkTime) {
+	if IsPrioritisedContractCall(params.FlareChainID, &prioritisedSubmitterContractAddress, nil, postForkTime) {
 		t.Errorf("Expected false for submitter contract with no return value")
 	}
 }

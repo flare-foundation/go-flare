@@ -18,15 +18,14 @@ import (
 
 var (
 	// Define activation times for submitter contract
-	submitterContractActivationTimeFlare  = big.NewInt(time.Date(2024, time.March, 1, 12, 0, 0, 0, time.UTC).Unix())
-	submitterContractActivationTimeCostwo = big.NewInt(time.Date(2024, time.January, 31, 12, 0, 0, 0, time.UTC).Unix())
+	submitterContractActivationTimeFlare  = big.NewInt(time.Date(2024, time.March, 26, 12, 0, 0, 0, time.UTC).Unix())
+	submitterContractActivationTimeCostwo = big.NewInt(time.Date(2024, time.February, 21, 12, 0, 0, 0, time.UTC).Unix())
 
 	// Define ftso and submitter contract addresses
 	prioritisedFTSOContractAddress = common.HexToAddress("0x1000000000000000000000000000000000000003")
 
-	prioritisedSubmitterContractAddressFlare  = common.HexToAddress("0x200000000000000000000000000000000000000a")
-	prioritisedSubmitterContractAddressCostwo = common.HexToAddress("0x300000000000000000000000000000000000000b")
-	prioritisedSubmitterContractAddressEnv    = common.HexToAddress(os.Getenv("SUBMITTER_CONTRACT_ADDRESS")) // for local and staging chains
+	prioritisedSubmitterContractAddress    = common.HexToAddress("0x2cA6571Daa15ce734Bbd0Bf27D5C9D16787fc33f")
+	prioritisedSubmitterContractAddressEnv = common.HexToAddress(os.Getenv("SUBMITTER_CONTRACT_ADDRESS")) // for local and staging chains
 )
 
 // Define errors
@@ -98,10 +97,10 @@ func isPrioritisedSubmitterContract(chainID *big.Int, to *common.Address, blockT
 	case to == nil || chainID == nil || blockTime == nil:
 		return false
 	case chainID.Cmp(params.FlareChainID) == 0:
-		return *to == prioritisedSubmitterContractAddressFlare &&
+		return *to == prioritisedSubmitterContractAddress &&
 			blockTime.Cmp(submitterContractActivationTimeFlare) > 0
 	case chainID.Cmp(params.CostwoChainID) == 0:
-		return *to == prioritisedSubmitterContractAddressCostwo &&
+		return *to == prioritisedSubmitterContractAddress &&
 			blockTime.Cmp(submitterContractActivationTimeCostwo) > 0
 	case chainID.Cmp(params.LocalFlareChainID) == 0 || chainID.Cmp(params.StagingChainID) == 0:
 		return *to == prioritisedSubmitterContractAddressEnv
