@@ -19,7 +19,7 @@ import (
 var (
 	// Define activation times for submitter contract
 	submitterContractActivationTimeFlare  = big.NewInt(time.Date(2024, time.March, 26, 12, 0, 0, 0, time.UTC).Unix())
-	submitterContractActivationTimeCostwo = big.NewInt(time.Date(2024, time.February, 21, 12, 0, 0, 0, time.UTC).Unix())
+	submitterContractActivationTimeCostwo = big.NewInt(time.Date(2024, time.February, 21, 14, 0, 0, 0, time.UTC).Unix())
 
 	// Define ftso and submitter contract addresses
 	prioritisedFTSOContractAddress = common.HexToAddress("0x1000000000000000000000000000000000000003")
