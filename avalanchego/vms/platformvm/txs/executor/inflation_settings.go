@@ -113,6 +113,17 @@ func getPhaseTwoInflationSettings(networkID uint32, config *config.Config) (uint
 			MaxFutureStartTime,
 			15,
 			time.Date(2023, time.September, 7, 0, 0, 0, 0, time.UTC)
+	case constants.LocalFlareID:
+		return 10 * units.KiloAvax,
+			50 * units.MegaAvax,
+			10 * units.KiloAvax,
+			0,
+			2 * 7 * 24 * time.Hour,
+			2 * 7 * 24 * time.Hour,
+			365 * 24 * time.Hour,
+			MaxFutureStartTime,
+			MaxValidatorWeightFactor,
+			time.Date(2023, time.April, 10, 15, 0, 0, 0, time.UTC)
 	default:
 		return getPhaseOneInflationSettings(networkID, config)
 	}

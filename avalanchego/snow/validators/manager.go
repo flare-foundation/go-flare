@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils/constants"
 )
 
 var _ Manager = &manager{}
@@ -43,9 +44,18 @@ type Manager interface {
 }
 
 // NewManager returns a new, empty manager
-func NewManager() Manager {
+// SGB-MERGE
+func NewManager(networkID uint32) Manager {
+	subnetToVdrs := make(map[ids.ID]Set)
+	switch networkID {
+	case constants.LocalID:
+		subnetToVdrs[constants.PrimaryNetworkID] = loadCustomValidators()
+		// SGB-MERGE
+		// TODO: Add sgb and coston network validators
+	}
+
 	return &manager{
-		subnetToVdrs: make(map[ids.ID]Set),
+		subnetToVdrs: subnetToVdrs,
 	}
 }
 

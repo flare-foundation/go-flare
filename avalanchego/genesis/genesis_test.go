@@ -178,7 +178,7 @@ func TestGenesisFromFile(t *testing.T) {
 		},
 		"fuji (with custom specified)": {
 			networkID:    constants.FujiID,
-			customConfig: localGenesisConfigJSON, // won't load
+			customConfig: []byte(localGenesisConfigJSON), // won't load
 			err:          "cannot override genesis config for standard network fuji (5)",
 		},
 		"local": {
@@ -198,7 +198,7 @@ func TestGenesisFromFile(t *testing.T) {
 		},
 		"custom (networkID mismatch)": {
 			networkID:    9999,
-			customConfig: localGenesisConfigJSON,
+			customConfig: []byte(localGenesisConfigJSON),
 			err:          "networkID 9999 specified but genesis config contains networkID 12345",
 		},
 		"custom (invalid format)": {
@@ -276,7 +276,7 @@ func TestGenesisFromFlag(t *testing.T) {
 		},
 		"custom (networkID mismatch)": {
 			networkID:    9999,
-			customConfig: localGenesisConfigJSON,
+			customConfig: []byte(localGenesisConfigJSON),
 			err:          "networkID 9999 specified but genesis config contains networkID 12345",
 		},
 		"custom (invalid format)": {

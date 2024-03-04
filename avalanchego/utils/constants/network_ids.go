@@ -26,6 +26,8 @@ const (
 	CostwoID     uint32 = 114
 	StagingID    uint32 = 161
 	LocalFlareID uint32 = 162
+	SongbirdID   uint32 = 5
+	CostonID     uint32 = 7
 
 	MainnetName    = "mainnet"
 	CascadeName    = "cascade"
@@ -39,6 +41,8 @@ const (
 	CostwoName     = "costwo"
 	StagingName    = "staging"
 	LocalFlareName = "localflare"
+	SongbirdName   = "songbird"
+	CostonName     = "coston"
 
 	MainnetHRP    = "avax"
 	CascadeHRP    = "cascade"
@@ -52,6 +56,8 @@ const (
 	CostwoHRP     = "costwo"
 	StagingHRP    = "staging"
 	LocalFlareHRP = "localflare"
+	SongbirdHRP   = "songbird"
+	CostonHRP     = "coston"
 )
 
 // Variables to be exported
@@ -60,17 +66,20 @@ var (
 	PlatformChainID  = ids.Empty
 
 	NetworkIDToNetworkName = map[uint32]string{
-		MainnetID:    MainnetName,
-		CascadeID:    CascadeName,
-		DenaliID:     DenaliName,
-		EverestID:    EverestName,
-		FujiID:       FujiName,
+		MainnetID: MainnetName,
+		CascadeID: CascadeName,
+		DenaliID:  DenaliName,
+		EverestID: EverestName,
+		// SGB-MERGE
+		// FujiID:       FujiName,
 		UnitTestID:   UnitTestName,
 		LocalID:      LocalName,
 		FlareID:      FlareName,
 		CostwoID:     CostwoName,
 		StagingID:    StagingName,
 		LocalFlareID: LocalFlareName,
+		SongbirdID:   SongbirdName,
+		CostonID:     CostonName,
 	}
 	NetworkNameToNetworkID = map[string]uint32{
 		MainnetName:    MainnetID,
@@ -85,6 +94,8 @@ var (
 		CostwoName:     CostwoID,
 		StagingName:    StagingID,
 		LocalFlareName: LocalFlareID,
+		SongbirdName:   SongbirdID,
+		CostonName:     CostonID,
 	}
 
 	NetworkIDToHRP = map[uint32]string{
@@ -92,13 +103,14 @@ var (
 		CascadeID:    CascadeHRP,
 		DenaliID:     DenaliHRP,
 		EverestID:    EverestHRP,
-		FujiID:       FujiHRP,
 		UnitTestID:   UnitTestHRP,
 		LocalID:      LocalHRP,
 		FlareID:      FlareHRP,
 		CostwoID:     CostwoHRP,
 		StagingID:    StagingHRP,
 		LocalFlareID: LocalFlareHRP,
+		SongbirdID:   SongbirdHRP,
+		CostonID:     CostonHRP,
 	}
 	NetworkHRPToNetworkID = map[string]uint32{
 		MainnetHRP:    MainnetID,
@@ -112,6 +124,8 @@ var (
 		CostwoHRP:     CostwoID,
 		StagingHRP:    StagingID,
 		LocalFlareHRP: LocalFlareID,
+		SongbirdHRP:   SongbirdID,
+		CostonHRP:     CostonID,
 	}
 
 	ValidNetworkPrefix = "network-"

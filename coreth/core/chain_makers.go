@@ -290,10 +290,15 @@ func makeHeader(chain consensus.ChainReader, config *params.ChainConfig, parent 
 
 	timestamp := new(big.Int).SetUint64(time)
 	var gasLimit uint64
-	if config.IsApricotPhase1(timestamp) {
-		gasLimit = params.ApricotPhase1GasLimit
+	if config.IsSongbirdCode() {
+		// SGB-MERGE
+		gasLimit = params.ApricotPhase5GasLimit
 	} else {
-		gasLimit = CalcGasLimit(parent.GasUsed(), parent.GasLimit(), parent.GasLimit(), parent.GasLimit())
+		if config.IsApricotPhase1(timestamp) {
+			gasLimit = params.ApricotPhase1GasLimit
+		} else {
+			gasLimit = CalcGasLimit(parent.GasUsed(), parent.GasLimit(), parent.GasLimit(), parent.GasLimit())
+		}
 	}
 
 	header := &types.Header{

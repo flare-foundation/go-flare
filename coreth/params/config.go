@@ -48,10 +48,12 @@ var (
 
 	// Flare Chain IDs.
 	FlareChainID      = big.NewInt(14)  // https://github.com/ethereum-lists/chains/blob/master/_data/chains/eip155-14.json
+	CostonChainID     = big.NewInt(16)  // https://github.com/ethereum-lists/chains/blob/master/_data/chains/eip155-16.json
 	SongbirdChainID   = big.NewInt(19)  // https://github.com/ethereum-lists/chains/blob/master/_data/chains/eip155-19.json
 	CostwoChainID     = big.NewInt(114) // TO-DO: Register with https://github.com/ethereum-lists
 	StagingChainID    = big.NewInt(161)
 	LocalFlareChainID = big.NewInt(162)
+	LocalChainID      = big.NewInt(4294967295)
 
 	errNonGenesisForkByHeight = errors.New("coreth only supports forking by height at the genesis block")
 )
@@ -211,6 +213,12 @@ func (c *ChainConfig) String() string {
 	banner += fmt.Sprintf(" - Bluberry Timestamp:          %-8v (https://github.com/ava-labs/avalanchego/releases/tag/v1.8.0)\n", c.BlueberryBlockTimestamp)
 	banner += "\n"
 	return banner
+}
+
+// SGB-MERGE
+// Code for songbird network (songbird, coston, local id)
+func (c *ChainConfig) IsSongbirdCode() bool {
+	return c.ChainID.Cmp(SongbirdChainID) == 0 || c.ChainID.Cmp(CostonChainID) == 0 || c.ChainID.Cmp(LocalChainID) == 0
 }
 
 // IsHomestead returns whether num is either equal to the homestead block or greater.
@@ -526,6 +534,10 @@ type Rules struct {
 	IsApricotPhase1, IsApricotPhase2, IsApricotPhase3, IsApricotPhase4, IsApricotPhase5 bool
 	IsBlueberry                                                                         bool
 
+	// SGB-MERGE
+	// Songbird (coston, local)
+	IsSongbirdCode bool
+
 	// Precompiles maps addresses to stateful precompiled contracts that are enabled
 	// for this rule set.
 	// Note: none of these addresses should conflict with the address space used by
@@ -549,6 +561,7 @@ func (c *ChainConfig) rules(num *big.Int) Rules {
 		IsConstantinople: c.IsConstantinople(num),
 		IsPetersburg:     c.IsPetersburg(num),
 		IsIstanbul:       c.IsIstanbul(num),
+		IsSongbirdCode:   c.IsSongbirdCode(),
 	}
 }
 

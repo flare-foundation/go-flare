@@ -128,12 +128,16 @@ func (w *worker) commitNewWork() (*types.Block, error) {
 	}
 
 	var gasLimit uint64
-	if w.chainConfig.IsApricotPhase1(big.NewInt(timestamp)) {
-		gasLimit = params.ApricotPhase1GasLimit
+	if w.chainConfig.IsSongbirdCode() {
+		gasLimit = params.ApricotPhase5GasLimit
 	} else {
-		// The gas limit is set in phase1 to ApricotPhase1GasLimit because the ceiling and floor were set to the same value
-		// such that the gas limit converged to it. Since this is hardbaked now, we remove the ability to configure it.
-		gasLimit = core.CalcGasLimit(parent.GasUsed(), parent.GasLimit(), params.ApricotPhase1GasLimit, params.ApricotPhase1GasLimit)
+		if w.chainConfig.IsApricotPhase1(big.NewInt(timestamp)) {
+			gasLimit = params.ApricotPhase1GasLimit
+		} else {
+			// The gas limit is set in phase1 to ApricotPhase1GasLimit because the ceiling and floor were set to the same value
+			// such that the gas limit converged to it. Since this is hardbaked now, we remove the ability to configure it.
+			gasLimit = core.CalcGasLimit(parent.GasUsed(), parent.GasLimit(), params.ApricotPhase1GasLimit, params.ApricotPhase1GasLimit)
+		}
 	}
 	num := parent.Number()
 	header := &types.Header{

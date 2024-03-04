@@ -864,7 +864,9 @@ func GetNextStakerChangeTime(state state.Chain) (time.Time, error) {
 	case hasPendingStaker:
 		return pendingStakerIterator.Value().NextTime, nil
 	default:
-		return time.Time{}, database.ErrNotFound
+		// SGB-MERGE
+		// return time.Time{}, database.ErrNotFound
+		return state.GetTimestamp().Add(time.Second), nil
 	}
 }
 

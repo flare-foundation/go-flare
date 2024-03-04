@@ -727,7 +727,7 @@ func (n *Node) initVMs() error {
 	// Instead of updating node's validator manager, platform chain makes changes
 	// to its own local validator manager (which isn't used for sampling)
 	if !n.Config.EnableStaking {
-		vdrs = validators.NewManager()
+		vdrs = validators.NewManager(n.Config.NetworkID)
 	}
 
 	vmRegisterer := registry.NewVMRegisterer(registry.VMRegistererConfig{
@@ -1120,7 +1120,7 @@ func (n *Node) initAPIAliases(genesisBytes []byte) error {
 
 // Initializes [n.vdrs] and returns the Primary Network validator set.
 func (n *Node) initVdrs() (validators.Set, error) {
-	n.vdrs = validators.NewManager()
+	n.vdrs = validators.NewManager(n.Config.NetworkID)
 	vdrSet := validators.NewSet()
 	if err := n.vdrs.Set(constants.PrimaryNetworkID, vdrSet); err != nil {
 		return vdrSet, fmt.Errorf("couldn't set primary network validators: %w", err)

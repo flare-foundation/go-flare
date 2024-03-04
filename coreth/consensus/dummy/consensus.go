@@ -96,20 +96,28 @@ func (self *DummyEngine) verifyHeaderGasFields(config *params.ChainConfig, heade
 	if header.GasUsed > header.GasLimit {
 		return fmt.Errorf("invalid gasUsed: have %d, gasLimit %d", header.GasUsed, header.GasLimit)
 	}
-	if config.IsApricotPhase1(timestamp) {
-		if header.GasLimit != params.ApricotPhase1GasLimit {
-			return fmt.Errorf("expected gas limit to be %d, but found %d", params.ApricotPhase1GasLimit, header.GasLimit)
+	if config.IsSongbirdCode() {
+		// SGB-MERGE
+		// Verify that the gas limit is correct for the current phase
+		if header.GasLimit != params.ApricotPhase5GasLimit {
+			return fmt.Errorf("expected gas limit to be %d in apricot phase 5 but got %d", params.ApricotPhase5GasLimit, header.GasLimit)
 		}
 	} else {
-		// Verify that the gas limit remains within allowed bounds
-		diff := int64(parent.GasLimit) - int64(header.GasLimit)
-		if diff < 0 {
-			diff *= -1
-		}
-		limit := parent.GasLimit / params.GasLimitBoundDivisor
+		if config.IsApricotPhase1(timestamp) {
+			if header.GasLimit != params.ApricotPhase1GasLimit {
+				return fmt.Errorf("expected gas limit to be %d, but found %d", params.ApricotPhase1GasLimit, header.GasLimit)
+			}
+		} else {
+			// Verify that the gas limit remains within allowed bounds
+			diff := int64(parent.GasLimit) - int64(header.GasLimit)
+			if diff < 0 {
+				diff *= -1
+			}
+			limit := parent.GasLimit / params.GasLimitBoundDivisor
 
-		if uint64(diff) >= limit || header.GasLimit < params.MinGasLimit {
-			return fmt.Errorf("invalid gas limit: have %d, want %d += %d", header.GasLimit, parent.GasLimit, limit)
+			if uint64(diff) >= limit || header.GasLimit < params.MinGasLimit {
+				return fmt.Errorf("invalid gas limit: have %d, want %d += %d", header.GasLimit, parent.GasLimit, limit)
+			}
 		}
 	}
 

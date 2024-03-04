@@ -8,6 +8,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/log"
 
 	safemath "github.com/ava-labs/avalanchego/utils/math"
 
@@ -98,12 +99,28 @@ func (v blockValidator) SyntacticVerify(b *Block, rules params.Rules) error {
 	}
 
 	// Enforce static gas limit after ApricotPhase1 (prior to ApricotPhase1 it's handled in processing).
-	if rules.IsApricotPhase1 {
-		if ethHeader.GasLimit != params.ApricotPhase1GasLimit {
+
+	// DEBUG !!!!!
+	log.Info(fmt.Sprintf("DEBUG: ethHeader.GasLimit: %d", ethHeader.GasLimit))
+	log.Info(fmt.Sprintf("DEBUG IsSongbirdCode: %t", rules.IsSongbirdCode))
+	log.Info(fmt.Sprintf("DEBUG chain id: %v", rules.ChainID.Int64()))
+
+	if rules.IsSongbirdCode {
+		// SGB-MERGE
+		if ethHeader.GasLimit != params.ApricotPhase5GasLimit {
 			return fmt.Errorf(
-				"expected gas limit to be %d after apricot phase 1 but got %d",
-				params.ApricotPhase1GasLimit, ethHeader.GasLimit,
+				"expected gas limit to be %d in apricot phase 5 but got %d",
+				params.ApricotPhase5GasLimit, ethHeader.GasLimit,
 			)
+		}
+	} else {
+		if rules.IsApricotPhase1 {
+			if ethHeader.GasLimit != params.ApricotPhase1GasLimit {
+				return fmt.Errorf(
+					"expected gas limit to be %d after apricot phase 1 but got %d",
+					params.ApricotPhase1GasLimit, ethHeader.GasLimit,
+				)
+			}
 		}
 	}
 

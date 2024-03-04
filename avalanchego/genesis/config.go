@@ -124,6 +124,12 @@ func (c Config) Unparse() (UnparsedConfig, error) {
 }
 
 func (c *Config) InitialSupply() (uint64, error) {
+	// SGB-MERGE
+	// For songbird, coston and local networks, the initial supply is 1
+	if c.NetworkID == constants.SongbirdID || c.NetworkID == constants.CostonID || c.NetworkID == constants.LocalID {
+		return 1, nil
+	}
+
 	initialSupply := uint64(0)
 	for _, allocation := range c.Allocations {
 		newInitialSupply, err := safemath.Add64(initialSupply, allocation.InitialAmount)
@@ -169,6 +175,14 @@ var (
 	// LocalFlareConfig is the config that should be used to generate a localFlare
 	// genesis.
 	LocalFlareConfig Config
+
+	// SongbirdConfig is the config that should be used to generate the Songbird
+	// canary network genesis.
+	SongbirdConfig Config
+
+	// CostonConfig is the config tat should be used to generate the Coston test
+	// network genesis.
+	CostonConfig Config
 )
 
 func init() {
@@ -179,16 +193,20 @@ func init() {
 	unparsedCostwoConfig := UnparsedConfig{}
 	unparsedStagingConfig := UnparsedConfig{}
 	unparsedLocalFlareConfig := UnparsedConfig{}
+	unparsedSongbirdConfig := UnparsedConfig{}
+	unparsedCostonConfig := UnparsedConfig{}
 
 	errs := wrappers.Errs{}
 	errs.Add(
 		json.Unmarshal(mainnetGenesisConfigJSON, &unparsedMainnetConfig),
 		json.Unmarshal(fujiGenesisConfigJSON, &unparsedFujiConfig),
-		json.Unmarshal(localGenesisConfigJSON, &unparsedLocalConfig),
+		json.Unmarshal([]byte(localGenesisConfigJSON), &unparsedLocalConfig),
 		json.Unmarshal(flareGenesisConfigJSON, &unparsedFlareConfig),
 		json.Unmarshal(costwoGenesisConfigJSON, &unparsedCostwoConfig),
 		json.Unmarshal(stagingGenesisConfigJSON, &unparsedStagingConfig),
 		json.Unmarshal(localFlareGenesisConfigJSON, &unparsedLocalFlareConfig),
+		json.Unmarshal([]byte(songbirdGenesisConfigJSON), &unparsedSongbirdConfig),
+		json.Unmarshal([]byte(costonGenesisConfigJSON), &unparsedCostonConfig),
 	)
 	if errs.Errored() {
 		panic(errs.Err)
@@ -203,6 +221,7 @@ func init() {
 	FujiConfig = fujiConfig
 
 	localConfig, err := unparsedLocalConfig.Parse()
+	localConfig.CChainGenesis = localCChainGenesis
 	errs.Add(err)
 	LocalConfig = localConfig
 
@@ -222,6 +241,14 @@ func init() {
 	errs.Add(err)
 	LocalFlareConfig = localFlareConfig
 
+	songbirdConfig, err := unparsedSongbirdConfig.Parse()
+	errs.Add(err)
+	SongbirdConfig = songbirdConfig
+
+	costonConfig, err := unparsedCostonConfig.Parse()
+	errs.Add(err)
+	CostonConfig = costonConfig
+
 	if errs.Errored() {
 		panic(errs.Err)
 	}
@@ -231,8 +258,9 @@ func GetConfig(networkID uint32) *Config {
 	switch networkID {
 	case constants.MainnetID:
 		return &MainnetConfig
-	case constants.FujiID:
-		return &FujiConfig
+	// SGB-MERGE
+	// case constants.FujiID:
+	// 	return &FujiConfig
 	case constants.LocalID:
 		return &LocalConfig
 	case constants.FlareID:
@@ -243,6 +271,10 @@ func GetConfig(networkID uint32) *Config {
 		return &StagingConfig
 	case constants.LocalFlareID:
 		return &LocalFlareConfig
+	case constants.SongbirdID:
+		return &SongbirdConfig
+	case constants.CostonID:
+		return &CostonConfig
 	default:
 		tempConfig := LocalConfig
 		tempConfig.NetworkID = networkID
