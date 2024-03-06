@@ -14,19 +14,39 @@ then
 	fi
 fi
 
-# Check if we can connect to the bootstrap endpoint (whitelisting)
-BOOTSTRAP_STATUS=$(curl -m 10 -s -w %{http_code} -X POST --data '{ "jsonrpc":"2.0", "id":1, "method":"info.getNodeIP" }' -H 'content-type:application/json;' "$AUTOCONFIGURE_BOOTSTRAP_ENDPOINT" -o /dev/null)
-if [ "$BOOTSTRAP_STATUS" != "200" ]; then
-	echo "Could not connect to bootstrap endpoint. Is your IP whitelisted?"
-	exit 1
-fi
-
 if [ "$AUTOCONFIGURE_BOOTSTRAP" = "1" ];
 then
+
+
+    __BOOTSTRAP_ENDPOINTS=("${AUTOCONFIGURE_BOOTSTRAP_ENDPOINT}" ${AUTOCONFIGURE_FALLBACK_ENDPOINTS//,/ })
+
+	echo "Trying provided bootstrap endpoints"
+	for __ENDPOINT in "${__BOOTSTRAP_ENDPOINTS[@]}"; do
+        echo "  Trying endpoint $__ENDPOINT"
+
+        RESPONSE_CODE=$(curl -X POST -m 5 -s -o /dev/null -w '%{http_code}' "$__ENDPOINT" -H 'Content-Type: application/json' --data '{ "jsonrpc":"2.0", "id":1, "method":"info.getNodeIP" }' || true)
+        if [ "$RESPONSE_CODE" = "200" ]; then
+            __BOOTSTRAP_ENDPOINT="$__ENDPOINT"
+            break
+        else
+			echo "    Failed! The endpoint is unreachable."
+            continue
+        fi
+    done
+
+	if [ -z "$__BOOTSTRAP_ENDPOINT" ]; then
+        echo "  None of provided bootstrap endpoints worked!"
+        exit 1
+    fi
+
+
 	echo "Autoconfiguring bootstrap IPs and IDs"
 
-	BOOTSTRAP_IPS=$(curl -m 10 -sX POST --data '{ "jsonrpc":"2.0", "id":1, "method":"info.getNodeIP" }' -H 'content-type:application/json;' "$AUTOCONFIGURE_BOOTSTRAP_ENDPOINT" | jq -r ".result.ip")
-	BOOTSTRAP_IDS=$(curl -m 10 -sX POST --data '{ "jsonrpc":"2.0", "id":1, "method":"info.getNodeID" }' -H 'content-type:application/json;' "$AUTOCONFIGURE_BOOTSTRAP_ENDPOINT" | jq -r ".result.nodeID")
+	BOOTSTRAP_IPS=$(curl -m 10 -sX POST --data '{ "jsonrpc":"2.0", "id":1, "method":"info.getNodeIP" }' -H 'content-type:application/json;' "$__BOOTSTRAP_ENDPOINT" | jq -r ".result.ip")
+	BOOTSTRAP_IDS=$(curl -m 10 -sX POST --data '{ "jsonrpc":"2.0", "id":1, "method":"info.getNodeID" }' -H 'content-type:application/json;' "$__BOOTSTRAP_ENDPOINT" | jq -r ".result.nodeID")
+
+	echo "  Got bootstrap ips: '${BOOTSTRAP_IPS}'"
+	echo "  Got bootstrap ids: '${BOOTSTRAP_IDS}'"
 fi
 
 exec /app/build/avalanchego \
