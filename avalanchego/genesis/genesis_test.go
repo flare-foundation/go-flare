@@ -44,8 +44,8 @@ func TestValidateConfig(t *testing.T) {
 			config:    &FujiConfig,
 		},
 		"local": {
-			networkID: 12345,
-			config:    &LocalConfig,
+			networkID: 162,
+			config:    &LocalFlareConfig,
 		},
 		"mainnet (networkID mismatch)": {
 			networkID: 2,
@@ -53,63 +53,63 @@ func TestValidateConfig(t *testing.T) {
 			err:       "networkID 2 specified but genesis config contains networkID 1",
 		},
 		"invalid start time": {
-			networkID: 12345,
+			networkID: 162,
 			config: func() *Config {
-				thisConfig := LocalConfig
+				thisConfig := LocalFlareConfig
 				thisConfig.StartTime = 999999999999999
 				return &thisConfig
 			}(),
 			err: "start time cannot be in the future",
 		},
 		"no initial supply": {
-			networkID: 12345,
+			networkID: 162,
 			config: func() *Config {
-				thisConfig := LocalConfig
+				thisConfig := LocalFlareConfig
 				thisConfig.Allocations = []Allocation{}
 				return &thisConfig
 			}(),
 			err: "initial supply must be > 0",
 		},
 		"no initial stakers": {
-			networkID: 12345,
+			networkID: 162,
 			config: func() *Config {
-				thisConfig := LocalConfig
+				thisConfig := LocalFlareConfig
 				thisConfig.InitialStakers = []Staker{}
 				return &thisConfig
 			}(),
 			err: "initial stakers must be > 0",
 		},
 		"invalid initial stake duration": {
-			networkID: 12345,
+			networkID: 162,
 			config: func() *Config {
-				thisConfig := LocalConfig
+				thisConfig := LocalFlareConfig
 				thisConfig.InitialStakeDuration = 0
 				return &thisConfig
 			}(),
 			err: "initial stake duration must be > 0",
 		},
 		"invalid stake offset": {
-			networkID: 12345,
+			networkID: 14,
 			config: func() *Config {
-				thisConfig := LocalConfig
+				thisConfig := FlareConfig
 				thisConfig.InitialStakeDurationOffset = 100000000
 				return &thisConfig
 			}(),
-			err: "initial stake duration is 31536000 but need at least 400000000 with offset of 100000000",
+			err: "initial stake duration is 31536000 but need at least 1900000000 with offset of 100000000",
 		},
 		"empty initial staked funds": {
-			networkID: 12345,
+			networkID: 162,
 			config: func() *Config {
-				thisConfig := LocalConfig
+				thisConfig := LocalFlareConfig
 				thisConfig.InitialStakedFunds = []ids.ShortID(nil)
 				return &thisConfig
 			}(),
 			err: "initial staked funds cannot be empty",
 		},
 		"duplicate initial staked funds": {
-			networkID: 12345,
+			networkID: 162,
 			config: func() *Config {
-				thisConfig := LocalConfig
+				thisConfig := LocalFlareConfig
 				thisConfig.InitialStakedFunds = append(thisConfig.InitialStakedFunds, thisConfig.InitialStakedFunds[0])
 				return &thisConfig
 			}(),
@@ -119,24 +119,24 @@ func TestValidateConfig(t *testing.T) {
 			networkID: 5,
 			config: func() *Config {
 				thisConfig := FujiConfig
-				thisConfig.InitialStakedFunds = append(thisConfig.InitialStakedFunds, LocalConfig.InitialStakedFunds[0])
+				thisConfig.InitialStakedFunds = append(thisConfig.InitialStakedFunds, LocalFlareConfig.InitialStakedFunds[0])
 				return &thisConfig
 			}(),
 			err: "does not have an allocation to stake",
 		},
 		"empty C-Chain genesis": {
-			networkID: 12345,
+			networkID: 162,
 			config: func() *Config {
-				thisConfig := LocalConfig
+				thisConfig := LocalFlareConfig
 				thisConfig.CChainGenesis = ""
 				return &thisConfig
 			}(),
 			err: "C-Chain genesis cannot be empty",
 		},
 		"empty message": {
-			networkID: 12345,
+			networkID: 162,
 			config: func() *Config {
-				thisConfig := LocalConfig
+				thisConfig := LocalFlareConfig
 				thisConfig.Message = ""
 				return &thisConfig
 			}(),
@@ -171,15 +171,15 @@ func TestGenesisFromFile(t *testing.T) {
 			customConfig: customGenesisConfigJSON,
 			err:          "cannot override genesis config for standard network mainnet (1)",
 		},
-		"fuji": {
-			networkID:    constants.FujiID,
+		"songbird": {
+			networkID:    constants.SongbirdID,
 			customConfig: customGenesisConfigJSON,
-			err:          "cannot override genesis config for standard network fuji (5)",
+			err:          "cannot override genesis config for standard network songbird (5)",
 		},
-		"fuji (with custom specified)": {
-			networkID:    constants.FujiID,
+		"songbird (with custom specified)": {
+			networkID:    constants.SongbirdID,
 			customConfig: []byte(localGenesisConfigJSON), // won't load
-			err:          "cannot override genesis config for standard network fuji (5)",
+			err:          "cannot override genesis config for standard network songbird (5)",
 		},
 		"local": {
 			networkID:    constants.LocalID,
@@ -256,9 +256,9 @@ func TestGenesisFromFlag(t *testing.T) {
 			networkID: constants.MainnetID,
 			err:       "cannot override genesis config for standard network mainnet (1)",
 		},
-		"fuji": {
-			networkID: constants.FujiID,
-			err:       "cannot override genesis config for standard network fuji (5)",
+		"songbird": {
+			networkID: constants.SongbirdID,
+			err:       "cannot override genesis config for standard network songbird (5)",
 		},
 		"local": {
 			networkID: constants.LocalID,
@@ -344,12 +344,12 @@ func TestGenesis(t *testing.T) {
 			expectedID: "UUvXi6j7QhVvgpbKM89MP5HdrxKm9CaJeHc187TsDNf8nZdLk",
 		},
 		{
-			networkID:  constants.FujiID,
-			expectedID: "MSj6o9TpezwsQx4Tv7SHqpVvCbJ8of1ikjsqPZ1bKRjc9zBy3",
+			networkID:  constants.SongbirdID,
+			expectedID: "wehzwSstW6ChWVj356tLr6sJfSb8PaZMhcerXUyxsAUzia1Gr",
 		},
 		{
 			networkID:  constants.LocalID,
-			expectedID: "hBbtNFKLpjuKti32L5bnfZ2vspABkN268t8FincYhQWnWLHxw",
+			expectedID: "pA6uxpovoxuKFwNxGndoX9YTYDUWCFnqwDodVWvS43UWT6Zde",
 		},
 	}
 	for _, test := range tests {
@@ -389,15 +389,15 @@ func TestVMGenesis(t *testing.T) {
 			},
 		},
 		{
-			networkID: constants.FujiID,
+			networkID: constants.SongbirdID,
 			vmTest: []vmTest{
 				{
 					vmID:       constants.AVMID,
-					expectedID: "2JVSBoinj9C2J33VntvzYtVJNZdN2NKiwwKjcumHUWEb5DbBrm",
+					expectedID: "7xKYhEvYuUekwDxozgEiMPufzJ3jJPypKbGE8ny6KL84z4RKB",
 				},
 				{
 					vmID:       constants.EVMID,
-					expectedID: "yH8D7ThNJkxmtkuv2jgBa4P1Rn3Qpr4pPr7QYNfcdoS6k6HWp",
+					expectedID: "2aamPVJ7SXz7DBUxFNY1Lyga52KWaVUH2Gz9Fetxo5gwjY5a29",
 				},
 			},
 		},
@@ -406,11 +406,11 @@ func TestVMGenesis(t *testing.T) {
 			vmTest: []vmTest{
 				{
 					vmID:       constants.AVMID,
-					expectedID: "2eNy1mUFdmaxXNj1eQHUe7Np4gju9sJsEtWQ4MX3ToiNKuADed",
+					expectedID: "ALRkp1tuy7ErVkWuEWFLVd657JAULWDDyQkQBkLKVE94jCaNu",
 				},
 				{
 					vmID:       constants.EVMID,
-					expectedID: "2CA6j5zYzasynPsFeNoqWkmTCt3VScMvXUZHbfDJ8k3oGzAPtU",
+					expectedID: "yHEy62ti66aY6p4gzGWd2d5DCgSCuuYEnHJUagQVxPm24gz94",
 				},
 			},
 		},
@@ -454,12 +454,12 @@ func TestAVAXAssetID(t *testing.T) {
 			expectedID: "FvwEAhmxKfeiG8SnEvq42hc6whRyY3EFYAvebMqDNDGCgxN5Z",
 		},
 		{
-			networkID:  constants.FujiID,
-			expectedID: "U8iRqJoiJm8xZHAacmvYyZVwqQx6uDNtQeP3CQ6fcgQk3JqnK",
+			networkID:  constants.SongbirdID,
+			expectedID: "1S3PSi4VsVpD8iK2vdykuajxVeuCV2xhjPSkQ4K88mqWGozMP",
 		},
 		{
 			networkID:  constants.LocalID,
-			expectedID: "2fombhL7aGPwj3KH4bfrmJwW6PVnMobf9Y2fn9GwxiAAJyFDbe",
+			expectedID: "2RULRJVXVpQNAsV3sBpy4G8LWH1LN3z5Adokv5bVtnZmsBQDCX",
 		},
 	}
 

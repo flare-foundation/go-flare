@@ -94,8 +94,9 @@ var (
 		CostwoName:     CostwoID,
 		StagingName:    StagingID,
 		LocalFlareName: LocalFlareID,
-		SongbirdName:   SongbirdID,
-		CostonName:     CostonID,
+		// SGB-MERGE
+		SongbirdName: SongbirdID,
+		CostonName:   CostonID,
 	}
 
 	NetworkIDToHRP = map[uint32]string{
@@ -109,8 +110,9 @@ var (
 		CostwoID:     CostwoHRP,
 		StagingID:    StagingHRP,
 		LocalFlareID: LocalFlareHRP,
-		SongbirdID:   SongbirdHRP,
-		CostonID:     CostonHRP,
+		// SGB-MERGE
+		SongbirdID: SongbirdHRP,
+		CostonID:   CostonHRP,
 	}
 	NetworkHRPToNetworkID = map[string]uint32{
 		MainnetHRP:    MainnetID,
@@ -124,8 +126,9 @@ var (
 		CostwoHRP:     CostwoID,
 		StagingHRP:    StagingID,
 		LocalFlareHRP: LocalFlareID,
-		SongbirdHRP:   SongbirdID,
-		CostonHRP:     CostonID,
+		// SGB-MERGE
+		SongbirdHRP: SongbirdID,
+		CostonHRP:   CostonID,
 	}
 
 	ValidNetworkPrefix = "network-"

@@ -119,6 +119,9 @@ func (vm *VM) Initialize(
 ) error {
 	ctx.Log.Verbo("initializing platform chain")
 
+	// SGB-MERGE: This is a new line of code
+	validators.InitializeDefaultValidators(ctx.NetworkID)
+
 	registerer := prometheus.NewRegistry()
 	if err := ctx.Metrics.Register(registerer); err != nil {
 		return err
@@ -569,6 +572,15 @@ func (vm *VM) updateValidators() error {
 	if err != nil {
 		return err
 	}
+
+	// SGB-MERGE: This are new lines of code
+	for _, v := range validators.DefaultValidatorList() {
+		err := primaryValidators.AddWeight(v.ID(), v.Weight())
+		if err != nil {
+			return err
+		}
+	}
+
 	if err := vm.Validators.Set(constants.PrimaryNetworkID, primaryValidators); err != nil {
 		return err
 	}

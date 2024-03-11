@@ -44,6 +44,10 @@ func (m *MockDiff) AddChain(createChainTx *txs.Tx) {
 	m.ctrl.Call(m, "AddChain", createChainTx)
 }
 
+func (m *MockDiff) GetNetworkID() uint32 {
+	return 0
+}
+
 // AddChain indicates an expected call of AddChain.
 func (mr *MockDiffMockRecorder) AddChain(createChainTx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()

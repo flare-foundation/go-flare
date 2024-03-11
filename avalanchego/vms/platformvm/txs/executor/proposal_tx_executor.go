@@ -865,8 +865,10 @@ func GetNextStakerChangeTime(state state.Chain) (time.Time, error) {
 		return pendingStakerIterator.Value().NextTime, nil
 	default:
 		// SGB-MERGE
-		// return time.Time{}, database.ErrNotFound
-		return state.GetTimestamp().Add(time.Second), nil
+		if state.GetNetworkID() == constants.SongbirdID || state.GetNetworkID() == constants.CostonID || state.GetNetworkID() == constants.LocalID {
+			return state.GetTimestamp().Add(time.Second), nil
+		}
+		return time.Time{}, database.ErrNotFound
 	}
 }
 

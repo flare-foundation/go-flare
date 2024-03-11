@@ -17,12 +17,12 @@ func TestGetHRP(t *testing.T) {
 			hrp: MainnetHRP,
 		},
 		{
-			id:  TestnetID,
-			hrp: FujiHRP,
+			id:  CostonID,
+			hrp: CostonHRP,
 		},
 		{
-			id:  FujiID,
-			hrp: FujiHRP,
+			id:  SongbirdID,
+			hrp: SongbirdName,
 		},
 		{
 			id:  LocalID,
@@ -69,12 +69,12 @@ func TestNetworkName(t *testing.T) {
 			name: MainnetName,
 		},
 		{
-			id:   TestnetID,
-			name: FujiName,
+			id:   CostonID,
+			name: CostonName,
 		},
 		{
-			id:   FujiID,
-			name: FujiName,
+			id:   SongbirdID,
+			name: SongbirdName,
 		},
 		{
 			id:   LocalID,

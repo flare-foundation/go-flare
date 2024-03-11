@@ -6,10 +6,15 @@ package genesis
 import (
 	"time"
 
+	"github.com/ava-labs/avalanchego/utils/crypto"
 	"github.com/ava-labs/avalanchego/utils/units"
 	"github.com/ava-labs/avalanchego/vms/platformvm/reward"
 	// "github.com/flare-foundation/flare/utils/units"
 	// "github.com/flare-foundation/flare/vms/platformvm/reward"
+)
+
+var (
+	EWOQKey *crypto.PrivateKeySECP256K1R
 )
 
 var (
