@@ -7,11 +7,13 @@ import (
 	"errors"
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ava-labs/coreth/core/vm"
+	"github.com/ava-labs/coreth/params"
 )
 
 // Define a mock structure to spy and mock values for daemon calls
@@ -474,5 +476,33 @@ func TestDaemonShouldNotMintMoreThanLimit(t *testing.T) {
 	// AddBalance should not have been called on the state database, as the mint request was over the limit
 	if defaultEVMMock.mockEVMCallerData.addBalanceCalls != 0 {
 		t.Errorf("Add balance call count not as expected. got %d want 1", defaultEVMMock.mockEVMCallerData.addBalanceCalls)
+	}
+}
+
+func TestPrioritisedContract(t *testing.T) {
+	address := common.HexToAddress("0x123456789aBCdEF123456789aBCdef123456789A")
+	preForkTime := big.NewInt(time.Date(2024, time.March, 20, 12, 0, 0, 0, time.UTC).Unix())
+	postForkTime := big.NewInt(time.Date(2024, time.March, 27, 12, 0, 0, 0, time.UTC).Unix())
+	ret0 := [32]byte{}
+	ret1 := [32]byte{}
+	ret1[31] = 1
+
+	if IsPrioritisedContractCall(params.FlareChainID, &address, nil, preForkTime) {
+		t.Errorf("Expected false for wrong address")
+	}
+	if !IsPrioritisedContractCall(params.FlareChainID, &prioritisedFTSOContractAddress, nil, preForkTime) {
+		t.Errorf("Expected true for FTSO contract")
+	}
+	if IsPrioritisedContractCall(params.FlareChainID, &prioritisedSubmitterContractAddress, ret1[:], preForkTime) {
+		t.Errorf("Expected false for submitter contract before activation")
+	}
+	if !IsPrioritisedContractCall(params.FlareChainID, &prioritisedSubmitterContractAddress, ret1[:], postForkTime) {
+		t.Errorf("Expected true for submitter contract after activation")
+	}
+	if IsPrioritisedContractCall(params.FlareChainID, &prioritisedSubmitterContractAddress, ret0[:], postForkTime) {
+		t.Errorf("Expected false for submitter contract with wrong return value")
+	}
+	if IsPrioritisedContractCall(params.FlareChainID, &prioritisedSubmitterContractAddress, nil, postForkTime) {
+		t.Errorf("Expected false for submitter contract with no return value")
 	}
 }
