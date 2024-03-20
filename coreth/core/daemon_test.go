@@ -483,26 +483,27 @@ func TestPrioritisedContract(t *testing.T) {
 	address := common.HexToAddress("0x123456789aBCdEF123456789aBCdef123456789A")
 	preForkTime := big.NewInt(time.Date(2024, time.March, 20, 12, 0, 0, 0, time.UTC).Unix())
 	postForkTime := big.NewInt(time.Date(2024, time.March, 27, 12, 0, 0, 0, time.UTC).Unix())
+	initialGas := uint64(0)
 	ret0 := [32]byte{}
 	ret1 := [32]byte{}
 	ret1[31] = 1
 
-	if IsPrioritisedContractCall(params.FlareChainID, &address, nil, preForkTime) {
+	if IsPrioritisedContractCall(params.FlareChainID, preForkTime, &address, nil, initialGas) {
 		t.Errorf("Expected false for wrong address")
 	}
-	if !IsPrioritisedContractCall(params.FlareChainID, &prioritisedFTSOContractAddress, nil, preForkTime) {
+	if !IsPrioritisedContractCall(params.FlareChainID, preForkTime, &prioritisedFTSOContractAddress, nil, initialGas) {
 		t.Errorf("Expected true for FTSO contract")
 	}
-	if IsPrioritisedContractCall(params.FlareChainID, &prioritisedSubmitterContractAddress, ret1[:], preForkTime) {
+	if IsPrioritisedContractCall(params.FlareChainID, preForkTime, &prioritisedSubmitterContractAddress, ret1[:], initialGas) {
 		t.Errorf("Expected false for submitter contract before activation")
 	}
-	if !IsPrioritisedContractCall(params.FlareChainID, &prioritisedSubmitterContractAddress, ret1[:], postForkTime) {
+	if !IsPrioritisedContractCall(params.FlareChainID, postForkTime, &prioritisedSubmitterContractAddress, ret1[:], initialGas) {
 		t.Errorf("Expected true for submitter contract after activation")
 	}
-	if IsPrioritisedContractCall(params.FlareChainID, &prioritisedSubmitterContractAddress, ret0[:], postForkTime) {
+	if IsPrioritisedContractCall(params.FlareChainID, postForkTime, &prioritisedSubmitterContractAddress, ret0[:], initialGas) {
 		t.Errorf("Expected false for submitter contract with wrong return value")
 	}
-	if IsPrioritisedContractCall(params.FlareChainID, &prioritisedSubmitterContractAddress, nil, postForkTime) {
+	if IsPrioritisedContractCall(params.FlareChainID, postForkTime, &prioritisedSubmitterContractAddress, nil, initialGas) {
 		t.Errorf("Expected false for submitter contract with no return value")
 	}
 }
