@@ -21,7 +21,7 @@ const (
 	ApricotPhase1GasLimit uint64 = 8_000_000
 
 	// SGB-MERGE
-	ApricotPhase5GasLimit uint64 = 30_000_000
+	SgbApricotPhase5GasLimit uint64 = 30_000_000
 
 	ApricotPhase3ExtraDataSize            uint64 = 80
 	ApricotPhase3MinBaseFee               int64  = 75_000_000_000
@@ -32,6 +32,7 @@ const (
 	ApricotPhase4MaxBaseFee               int64  = 1_000_000_000_000
 	ApricotPhase4BaseFeeChangeDenominator uint64 = 12
 	ApricotPhase5TargetGas                uint64 = 15_000_000
+	SgbApricotPhase5TargetGas             uint64 = 150_000_000
 	ApricotPhase5BaseFeeChangeDenominator uint64 = 36
 
 	// The base cost to charge per atomic transaction. Added in Apricot Phase 5.

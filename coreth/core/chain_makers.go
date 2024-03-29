@@ -292,7 +292,7 @@ func makeHeader(chain consensus.ChainReader, config *params.ChainConfig, parent 
 	var gasLimit uint64
 	if config.IsSongbirdCode() {
 		// SGB-MERGE
-		gasLimit = params.ApricotPhase5GasLimit
+		gasLimit = params.SgbApricotPhase5GasLimit
 	} else {
 		if config.IsApricotPhase1(timestamp) {
 			gasLimit = params.ApricotPhase1GasLimit
