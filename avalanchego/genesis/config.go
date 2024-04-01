@@ -242,10 +242,12 @@ func init() {
 	LocalFlareConfig = localFlareConfig
 
 	songbirdConfig, err := unparsedSongbirdConfig.Parse()
+	songbirdConfig.CChainGenesis = songbirdCChainGenesis
 	errs.Add(err)
 	SongbirdConfig = songbirdConfig
 
 	costonConfig, err := unparsedCostonConfig.Parse()
+	costonConfig.CChainGenesis = costonCChainGenesis
 	errs.Add(err)
 	CostonConfig = costonConfig
 

@@ -163,8 +163,14 @@ func (self *DummyEngine) verifyHeaderGasFields(config *params.ChainConfig, heade
 	if config.IsApricotPhase5(timestamp) {
 		blockGasCostStep = ApricotPhase5BlockGasCostStep
 	}
+	var apricotPhase4TargetBlockRate uint64
+	if config.IsSongbirdCode() {
+		apricotPhase4TargetBlockRate = SgbApricotPhase4TargetBlockRate
+	} else {
+		apricotPhase4TargetBlockRate = ApricotPhase4TargetBlockRate
+	}
 	expectedBlockGasCost := calcBlockGasCost(
-		ApricotPhase4TargetBlockRate,
+		apricotPhase4TargetBlockRate,
 		ApricotPhase4MinBlockGasCost,
 		ApricotPhase4MaxBlockGasCost,
 		blockGasCostStep,
@@ -361,8 +367,14 @@ func (self *DummyEngine) Finalize(chain consensus.ChainHeaderReader, block *type
 		}
 		// Calculate the expected blockGasCost for this block.
 		// Note: this is a deterministic transtion that defines an exact block fee for this block.
+		var apricotPhase4TargetBlockRate uint64
+		if chain.Config().IsSongbirdCode() {
+			apricotPhase4TargetBlockRate = SgbApricotPhase4TargetBlockRate
+		} else {
+			apricotPhase4TargetBlockRate = ApricotPhase4TargetBlockRate
+		}
 		blockGasCost := calcBlockGasCost(
-			ApricotPhase4TargetBlockRate,
+			apricotPhase4TargetBlockRate,
 			ApricotPhase4MinBlockGasCost,
 			ApricotPhase4MaxBlockGasCost,
 			blockGasCostStep,
@@ -411,8 +423,14 @@ func (self *DummyEngine) FinalizeAndAssemble(chain consensus.ChainHeaderReader, 
 			blockGasCostStep = ApricotPhase5BlockGasCostStep
 		}
 		// Calculate the required block gas cost for this block.
+		var apricotPhase4TargetBlockRate uint64
+		if chain.Config().IsSongbirdCode() {
+			apricotPhase4TargetBlockRate = SgbApricotPhase4TargetBlockRate
+		} else {
+			apricotPhase4TargetBlockRate = ApricotPhase4TargetBlockRate
+		}
 		header.BlockGasCost = calcBlockGasCost(
-			ApricotPhase4TargetBlockRate,
+			apricotPhase4TargetBlockRate,
 			ApricotPhase4MinBlockGasCost,
 			ApricotPhase4MaxBlockGasCost,
 			blockGasCostStep,

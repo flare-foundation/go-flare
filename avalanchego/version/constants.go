@@ -32,6 +32,27 @@ var (
 		Patch: 0,
 	}
 
+	CurrentSgb = &Semantic{
+		Major: 0,
+		Minor: 6,
+		Patch: 6,
+	}
+	CurrentSgbApp = &Application{
+		Major: CurrentSgb.Major,
+		Minor: CurrentSgb.Minor,
+		Patch: CurrentSgb.Patch,
+	}
+	MinimumCompatibleSgbVersion = &Application{
+		Major: 0,
+		Minor: 6,
+		Patch: 5,
+	}
+	PrevMinimumCompatibleSgbVersion = &Application{
+		Major: 0,
+		Minor: 6,
+		Patch: 4,
+	}
+
 	CurrentDatabase = DatabaseVersion1_4_5
 	PrevDatabase    = DatabaseVersion1_0_0
 
@@ -47,22 +68,26 @@ var (
 	}
 
 	ApricotPhase3Times = map[uint32]time.Time{
-		constants.MainnetID:    time.Date(2021, time.August, 24, 14, 0, 0, 0, time.UTC),
-		constants.FujiID:       time.Date(2021, time.August, 16, 19, 0, 0, 0, time.UTC),
+		constants.MainnetID: time.Date(2021, time.August, 24, 14, 0, 0, 0, time.UTC),
+		// constants.FujiID:       time.Date(2021, time.August, 16, 19, 0, 0, 0, time.UTC),
 		constants.FlareID:      time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC),
 		constants.CostwoID:     time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC),
 		constants.StagingID:    time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC),
 		constants.LocalFlareID: time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC),
+		constants.CostonID:     time.Date(2022, time.February, 25, 14, 0, 0, 0, time.UTC),
+		constants.SongbirdID:   time.Date(2022, time.March, 7, 14, 0, 0, 0, time.UTC),
 	}
 	ApricotPhase3DefaultTime = time.Date(2020, time.December, 5, 5, 0, 0, 0, time.UTC)
 
 	ApricotPhase4Times = map[uint32]time.Time{
-		constants.MainnetID:    time.Date(2021, time.September, 22, 21, 0, 0, 0, time.UTC),
-		constants.FujiID:       time.Date(2021, time.September, 16, 21, 0, 0, 0, time.UTC),
+		constants.MainnetID: time.Date(2021, time.September, 22, 21, 0, 0, 0, time.UTC),
+		// constants.FujiID:       time.Date(2021, time.September, 16, 21, 0, 0, 0, time.UTC),
 		constants.FlareID:      time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC),
 		constants.CostwoID:     time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC),
 		constants.StagingID:    time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC),
 		constants.LocalFlareID: time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC),
+		constants.CostonID:     time.Date(2022, time.February, 25, 15, 0, 0, 0, time.UTC),
+		constants.SongbirdID:   time.Date(2022, time.March, 7, 15, 0, 0, 0, time.UTC),
 	}
 	ApricotPhase4DefaultTime     = time.Date(2020, time.December, 5, 5, 0, 0, 0, time.UTC)
 	ApricotPhase4MinPChainHeight = map[uint32]uint64{
@@ -72,34 +97,40 @@ var (
 	ApricotPhase4DefaultMinPChainHeight uint64
 
 	ApricotPhase5Times = map[uint32]time.Time{
-		constants.MainnetID:    time.Date(2021, time.December, 2, 18, 0, 0, 0, time.UTC),
-		constants.FujiID:       time.Date(2021, time.November, 24, 15, 0, 0, 0, time.UTC),
+		constants.MainnetID: time.Date(2021, time.December, 2, 18, 0, 0, 0, time.UTC),
+		// constants.FujiID:       time.Date(2021, time.November, 24, 15, 0, 0, 0, time.UTC),
 		constants.FlareID:      time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC),
 		constants.CostwoID:     time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC),
 		constants.StagingID:    time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC),
 		constants.LocalFlareID: time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC),
+		constants.CostonID:     time.Date(2022, time.February, 25, 16, 0, 0, 0, time.UTC),
+		constants.SongbirdID:   time.Date(2022, time.March, 7, 16, 0, 0, 0, time.UTC),
 	}
 	ApricotPhase5DefaultTime = time.Date(2020, time.December, 5, 5, 0, 0, 0, time.UTC)
 
 	// FIXME: update this before release
 	BlueberryTimes = map[uint32]time.Time{
-		constants.MainnetID:    time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
-		constants.FujiID:       time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
+		constants.MainnetID: time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
+		// constants.FujiID:       time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
 		constants.FlareID:      time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
 		constants.CostwoID:     time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
 		constants.StagingID:    time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
 		constants.LocalFlareID: time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
+		constants.CostonID:     time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
+		constants.SongbirdID:   time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
 	}
 	BlueberryDefaultTime = time.Date(2020, time.December, 5, 5, 0, 0, 0, time.UTC)
 
 	// FIXME: update this before release
 	XChainMigrationTimes = map[uint32]time.Time{
-		constants.MainnetID:    time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
-		constants.FujiID:       time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
+		constants.MainnetID: time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
+		// constants.FujiID:       time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
 		constants.FlareID:      time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
 		constants.CostwoID:     time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
 		constants.StagingID:    time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
 		constants.LocalFlareID: time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
+		constants.CostonID:     time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
+		constants.SongbirdID:   time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
 	}
 	XChainMigrationDefaultTime = time.Date(2020, time.December, 5, 5, 0, 0, 0, time.UTC)
 )
@@ -147,6 +178,14 @@ func GetXChainMigrationTime(networkID uint32) time.Time {
 }
 
 func GetCompatibility(networkID uint32) Compatibility {
+	if networkID == constants.SongbirdID || networkID == constants.CostonID || networkID == constants.LocalID {
+		return NewCompatibility(
+			CurrentSgbApp,
+			MinimumCompatibleSgbVersion,
+			GetApricotPhase5Time(networkID),
+			PrevMinimumCompatibleSgbVersion,
+		)
+	}
 	return NewCompatibility(
 		CurrentApp,
 		MinimumCompatibleVersion,

@@ -46,5 +46,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Flare specific: set the application prefix (flare for songbird and avalanche for flare)
+	version.InitApplicationPrefix(nodeConfig.NetworkID)
+
 	runner.Run(runnerConfig, nodeConfig)
 }
