@@ -128,6 +128,50 @@ var (
 		BlueberryBlockTimestamp:     big.NewInt(0),
 	}
 
+	// CostonChainConfig is the configuration for the Coston test network.
+	CostonChainConfig = &ChainConfig{
+		ChainID:                     CostonChainID,
+		HomesteadBlock:              big.NewInt(0),
+		DAOForkBlock:                big.NewInt(0),
+		DAOForkSupport:              true,
+		EIP150Block:                 big.NewInt(0),
+		EIP150Hash:                  common.HexToHash("0x2086799aeebeae135c246c65021c82b4e15a2c451340993aacfd2751886514f0"),
+		EIP155Block:                 big.NewInt(0),
+		EIP158Block:                 big.NewInt(0),
+		ByzantiumBlock:              big.NewInt(0),
+		ConstantinopleBlock:         big.NewInt(0),
+		PetersburgBlock:             big.NewInt(0),
+		IstanbulBlock:               big.NewInt(0),
+		MuirGlacierBlock:            big.NewInt(0),
+		ApricotPhase1BlockTimestamp: big.NewInt(time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhase2BlockTimestamp: big.NewInt(time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhase3BlockTimestamp: big.NewInt(time.Date(2022, time.February, 25, 14, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhase4BlockTimestamp: big.NewInt(time.Date(2022, time.February, 25, 15, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhase5BlockTimestamp: big.NewInt(time.Date(2022, time.February, 25, 16, 0, 0, 0, time.UTC).Unix()),
+	}
+
+	// SongbirdChainConfig is the configuration for the Songbird canary network.
+	SongbirdChainConfig = &ChainConfig{
+		ChainID:                     SongbirdChainID,
+		HomesteadBlock:              big.NewInt(0),
+		DAOForkBlock:                big.NewInt(0),
+		DAOForkSupport:              true,
+		EIP150Block:                 big.NewInt(0),
+		EIP150Hash:                  common.HexToHash("0x2086799aeebeae135c246c65021c82b4e15a2c451340993aacfd2751886514f0"),
+		EIP155Block:                 big.NewInt(0),
+		EIP158Block:                 big.NewInt(0),
+		ByzantiumBlock:              big.NewInt(0),
+		ConstantinopleBlock:         big.NewInt(0),
+		PetersburgBlock:             big.NewInt(0),
+		IstanbulBlock:               big.NewInt(0),
+		MuirGlacierBlock:            big.NewInt(0),
+		ApricotPhase1BlockTimestamp: big.NewInt(time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhase2BlockTimestamp: big.NewInt(time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhase3BlockTimestamp: big.NewInt(time.Date(2022, time.March, 7, 14, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhase4BlockTimestamp: big.NewInt(time.Date(2022, time.March, 7, 15, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhase5BlockTimestamp: big.NewInt(time.Date(2022, time.March, 7, 16, 0, 0, 0, time.UTC).Unix()),
+	}
+
 	TestChainConfig          = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0)}
 	TestLaunchConfig         = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil, nil, nil}
 	TestApricotPhase1Config  = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil, nil}
