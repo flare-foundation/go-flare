@@ -101,7 +101,7 @@ func (v blockValidator) SyntacticVerify(b *Block, rules params.Rules) error {
 
 	if rules.IsSongbirdCode {
 		// SGB-MERGE
-		if ethHeader.GasLimit != params.SgbApricotPhase5GasLimit {
+		if rules.IsApricotPhase5 && ethHeader.GasLimit != params.SgbApricotPhase5GasLimit {
 			return fmt.Errorf(
 				"expected gas limit to be %d in apricot phase 5 but got %d",
 				params.SgbApricotPhase5GasLimit, ethHeader.GasLimit,
