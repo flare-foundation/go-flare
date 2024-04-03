@@ -371,7 +371,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	chainID = st.evm.ChainConfig().ChainID
 	timestamp = st.evm.Context.Time
 
-	burnAddress, nominalGasPrice, isSongbird, isFlare, err := stateTransitionVariants.GetValue(chainID)(st)
+	burnAddress, nominalGasPrice, isFlare, isSongbird, err := stateTransitionVariants.GetValue(chainID)(st)
 	if err != nil {
 		return nil, err
 	}
