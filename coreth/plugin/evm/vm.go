@@ -405,7 +405,11 @@ func (vm *VM) Initialize(
 
 	vm.chainID = g.Config.ChainID
 
-	vm.ethConfig = ethconfig.NewDefaultConfig()
+	if g.Config.IsSongbirdCode() {
+		vm.ethConfig = ethconfig.NewDefaultSgbConfig()
+	} else {
+		vm.ethConfig = ethconfig.NewDefaultConfig()
+	}
 	vm.ethConfig.Genesis = g
 	vm.ethConfig.NetworkId = vm.chainID.Uint64()
 
