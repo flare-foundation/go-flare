@@ -82,6 +82,10 @@ func (e *DefaultEVMMock) GetGasLimit() uint64 {
 	return defaultGetGasLimit(&e.mockEVMCallerData)
 }
 
+func (e *DefaultEVMMock) GetChainID() *big.Int {
+	return params.FlareChainID
+}
+
 func (e *DefaultEVMMock) AddBalance(addr common.Address, amount *big.Int) {
 	defaultAddBalance(&e.mockEVMCallerData, addr, amount)
 }
@@ -158,6 +162,10 @@ func (e *BadMintReturnSizeEVMMock) GetGasLimit() uint64 {
 	return defaultGetGasLimit(&e.mockEVMCallerData)
 }
 
+func (e *BadMintReturnSizeEVMMock) GetChainID() *big.Int {
+	return params.FlareChainID
+}
+
 func (e *BadMintReturnSizeEVMMock) AddBalance(addr common.Address, amount *big.Int) {
 	defaultAddBalance(&e.mockEVMCallerData, addr, amount)
 }
@@ -211,6 +219,10 @@ func (e *BadDaemonCallEVMMock) GetBlockTime() *big.Int {
 
 func (e *BadDaemonCallEVMMock) GetGasLimit() uint64 {
 	return defaultGetGasLimit(&e.mockEVMCallerData)
+}
+
+func (e *BadDaemonCallEVMMock) GetChainID() *big.Int {
+	return params.FlareChainID
 }
 
 func (e *BadDaemonCallEVMMock) AddBalance(addr common.Address, amount *big.Int) {
@@ -304,6 +316,10 @@ func (e *ReturnNilMintRequestEVMMock) GetGasLimit() uint64 {
 	return defaultGetGasLimit(&e.mockEVMCallerData)
 }
 
+func (e *ReturnNilMintRequestEVMMock) GetChainID() *big.Int {
+	return params.FlareChainID
+}
+
 func (e *ReturnNilMintRequestEVMMock) AddBalance(addr common.Address, amount *big.Int) {
 	defaultAddBalance(&e.mockEVMCallerData, addr, amount)
 }
@@ -343,7 +359,7 @@ func TestDaemonShouldNotMintMoreThanMax(t *testing.T) {
 		if err, ok := err.(*ErrMaxMintExceeded); !ok {
 			want := &ErrMaxMintExceeded{
 				mintRequest: mintRequest,
-				mintMax:     GetMaximumMintRequest(big.NewInt(0)),
+				mintMax:     GetMaximumMintRequest(params.FlareChainID, big.NewInt(0)),
 			}
 			t.Errorf("got '%s' want '%s'", err.Error(), want.Error())
 		}
