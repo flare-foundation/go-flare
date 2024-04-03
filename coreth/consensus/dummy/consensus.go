@@ -99,7 +99,7 @@ func (self *DummyEngine) verifyHeaderGasFields(config *params.ChainConfig, heade
 	if config.IsSongbirdCode() {
 		// SGB-MERGE
 		// Verify that the gas limit is correct for the current phase
-		if header.GasLimit != params.SgbApricotPhase5GasLimit {
+		if config.IsApricotPhase5(timestamp) && header.GasLimit != params.SgbApricotPhase5GasLimit {
 			return fmt.Errorf("expected gas limit to be %d in apricot phase 5 but got %d", params.SgbApricotPhase5GasLimit, header.GasLimit)
 		}
 	} else {
