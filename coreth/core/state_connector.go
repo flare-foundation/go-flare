@@ -156,8 +156,24 @@ func GetStateConnectorIsActivatedAndCalledCoston(blockTime *big.Int, to common.A
 
 func GetStateConnectorCoinbaseSignalAddr(chainID *big.Int, blockTime *big.Int) common.Address {
 	switch {
-	default:
+	case chainID.Cmp(params.FlareChainID) == 0 || chainID.Cmp(params.CostwoChainID) == 0 || chainID.Cmp(params.StagingChainID) == 0 || chainID.Cmp(params.LocalFlareChainID) == 0:
 		return common.HexToAddress("0x00000000000000000000000000000000000DEaD1")
+	case chainID.Cmp(params.SongbirdChainID) == 0:
+		switch {
+		case blockTime.Cmp(songbirdOct22ForkTime) > 0:
+			return common.HexToAddress("0x00000000000000000000000000000000000DEaD1")
+		default:
+			return common.HexToAddress("0x000000000000000000000000000000000000dEaD")
+		}
+	case chainID.Cmp(params.CostonChainID) == 0:
+		switch {
+		case blockTime.Cmp(costonOct22ForkTime) > 0:
+			return common.HexToAddress("0x00000000000000000000000000000000000DEaD1")
+		default:
+			return common.HexToAddress("0x000000000000000000000000000000000000dEaD")
+		}
+	default:
+		return common.HexToAddress("0x000000000000000000000000000000000000dEaD")
 	}
 }
 
