@@ -221,8 +221,35 @@ func GetDefaultAttestors(chainID *big.Int, blockTime *big.Int) []common.Address 
 			}
 		}
 	case chainID.Cmp(params.SongbirdChainID) == 0:
-		return []common.Address{
-			common.HexToAddress("0x0c19f3B4927abFc596353B0f9Ddad5D817736F70"),
+		switch {
+		case blockTime.Cmp(submitterContractActivationTimeSongbird) > 0:
+			return []common.Address{
+				common.HexToAddress("0xcE397b9a395ace2e328030699bDDf4E2F049A05B"),
+				common.HexToAddress("0xeDBb013BBC314124a9f842c1887e34cfeB03B052"),
+				common.HexToAddress("0xb9eF3951ac2D04C6bdD886bF042041E3954E86aF"),
+				common.HexToAddress("0x816Cec8f3A37Fd673Cfd4229441c59cA8DbD0641"),
+				common.HexToAddress("0x14c9c4583F0b1af8a69452Ec1b29884240f83bDC"),
+				common.HexToAddress("0x0049081C2D6def64800cC011Bd9aDe8682c6593a"),
+				common.HexToAddress("0x53Fcb50a22aFd6e5438d754CB22c4726032d2488"),
+				common.HexToAddress("0x35f4F0Bb73a6040F24927e1735B089d7769F7674"),
+				common.HexToAddress("0x3B583C919fD4C863F3A17d11929346C687FfB7c3"),
+			}
+		case blockTime.Cmp(songbirdOct22ForkTime) > 0:
+			return []common.Address{
+				common.HexToAddress("0x2D3e7e4b19bDc920fd9C57BD3072A31F5a59FeC8"),
+				common.HexToAddress("0x442DD539Fe78D43A1a9358FF3460CfE63e2bC9CC"),
+				common.HexToAddress("0x49893c5Dfc035F4eE4E46faC014f6D4bC80F7f92"),
+				common.HexToAddress("0x5D2f75392DdDa69a2818021dd6a64937904c8352"),
+				common.HexToAddress("0x6455dC38fdF739b6fE021b30C7D9672C1c6DEb5c"),
+				common.HexToAddress("0x808441Ec3Fa1721330226E69527Bc160D8d9386a"),
+				common.HexToAddress("0x823B0f5c7758E9d3bE55bA1EA840E29ccd5D5CcB"),
+				common.HexToAddress("0x85016969b9eBDB8977975a4743c9FCEeabCEAf8A"),
+				common.HexToAddress("0x8A3D627D86A81F5D21683F4963565C63DB5e1309"),
+			}
+		default:
+			return []common.Address{
+				common.HexToAddress("0x0c19f3B4927abFc596353B0f9Ddad5D817736F70"),
+			}
 		}
 	case chainID.Cmp(params.CostwoChainID) == 0:
 		return []common.Address{
@@ -235,6 +262,25 @@ func GetDefaultAttestors(chainID *big.Int, blockTime *big.Int) []common.Address 
 			common.HexToAddress("0xdA6d6aA9F1f770c279c5DA0C71f4DC1142A70d5D"),
 			common.HexToAddress("0x3d895D00d2802120D39d4D2554F7ef09d6845E99"),
 			common.HexToAddress("0xc36141CFBe5Af6eB2F8b21550Ccd457DA7FaF3C6"),
+		}
+	case chainID.Cmp(params.CostonChainID) == 0:
+		switch {
+		case blockTime.Cmp(costonOct22ForkTime) > 0:
+			return []common.Address{
+				common.HexToAddress("0x30e4b4542b4aAf615838B113f14c46dE1469212e"),
+				common.HexToAddress("0x3519E14183252794aaA52aA824f34482ef44cE1d"),
+				common.HexToAddress("0xb445857476181ec378Ec453ab3d122183CfC3b78"),
+				common.HexToAddress("0x6D755cd7A61A9DCFc96FaE0f927C3a73bE986ce4"),
+				common.HexToAddress("0xdC0fD24846303D58d2D66AA8820be2685735dBd2"),
+				common.HexToAddress("0x3F52c41c0500a4f018A38c9f8273b254aD7e2FCc"),
+				common.HexToAddress("0xdA6d6aA9F1f770c279c5DA0C71f4DC1142A70d5D"),
+				common.HexToAddress("0x3d895D00d2802120D39d4D2554F7ef09d6845E99"),
+				common.HexToAddress("0xc36141CFBe5Af6eB2F8b21550Ccd457DA7FaF3C6"),
+			}
+		default:
+			return []common.Address{
+				common.HexToAddress("0x3a6e101103ec3d9267d08f484a6b70e1440a8255"),
+			}
 		}
 	case chainID.Cmp(params.StagingChainID) == 0:
 		return []common.Address{
