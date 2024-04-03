@@ -104,6 +104,7 @@ func (e *ErrMintNegative) Error() string { return "mint request cannot be negati
 
 // Define interface for dependencies
 type EVMCaller interface {
+	GetChainID() *big.Int
 	DaemonCall(caller vm.ContractRef, addr common.Address, input []byte, gas uint64) (snapshot int, ret []byte, leftOverGas uint64, err error)
 	DaemonRevertToSnapshot(snapshot int)
 	GetBlockTime() *big.Int
@@ -151,10 +152,13 @@ func IsPrioritisedContractCall(chainID *big.Int, blockTime *big.Int, to *common.
 	}
 }
 
-func GetMaximumMintRequest(blockTime *big.Int) *big.Int {
+func GetMaximumMintRequest(chainID *big.Int, blockTime *big.Int) *big.Int {
 	switch {
-	default:
+	case chainID.Cmp(params.FlareChainID) == 0 || chainID.Cmp(params.CostwoChainID) == 0 || chainID.Cmp(params.LocalFlareChainID) == 0 || chainID.Cmp(params.StagingChainID) == 0:
 		maxRequest, _ := new(big.Int).SetString("60000000000000000000000000", 10)
+		return maxRequest
+	default: // Songbird, Coston
+		maxRequest, _ := new(big.Int).SetString("50000000000000000000000000", 10)
 		return maxRequest
 	}
 }
@@ -194,7 +198,7 @@ func daemon(evm EVMCaller) (int, *big.Int, error) {
 
 func mint(evm EVMCaller, mintRequest *big.Int) error {
 	// If the mint request is greater than zero and less than max
-	max := GetMaximumMintRequest(evm.GetBlockTime())
+	max := GetMaximumMintRequest(evm.GetChainID(), evm.GetBlockTime())
 	if mintRequest.Cmp(big.NewInt(0)) > 0 &&
 		mintRequest.Cmp(max) <= 0 {
 		// Mint the amount asked for on to the daemon contract

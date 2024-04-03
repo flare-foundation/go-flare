@@ -138,6 +138,10 @@ func (st *StateTransition) DaemonRevertToSnapshot(snapshot int) {
 	st.evm.StateDB.RevertToSnapshot(snapshot)
 }
 
+func (st *StateTransition) GetChainID() *big.Int {
+	return st.evm.ChainConfig().ChainID
+}
+
 func (st *StateTransition) GetBlockTime() *big.Int {
 	return st.evm.Context.Time
 }
