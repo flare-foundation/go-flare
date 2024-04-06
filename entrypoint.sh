@@ -8,7 +8,7 @@ then
 	then
 		echo "Autoconfiguring public IP"
 		PUBLIC_IP=$(curl -s -m 10 https://flare.network/cdn-cgi/trace | grep 'ip=' | cut -d'=' -f2)
-		echo "  Got public address '${PUBLIC_IP}'" 
+		echo "  Got public address '${PUBLIC_IP}'"
 	else
 		echo "/!\\ AUTOCONFIGURE_PUBLIC_IP is enabled, but PUBLIC_IP is already set to '$PUBLIC_IP'! Skipping autoconfigure and using current PUBLIC_IP value!"
 	fi
@@ -24,7 +24,7 @@ then
 	for __ENDPOINT in "${__BOOTSTRAP_ENDPOINTS[@]}"; do
         echo "  Trying endpoint $__ENDPOINT"
 
-        RESPONSE_CODE=$(curl -X POST -m 5 -s -o /dev/null -w '%{http_code}' "$__ENDPOINT" -H 'Content-Type: application/json' --data '{ "jsonrpc":"2.0", "id":1, "method":"info.getNodeIP" }' || true)
+        RESPONSE_CODE=$(curl -X POST -m 10 -s -o /dev/null -w '%{http_code}' "$__ENDPOINT" -H 'Content-Type: application/json' --data '{ "jsonrpc":"2.0", "id":1, "method":"info.getNodeIP" }' || true)
         if [ "$RESPONSE_CODE" = "200" ]; then
             __BOOTSTRAP_ENDPOINT="$__ENDPOINT"
             break
