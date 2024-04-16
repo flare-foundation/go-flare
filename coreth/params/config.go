@@ -262,7 +262,7 @@ func (c *ChainConfig) String() string {
 // SGB-MERGE
 // Code for songbird network (songbird, coston, local id)
 func (c *ChainConfig) IsSongbirdCode() bool {
-	return c.ChainID.Cmp(SongbirdChainID) == 0 || c.ChainID.Cmp(CostonChainID) == 0 || c.ChainID.Cmp(LocalChainID) == 0
+	return c.ChainID != nil && (c.ChainID.Cmp(SongbirdChainID) == 0 || c.ChainID.Cmp(CostonChainID) == 0 || c.ChainID.Cmp(LocalChainID) == 0)
 }
 
 // IsHomestead returns whether num is either equal to the homestead block or greater.

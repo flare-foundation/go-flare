@@ -27,8 +27,10 @@ func (ca *ChainValue[T]) AddValues(chainIDs []*big.Int, action T) *ChainValue[T]
 }
 
 func (ca *ChainValue[T]) GetValue(chainID *big.Int) T {
-	if action, ok := ca.valueMap[chainID.Uint64()]; ok {
-		return action
+	if chainID != nil {
+		if action, ok := ca.valueMap[chainID.Uint64()]; ok {
+			return action
+		}
 	}
 	return ca.defaultValue
 }
