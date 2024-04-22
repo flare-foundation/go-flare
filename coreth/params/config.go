@@ -151,6 +151,29 @@ var (
 		SongbirdTransitionTimestamp: big.NewInt(time.Date(2024, time.April, 25, 0, 0, 0, 0, time.UTC).Unix()),
 	}
 
+	// LocalChainConfig is the configuration for the Songbird Local network.
+	LocalChainConfig = &ChainConfig{
+		ChainID:                     LocalChainID,
+		HomesteadBlock:              big.NewInt(0),
+		DAOForkBlock:                big.NewInt(0),
+		DAOForkSupport:              true,
+		EIP150Block:                 big.NewInt(0),
+		EIP150Hash:                  common.HexToHash("0x2086799aeebeae135c246c65021c82b4e15a2c451340993aacfd2751886514f0"),
+		EIP155Block:                 big.NewInt(0),
+		EIP158Block:                 big.NewInt(0),
+		ByzantiumBlock:              big.NewInt(0),
+		ConstantinopleBlock:         big.NewInt(0),
+		PetersburgBlock:             big.NewInt(0),
+		IstanbulBlock:               big.NewInt(0),
+		MuirGlacierBlock:            big.NewInt(0),
+		ApricotPhase1BlockTimestamp: big.NewInt(0),
+		ApricotPhase2BlockTimestamp: big.NewInt(0),
+		ApricotPhase3BlockTimestamp: big.NewInt(0),
+		ApricotPhase4BlockTimestamp: big.NewInt(0),
+		ApricotPhase5BlockTimestamp: big.NewInt(0),
+		SongbirdTransitionTimestamp: big.NewInt(0),
+	}
+
 	// SongbirdChainConfig is the configuration for the Songbird canary network.
 	SongbirdChainConfig = &ChainConfig{
 		ChainID:                     SongbirdChainID,

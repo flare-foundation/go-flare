@@ -387,6 +387,8 @@ func (vm *VM) Initialize(
 		g.Config = params.CostonChainConfig
 	case g.Config.ChainID.Cmp(params.SongbirdChainID) == 0:
 		g.Config = params.SongbirdChainConfig
+	case g.Config.ChainID.Cmp(params.LocalChainID) == 0:
+		g.Config = params.LocalChainConfig
 	}
 	vm.syntacticBlockValidator = NewBlockValidator(extDataHashes)
 
