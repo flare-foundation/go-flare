@@ -148,6 +148,7 @@ var (
 		ApricotPhase3BlockTimestamp: big.NewInt(time.Date(2022, time.February, 25, 14, 0, 0, 0, time.UTC).Unix()),
 		ApricotPhase4BlockTimestamp: big.NewInt(time.Date(2022, time.February, 25, 15, 0, 0, 0, time.UTC).Unix()),
 		ApricotPhase5BlockTimestamp: big.NewInt(time.Date(2022, time.February, 25, 16, 0, 0, 0, time.UTC).Unix()),
+		SongbirdTransitionTimestamp: big.NewInt(time.Date(2024, time.April, 25, 0, 0, 0, 0, time.UTC).Unix()),
 	}
 
 	// SongbirdChainConfig is the configuration for the Songbird canary network.
@@ -170,16 +171,17 @@ var (
 		ApricotPhase3BlockTimestamp: big.NewInt(time.Date(2022, time.March, 7, 14, 0, 0, 0, time.UTC).Unix()),
 		ApricotPhase4BlockTimestamp: big.NewInt(time.Date(2022, time.March, 7, 15, 0, 0, 0, time.UTC).Unix()),
 		ApricotPhase5BlockTimestamp: big.NewInt(time.Date(2022, time.March, 7, 16, 0, 0, 0, time.UTC).Unix()),
+		SongbirdTransitionTimestamp: big.NewInt(time.Date(2024, time.May, 25, 0, 0, 0, 0, time.UTC).Unix()),
 	}
 
-	TestChainConfig          = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0)}
-	TestLaunchConfig         = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil, nil, nil}
-	TestApricotPhase1Config  = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil, nil}
-	TestApricotPhase2Config  = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil}
-	TestApricotPhase3Config  = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil}
-	TestApricotPhase4Config  = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil}
-	TestApricotPhase5Config  = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil}
-	TestBlueberryChainConfig = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0)}
+	TestChainConfig          = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0)}
+	TestLaunchConfig         = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil, nil, nil, nil}
+	TestApricotPhase1Config  = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil, nil, nil}
+	TestApricotPhase2Config  = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil, nil}
+	TestApricotPhase3Config  = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil}
+	TestApricotPhase4Config  = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil}
+	TestApricotPhase5Config  = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil}
+	TestBlueberryChainConfig = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil}
 	TestRules                = TestChainConfig.AvalancheRules(new(big.Int), new(big.Int))
 )
 
@@ -222,6 +224,9 @@ type ChainConfig struct {
 	ApricotPhase5BlockTimestamp *big.Int `json:"apricotPhase5BlockTimestamp,omitempty"`
 	// Blueberry TODO comment. (nil = no fork, 0 = already activated)
 	BlueberryBlockTimestamp *big.Int `json:"blueberryBlockTimestamp,omitempty"`
+
+	// SGB-MERGE: when export/import transactions will be allowed on songbird code (Songbird, Coston, Local)
+	SongbirdTransitionTimestamp *big.Int `json:"songbirdTransitionTimestamp,omitempty"`
 }
 
 // String implements the fmt.Stringer interface.
@@ -255,12 +260,13 @@ func (c *ChainConfig) String() string {
 	banner += fmt.Sprintf(" - Apricot Phase 4 Timestamp:   %-8v (https://github.com/ava-labs/avalanchego/releases/tag/v1.6.0)\n", c.ApricotPhase4BlockTimestamp)
 	banner += fmt.Sprintf(" - Apricot Phase 5 Timestamp:   %-8v (https://github.com/ava-labs/avalanchego/releases/tag/v1.7.0)\n", c.ApricotPhase5BlockTimestamp)
 	banner += fmt.Sprintf(" - Bluberry Timestamp:          %-8v (https://github.com/ava-labs/avalanchego/releases/tag/v1.8.0)\n", c.BlueberryBlockTimestamp)
+	banner += fmt.Sprintf(" - Sgb Transition Timestamp:    %-8v\n", c.SongbirdTransitionTimestamp)
 	banner += "\n"
 	return banner
 }
 
 // SGB-MERGE
-// Code for songbird network (songbird, coston, local id)
+// Code for songbird network (Songbird, Coston, Local id)
 func (c *ChainConfig) IsSongbirdCode() bool {
 	return c.ChainID != nil && (c.ChainID.Cmp(SongbirdChainID) == 0 || c.ChainID.Cmp(CostonChainID) == 0 || c.ChainID.Cmp(LocalChainID) == 0)
 }
@@ -353,6 +359,12 @@ func (c *ChainConfig) IsApricotPhase5(blockTimestamp *big.Int) bool {
 // with a timestamp after the Blueberry upgrade time.
 func (c *ChainConfig) IsBlueberry(blockTimestamp *big.Int) bool {
 	return utils.IsForked(c.BlueberryBlockTimestamp, blockTimestamp)
+}
+
+// IsSongbirdTransition returns whether [blockTimestamp] represents a block
+// with a timestamp after the Songbird code transition time.
+func (c *ChainConfig) IsSongbirdTransition(blockTimestamp *big.Int) bool {
+	return utils.IsForked(c.SongbirdTransitionTimestamp, blockTimestamp)
 }
 
 // CheckCompatible checks whether scheduled fork transitions have been imported
@@ -579,8 +591,9 @@ type Rules struct {
 	IsBlueberry                                                                         bool
 
 	// SGB-MERGE
-	// Songbird (coston, local)
-	IsSongbirdCode bool
+	// Songbird (Songbird, Coston, Local)
+	IsSongbirdCode       bool
+	IsSongbirdTransition bool
 
 	// Precompiles maps addresses to stateful precompiled contracts that are enabled
 	// for this rule set.
@@ -620,6 +633,7 @@ func (c *ChainConfig) AvalancheRules(blockNum, blockTimestamp *big.Int) Rules {
 	rules.IsApricotPhase4 = c.IsApricotPhase4(blockTimestamp)
 	rules.IsApricotPhase5 = c.IsApricotPhase5(blockTimestamp)
 	rules.IsBlueberry = c.IsBlueberry(blockTimestamp)
+	rules.IsSongbirdTransition = c.IsSongbirdTransition(blockTimestamp)
 
 	// Initialize the stateful precompiles that should be enabled at [blockTimestamp].
 	rules.Precompiles = make(map[common.Address]precompile.StatefulPrecompiledContract)

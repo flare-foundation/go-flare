@@ -14,6 +14,8 @@ var inflationSettingsVariants = utils.NewNetworkValue(getDefaultInflationSetting
 	AddValue(constants.CostwoID, getCostwoInflationSettings).
 	AddValue(constants.LocalFlareID, getLocalFlareInflationSettings).
 	AddValue(constants.StagingID, getStagingInflationSettings).
+	AddValue(constants.SongbirdID, getSongbirdInflationSettings).
+	AddValue(constants.CostonID, getCostonInflationSettings).
 	AddValue(constants.LocalID, getLocalInflationSettings)
 
 type InflationSettings struct {
@@ -150,13 +152,52 @@ func getStagingInflationSettings(_ time.Time, _ *config.Config) InflationSetting
 	}
 }
 
-func getLocalInflationSettings(currentTimestamp time.Time, config *config.Config) InflationSettings {
+func getSongbirdInflationSettings(currentTimestamp time.Time, config *config.Config) InflationSettings {
 	switch {
 	case currentTimestamp.Before(time.Date(2000, time.March, 1, 0, 0, 0, 0, time.UTC)):
-		// Phase 1
 		return getDefaultInflationSettings(currentTimestamp, config)
 	default:
 		// Phase 2
+		return InflationSettings{
+			MinValidatorStake:        1 * units.MegaAvax,
+			MaxValidatorStake:        200 * units.MegaAvax,
+			MinDelegatorStake:        50 * units.KiloAvax,
+			MinDelegationFee:         0,
+			MinStakeDuration:         60 * 24 * time.Hour,
+			MinDelegateDuration:      2 * 7 * 24 * time.Hour,
+			MaxStakeDuration:         365 * 24 * time.Hour,
+			MinFutureStartTimeOffset: MaxFutureStartTime,
+			MaxValidatorWeightFactor: 15,
+			MinStakeStartTime:        time.Date(2024, time.October, 1, 0, 0, 0, 0, time.UTC),
+		}
+	}
+}
+
+func getCostonInflationSettings(currentTimestamp time.Time, config *config.Config) InflationSettings {
+	switch {
+	case currentTimestamp.Before(time.Date(2000, time.March, 1, 0, 0, 0, 0, time.UTC)):
+		return getDefaultInflationSettings(currentTimestamp, config)
+	default:
+		return InflationSettings{
+			MinValidatorStake:        100 * units.KiloAvax,
+			MaxValidatorStake:        50 * units.MegaAvax,
+			MinDelegatorStake:        10 * units.KiloAvax,
+			MinDelegationFee:         0,
+			MinStakeDuration:         24 * time.Hour,
+			MinDelegateDuration:      1 * time.Hour,
+			MaxStakeDuration:         365 * 24 * time.Hour,
+			MinFutureStartTimeOffset: MaxFutureStartTime,
+			MaxValidatorWeightFactor: 15,
+			MinStakeStartTime:        time.Date(2024, time.April, 24, 15, 0, 0, 0, time.UTC),
+		}
+	}
+}
+
+func getLocalInflationSettings(currentTimestamp time.Time, config *config.Config) InflationSettings {
+	switch {
+	case currentTimestamp.Before(time.Date(2000, time.March, 1, 0, 0, 0, 0, time.UTC)):
+		return getDefaultInflationSettings(currentTimestamp, config)
+	default:
 		return InflationSettings{
 			MinValidatorStake:        10 * units.KiloAvax,
 			MaxValidatorStake:        50 * units.MegaAvax,
@@ -166,8 +207,8 @@ func getLocalInflationSettings(currentTimestamp time.Time, config *config.Config
 			MinDelegateDuration:      20 * time.Minute,
 			MaxStakeDuration:         365 * 24 * time.Hour,
 			MinFutureStartTimeOffset: MaxFutureStartTime,
-			MaxValidatorWeightFactor: MaxValidatorWeightFactor,
-			MinStakeStartTime:        time.Date(2023, time.April, 10, 15, 0, 0, 0, time.UTC),
+			MaxValidatorWeightFactor: 15,
+			MinStakeStartTime:        time.Date(2024, time.April, 22, 15, 0, 0, 0, time.UTC),
 		}
 	}
 }

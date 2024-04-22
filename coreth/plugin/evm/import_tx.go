@@ -69,6 +69,11 @@ func (utx *UnsignedImportTx) Verify(
 		return errNoEVMOutputs
 	}
 
+	// SGB-MERGE
+	if rules.IsSongbirdCode && !rules.IsSongbirdTransition {
+		return errImportTxsDisabled
+	}
+
 	// Make sure that the tx has a valid peer chain ID
 	if rules.IsApricotPhase5 {
 		// Note that SameSubnet verifies that [tx.SourceChain] isn't this

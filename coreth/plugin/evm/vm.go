@@ -175,6 +175,8 @@ var (
 	errConflictingAtomicTx            = errors.New("conflicting atomic tx present")
 	errTooManyAtomicTx                = errors.New("too many atomic tx")
 	errMissingAtomicTxs               = errors.New("cannot build a block with non-empty extra data and zero atomic transactions")
+	errImportTxsDisabled              = errors.New("import transactions are disabled")
+	errExportTxsDisabled              = errors.New("export transactions are disabled")
 )
 
 var originalStderr *os.File

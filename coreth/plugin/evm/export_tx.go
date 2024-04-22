@@ -75,6 +75,11 @@ func (utx *UnsignedExportTx) Verify(
 		return errWrongBlockchainID
 	}
 
+	// SGB-MERGE
+	if rules.IsSongbirdCode && !rules.IsSongbirdTransition {
+		return errExportTxsDisabled
+	}
+
 	// Make sure that the tx has a valid peer chain ID
 	if rules.IsApricotPhase5 {
 		// Note that SameSubnet verifies that [tx.DestinationChain] isn't this
@@ -165,7 +170,7 @@ func (utx *UnsignedExportTx) Burned(assetID ids.ID) (uint64, error) {
 func (utx *UnsignedExportTx) SemanticVerify(
 	vm *VM,
 	stx *Tx,
-	_ *Block,
+	parent *Block,
 	baseFee *big.Int,
 	rules params.Rules,
 ) error {
