@@ -70,9 +70,9 @@ func getPhaseOneInflationSettings(networkID uint32, config *config.Config) (uint
 			10 * units.KiloAvax,
 			0,
 			2 * 7 * 24 * time.Hour,
-			2 * 7 * 24 * time.Hour,
+			4 * time.Minute,
 			365 * 24 * time.Hour,
-			24 * time.Hour,
+			MaxFutureStartTime,
 			MaxValidatorWeightFactor,
 			time.Date(2023, time.April, 10, 15, 0, 0, 0, time.UTC)
 	default:
