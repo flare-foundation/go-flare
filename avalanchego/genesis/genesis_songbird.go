@@ -94,7 +94,7 @@ var (
 			"4AC175dcf8355A5Ed545a7178715c542cF43B9bB": {"balance":     "0x2116545850052128000000"},
 			"544DF305ef3ef012108D770B259720E7Ef6360Bd": {"balance":     "0x2116545850052128000000"},
 			"42a7bD36593c75c981C7201d2E7974133782f0e0": {"balance":   "0x0c9a0d0a69d549fff26def00"},
-			"493044fbBAA7F9F78379864fA88aCcaFf6A7586e": {"balance":         "0x5150ae84a8cdf00000"}
+			"493044fbBAA7F9F78379864fA88aCcaFf6A7586e": {"balance":         "0x5150ae84a8cdf00000"}			
 		},
 		"number": "0x0",
 		"gasUsed": "0x0",
