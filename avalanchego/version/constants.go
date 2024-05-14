@@ -92,7 +92,7 @@ var (
 	ApricotPhase4DefaultTime     = time.Date(2020, time.December, 5, 5, 0, 0, 0, time.UTC)
 	ApricotPhase4MinPChainHeight = map[uint32]uint64{
 		constants.MainnetID: 793005,
-		constants.FujiID:    47437,
+		// constants.FujiID:    47437,
 	}
 	ApricotPhase4DefaultMinPChainHeight uint64
 
