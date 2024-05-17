@@ -39,10 +39,6 @@ func TestValidateConfig(t *testing.T) {
 			networkID: 1,
 			config:    &MainnetConfig,
 		},
-		"fuji": {
-			networkID: 5,
-			config:    &FujiConfig,
-		},
 		"local": {
 			networkID: 162,
 			config:    &LocalFlareConfig,
@@ -114,15 +110,6 @@ func TestValidateConfig(t *testing.T) {
 				return &thisConfig
 			}(),
 			err: "duplicated in initial staked funds",
-		},
-		"initial staked funds not in allocations": {
-			networkID: 5,
-			config: func() *Config {
-				thisConfig := FujiConfig
-				thisConfig.InitialStakedFunds = append(thisConfig.InitialStakedFunds, LocalFlareConfig.InitialStakedFunds[0])
-				return &thisConfig
-			}(),
-			err: "does not have an allocation to stake",
 		},
 		"empty C-Chain genesis": {
 			networkID: 162,

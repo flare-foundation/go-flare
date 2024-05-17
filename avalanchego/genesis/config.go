@@ -152,10 +152,6 @@ var (
 	// genesis.
 	MainnetConfig Config
 
-	// FujiConfig is the config that should be used to generate the fuji
-	// genesis.
-	FujiConfig Config
-
 	// LocalConfig is the config that should be used to generate a local
 	// genesis.
 	LocalConfig Config
@@ -187,7 +183,6 @@ var (
 
 func init() {
 	unparsedMainnetConfig := UnparsedConfig{}
-	unparsedFujiConfig := UnparsedConfig{}
 	unparsedLocalConfig := UnparsedConfig{}
 	unparsedFlareConfig := UnparsedConfig{}
 	unparsedCostwoConfig := UnparsedConfig{}
@@ -199,7 +194,6 @@ func init() {
 	errs := wrappers.Errs{}
 	errs.Add(
 		json.Unmarshal(mainnetGenesisConfigJSON, &unparsedMainnetConfig),
-		json.Unmarshal(fujiGenesisConfigJSON, &unparsedFujiConfig),
 		json.Unmarshal([]byte(localGenesisConfigJSON), &unparsedLocalConfig),
 		json.Unmarshal(flareGenesisConfigJSON, &unparsedFlareConfig),
 		json.Unmarshal(costwoGenesisConfigJSON, &unparsedCostwoConfig),
@@ -215,10 +209,6 @@ func init() {
 	mainnetConfig, err := unparsedMainnetConfig.Parse()
 	errs.Add(err)
 	MainnetConfig = mainnetConfig
-
-	fujiConfig, err := unparsedFujiConfig.Parse()
-	errs.Add(err)
-	FujiConfig = fujiConfig
 
 	localConfig, err := unparsedLocalConfig.Parse()
 	localConfig.CChainGenesis = localCChainGenesis
@@ -260,9 +250,6 @@ func GetConfig(networkID uint32) *Config {
 	switch networkID {
 	case constants.MainnetID:
 		return &MainnetConfig
-	// SGB-MERGE
-	// case constants.FujiID:
-	// 	return &FujiConfig
 	case constants.LocalID:
 		return &LocalConfig
 	case constants.FlareID:

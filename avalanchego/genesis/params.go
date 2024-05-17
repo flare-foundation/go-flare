@@ -53,9 +53,6 @@ func GetTxFeeConfig(networkID uint32) TxFeeConfig {
 	switch networkID {
 	case constants.MainnetID:
 		return MainnetParams.TxFeeConfig
-	// SGB-MERGE
-	// case constants.FujiID:
-	// 	return FujiParams.TxFeeConfig
 	case constants.LocalID:
 		return LocalParams.TxFeeConfig
 	case constants.FlareID:
@@ -79,9 +76,6 @@ func GetStakingConfig(networkID uint32) StakingConfig {
 	switch networkID {
 	case constants.MainnetID:
 		return MainnetParams.StakingConfig
-	// SGB-MERGE
-	// case constants.FujiID:
-	// 	return FujiParams.StakingConfig
 	case constants.LocalID:
 		return LocalParams.StakingConfig
 	case constants.FlareID:

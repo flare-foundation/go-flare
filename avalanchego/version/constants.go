@@ -68,8 +68,7 @@ var (
 	}
 
 	ApricotPhase3Times = map[uint32]time.Time{
-		constants.MainnetID: time.Date(2021, time.August, 24, 14, 0, 0, 0, time.UTC),
-		// constants.FujiID:       time.Date(2021, time.August, 16, 19, 0, 0, 0, time.UTC),
+		constants.MainnetID:    time.Date(2021, time.August, 24, 14, 0, 0, 0, time.UTC),
 		constants.FlareID:      time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC),
 		constants.CostwoID:     time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC),
 		constants.StagingID:    time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC),
@@ -80,8 +79,7 @@ var (
 	ApricotPhase3DefaultTime = time.Date(2020, time.December, 5, 5, 0, 0, 0, time.UTC)
 
 	ApricotPhase4Times = map[uint32]time.Time{
-		constants.MainnetID: time.Date(2021, time.September, 22, 21, 0, 0, 0, time.UTC),
-		// constants.FujiID:       time.Date(2021, time.September, 16, 21, 0, 0, 0, time.UTC),
+		constants.MainnetID:    time.Date(2021, time.September, 22, 21, 0, 0, 0, time.UTC),
 		constants.FlareID:      time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC),
 		constants.CostwoID:     time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC),
 		constants.StagingID:    time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC),
@@ -92,13 +90,11 @@ var (
 	ApricotPhase4DefaultTime     = time.Date(2020, time.December, 5, 5, 0, 0, 0, time.UTC)
 	ApricotPhase4MinPChainHeight = map[uint32]uint64{
 		constants.MainnetID: 793005,
-		// constants.FujiID:    47437,
 	}
 	ApricotPhase4DefaultMinPChainHeight uint64
 
 	ApricotPhase5Times = map[uint32]time.Time{
-		constants.MainnetID: time.Date(2021, time.December, 2, 18, 0, 0, 0, time.UTC),
-		// constants.FujiID:       time.Date(2021, time.November, 24, 15, 0, 0, 0, time.UTC),
+		constants.MainnetID:    time.Date(2021, time.December, 2, 18, 0, 0, 0, time.UTC),
 		constants.FlareID:      time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC),
 		constants.CostwoID:     time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC),
 		constants.StagingID:    time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC),
@@ -110,8 +106,7 @@ var (
 
 	// FIXME: update this before release
 	BlueberryTimes = map[uint32]time.Time{
-		constants.MainnetID: time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
-		// constants.FujiID:       time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
+		constants.MainnetID:    time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
 		constants.FlareID:      time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
 		constants.CostwoID:     time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
 		constants.StagingID:    time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
@@ -123,8 +118,7 @@ var (
 
 	// FIXME: update this before release
 	XChainMigrationTimes = map[uint32]time.Time{
-		constants.MainnetID: time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
-		// constants.FujiID:       time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
+		constants.MainnetID:    time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
 		constants.FlareID:      time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
 		constants.CostwoID:     time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
 		constants.StagingID:    time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
