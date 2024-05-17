@@ -17,9 +17,7 @@ const (
 	CascadeID uint32 = 2
 	DenaliID  uint32 = 3
 	EverestID uint32 = 4
-	FujiID    uint32 = 5
 
-	TestnetID    uint32 = FujiID
 	UnitTestID   uint32 = 10
 	LocalID      uint32 = 12345
 	FlareID      uint32 = 14
@@ -66,12 +64,10 @@ var (
 	PlatformChainID  = ids.Empty
 
 	NetworkIDToNetworkName = map[uint32]string{
-		MainnetID: MainnetName,
-		CascadeID: CascadeName,
-		DenaliID:  DenaliName,
-		EverestID: EverestName,
-		// SGB-MERGE
-		// FujiID:       FujiName,
+		MainnetID:    MainnetName,
+		CascadeID:    CascadeName,
+		DenaliID:     DenaliName,
+		EverestID:    EverestName,
 		UnitTestID:   UnitTestName,
 		LocalID:      LocalName,
 		FlareID:      FlareName,
@@ -86,17 +82,14 @@ var (
 		CascadeName:    CascadeID,
 		DenaliName:     DenaliID,
 		EverestName:    EverestID,
-		FujiName:       FujiID,
-		TestnetName:    TestnetID,
 		UnitTestName:   UnitTestID,
 		LocalName:      LocalID,
 		FlareName:      FlareID,
 		CostwoName:     CostwoID,
 		StagingName:    StagingID,
 		LocalFlareName: LocalFlareID,
-		// SGB-MERGE
-		SongbirdName: SongbirdID,
-		CostonName:   CostonID,
+		SongbirdName:   SongbirdID,
+		CostonName:     CostonID,
 	}
 
 	NetworkIDToHRP = map[uint32]string{
@@ -110,25 +103,22 @@ var (
 		CostwoID:     CostwoHRP,
 		StagingID:    StagingHRP,
 		LocalFlareID: LocalFlareHRP,
-		// SGB-MERGE
-		SongbirdID: SongbirdHRP,
-		CostonID:   CostonHRP,
+		SongbirdID:   SongbirdHRP,
+		CostonID:     CostonHRP,
 	}
 	NetworkHRPToNetworkID = map[string]uint32{
 		MainnetHRP:    MainnetID,
 		CascadeHRP:    CascadeID,
 		DenaliHRP:     DenaliID,
 		EverestHRP:    EverestID,
-		FujiHRP:       FujiID,
 		UnitTestHRP:   UnitTestID,
 		LocalHRP:      LocalID,
 		FlareHRP:      FlareID,
 		CostwoHRP:     CostwoID,
 		StagingHRP:    StagingID,
 		LocalFlareHRP: LocalFlareID,
-		// SGB-MERGE
-		SongbirdHRP: SongbirdID,
-		CostonHRP:   CostonID,
+		SongbirdHRP:   SongbirdID,
+		CostonHRP:     CostonID,
 	}
 
 	ValidNetworkPrefix = "network-"

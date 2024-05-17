@@ -167,9 +167,9 @@ func TestGenesisFromFile(t *testing.T) {
 		expected        string
 	}{
 		"mainnet": {
-			networkID:    constants.MainnetID,
+			networkID:    constants.FlareID,
 			customConfig: customGenesisConfigJSON,
-			err:          "cannot override genesis config for standard network mainnet (1)",
+			err:          "cannot override genesis config for standard network flare (14)",
 		},
 		"songbird": {
 			networkID:    constants.SongbirdID,
@@ -253,8 +253,8 @@ func TestGenesisFromFlag(t *testing.T) {
 		expected     string
 	}{
 		"mainnet": {
-			networkID: constants.MainnetID,
-			err:       "cannot override genesis config for standard network mainnet (1)",
+			networkID: constants.FlareID,
+			err:       "cannot override genesis config for standard network flare (14)",
 		},
 		"songbird": {
 			networkID: constants.SongbirdID,
@@ -303,8 +303,8 @@ func TestGenesisFromFlag(t *testing.T) {
 				case constants.MainnetID:
 					genBytes, err = json.Marshal(&MainnetConfig)
 					require.NoError(err)
-				case constants.TestnetID:
-					genBytes, err = json.Marshal(&FujiConfig)
+				case constants.SongbirdID:
+					genBytes, err = json.Marshal(&SongbirdConfig)
 					require.NoError(err)
 				case constants.LocalID:
 					genBytes, err = json.Marshal(&LocalConfig)
@@ -340,13 +340,12 @@ func TestGenesis(t *testing.T) {
 		expectedID string
 	}{
 		{
-			networkID:  constants.MainnetID,
-			expectedID: "UUvXi6j7QhVvgpbKM89MP5HdrxKm9CaJeHc187TsDNf8nZdLk",
+			networkID:  constants.FlareID,
+			expectedID: "frq8jezXkuL4PmuBt6FDcpULh2sCsFHPgWq3ZGP1G8R8UnnoU",
 		},
 		{
-			networkID: constants.SongbirdID,
-			// expectedID: "wehzwSstW6ChWVj356tLr6sJfSb8PaZMhcerXUyxsAUzia1Gr",
-			expectedID: "2r5gyF26aYN9BHaFYaDDFGpx2tiq4bz3GCiYUGo4QzKpzHeX9g",
+			networkID:  constants.SongbirdID,
+			expectedID: "2ACyRqRc8H5VT7DDGn4qadKfct4iTPe9buQKhAjiDyotSVkeoi",
 		},
 		{
 			networkID:  constants.LocalID,

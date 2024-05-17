@@ -126,12 +126,8 @@ func TestNetworkID(t *testing.T) {
 			id:   MainnetID,
 		},
 		{
-			name: TestnetName,
-			id:   TestnetID,
-		},
-		{
-			name: FujiName,
-			id:   FujiID,
+			name: SongbirdName,
+			id:   SongbirdID,
 		},
 		{
 			name: LocalName,
