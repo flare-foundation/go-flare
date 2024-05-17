@@ -37,12 +37,12 @@ func InitializeDefaultValidators(networkID uint32) {
 }
 
 type defaultValidatorSet struct {
-	initialzed bool
-	vdrMap     map[ids.NodeID]Validator
+	initialized bool
+	vdrMap      map[ids.NodeID]Validator
 }
 
 func (dvs *defaultValidatorSet) initialize(networkID uint32) {
-	if dvs.initialzed {
+	if dvs.initialized {
 		return
 	}
 
@@ -59,11 +59,11 @@ func (dvs *defaultValidatorSet) initialize(networkID uint32) {
 	for _, vdr := range vdrs {
 		dvs.vdrMap[vdr.ID()] = vdr
 	}
-	dvs.initialzed = true
+	dvs.initialized = true
 }
 
 func (dvs *defaultValidatorSet) list() []Validator {
-	if !dvs.initialzed {
+	if !dvs.initialized {
 		panic(errNotInitialized)
 	}
 	vdrs := make([]Validator, 0, len(dvs.vdrMap))
@@ -74,7 +74,7 @@ func (dvs *defaultValidatorSet) list() []Validator {
 }
 
 func (dvs *defaultValidatorSet) isValidator(vdrID ids.NodeID) bool {
-	if !dvs.initialzed {
+	if !dvs.initialized {
 		panic(errNotInitialized)
 	}
 	_, ok := dvs.vdrMap[vdrID]
