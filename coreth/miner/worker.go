@@ -129,7 +129,9 @@ func (w *worker) commitNewWork() (*types.Block, error) {
 
 	var gasLimit uint64
 	if w.chainConfig.IsSongbirdCode() {
-		if w.chainConfig.IsApricotPhase5(big.NewInt(timestamp)) {
+		if w.chainConfig.IsSongbirdTransition(big.NewInt(timestamp)) {
+			gasLimit = params.SgbTransitionGasLimit
+		} else if w.chainConfig.IsApricotPhase5(big.NewInt(timestamp)) {
 			gasLimit = params.SgbApricotPhase5GasLimit
 		} else if w.chainConfig.IsApricotPhase1(big.NewInt(timestamp)) {
 			gasLimit = params.ApricotPhase1GasLimit

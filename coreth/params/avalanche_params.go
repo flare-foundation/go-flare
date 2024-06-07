@@ -21,6 +21,8 @@ const (
 	ApricotPhase1GasLimit uint64 = 8_000_000
 
 	// SGB-MERGE
+	// revert to the default gas limit after the transition due to re-enabled transfer between chains
+	SgbTransitionGasLimit    uint64 = 8_000_000
 	SgbApricotPhase5GasLimit uint64 = 30_000_000
 
 	ApricotPhase3ExtraDataSize            uint64 = 80
