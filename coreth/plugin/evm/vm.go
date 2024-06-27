@@ -175,6 +175,8 @@ var (
 	errConflictingAtomicTx            = errors.New("conflicting atomic tx present")
 	errTooManyAtomicTx                = errors.New("too many atomic tx")
 	errMissingAtomicTxs               = errors.New("cannot build a block with non-empty extra data and zero atomic transactions")
+	errImportTxsDisabled              = errors.New("import transactions are disabled")
+	errExportTxsDisabled              = errors.New("export transactions are disabled")
 )
 
 var originalStderr *os.File
@@ -381,6 +383,12 @@ func (vm *VM) Initialize(
 		extDataHashes = fujiExtDataHashes
 	case g.Config.ChainID.Cmp(params.AvalancheLocalChainID) == 0:
 		g.Config = params.AvalancheLocalChainConfig
+	case g.Config.ChainID.Cmp(params.CostonChainID) == 0:
+		g.Config = params.CostonChainConfig
+	case g.Config.ChainID.Cmp(params.SongbirdChainID) == 0:
+		g.Config = params.SongbirdChainConfig
+	case g.Config.ChainID.Cmp(params.LocalChainID) == 0:
+		g.Config = params.LocalChainConfig
 	}
 	vm.syntacticBlockValidator = NewBlockValidator(extDataHashes)
 
@@ -401,7 +409,11 @@ func (vm *VM) Initialize(
 
 	vm.chainID = g.Config.ChainID
 
-	vm.ethConfig = ethconfig.NewDefaultConfig()
+	if g.Config.IsSongbirdCode() {
+		vm.ethConfig = ethconfig.NewDefaultSgbConfig()
+	} else {
+		vm.ethConfig = ethconfig.NewDefaultConfig()
+	}
 	vm.ethConfig.Genesis = g
 	vm.ethConfig.NetworkId = vm.chainID.Uint64()
 
@@ -1060,10 +1072,10 @@ func (vm *VM) Version() (string, error) {
 }
 
 // NewHandler returns a new Handler for a service where:
-//   * The handler's functionality is defined by [service]
+//   - The handler's functionality is defined by [service]
 //     [service] should be a gorilla RPC service (see https://www.gorillatoolkit.org/pkg/rpc/v2)
-//   * The name of the service is [name]
-//   * The LockOption is the first element of [lockOption]
+//   - The name of the service is [name]
+//   - The LockOption is the first element of [lockOption]
 //     By default the LockOption is WriteLock
 //     [lockOption] should have either 0 or 1 elements. Elements beside the first are ignored.
 func newHandler(name string, service interface{}, lockOption ...commonEng.LockOption) (*commonEng.HTTPHandler, error) {

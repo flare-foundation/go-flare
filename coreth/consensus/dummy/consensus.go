@@ -96,20 +96,33 @@ func (self *DummyEngine) verifyHeaderGasFields(config *params.ChainConfig, heade
 	if header.GasUsed > header.GasLimit {
 		return fmt.Errorf("invalid gasUsed: have %d, gasLimit %d", header.GasUsed, header.GasLimit)
 	}
-	if config.IsApricotPhase1(timestamp) {
-		if header.GasLimit != params.ApricotPhase1GasLimit {
-			return fmt.Errorf("expected gas limit to be %d, but found %d", params.ApricotPhase1GasLimit, header.GasLimit)
+	if config.IsSongbirdCode() {
+		// Verify that the gas limit is correct for the current phase
+		if config.IsSongbirdTransition(timestamp) {
+			if header.GasLimit != params.SgbTransitionGasLimit {
+				return fmt.Errorf("expected gas limit to be %d in sgb transition but got %d", params.SgbTransitionGasLimit, header.GasLimit)
+			}
+		} else if config.IsApricotPhase5(timestamp) {
+			if header.GasLimit != params.SgbApricotPhase5GasLimit {
+				return fmt.Errorf("expected gas limit to be %d in apricot phase 5 but got %d", params.SgbApricotPhase5GasLimit, header.GasLimit)
+			}
 		}
 	} else {
-		// Verify that the gas limit remains within allowed bounds
-		diff := int64(parent.GasLimit) - int64(header.GasLimit)
-		if diff < 0 {
-			diff *= -1
-		}
-		limit := parent.GasLimit / params.GasLimitBoundDivisor
+		if config.IsApricotPhase1(timestamp) {
+			if header.GasLimit != params.ApricotPhase1GasLimit {
+				return fmt.Errorf("expected gas limit to be %d, but found %d", params.ApricotPhase1GasLimit, header.GasLimit)
+			}
+		} else {
+			// Verify that the gas limit remains within allowed bounds
+			diff := int64(parent.GasLimit) - int64(header.GasLimit)
+			if diff < 0 {
+				diff *= -1
+			}
+			limit := parent.GasLimit / params.GasLimitBoundDivisor
 
-		if uint64(diff) >= limit || header.GasLimit < params.MinGasLimit {
-			return fmt.Errorf("invalid gas limit: have %d, want %d += %d", header.GasLimit, parent.GasLimit, limit)
+			if uint64(diff) >= limit || header.GasLimit < params.MinGasLimit {
+				return fmt.Errorf("invalid gas limit: have %d, want %d += %d", header.GasLimit, parent.GasLimit, limit)
+			}
 		}
 	}
 
@@ -155,8 +168,14 @@ func (self *DummyEngine) verifyHeaderGasFields(config *params.ChainConfig, heade
 	if config.IsApricotPhase5(timestamp) {
 		blockGasCostStep = ApricotPhase5BlockGasCostStep
 	}
+	var apricotPhase4TargetBlockRate uint64
+	if config.IsSongbirdCode() {
+		apricotPhase4TargetBlockRate = SgbApricotPhase4TargetBlockRate
+	} else {
+		apricotPhase4TargetBlockRate = ApricotPhase4TargetBlockRate
+	}
 	expectedBlockGasCost := calcBlockGasCost(
-		ApricotPhase4TargetBlockRate,
+		apricotPhase4TargetBlockRate,
 		ApricotPhase4MinBlockGasCost,
 		ApricotPhase4MaxBlockGasCost,
 		blockGasCostStep,
@@ -353,8 +372,14 @@ func (self *DummyEngine) Finalize(chain consensus.ChainHeaderReader, block *type
 		}
 		// Calculate the expected blockGasCost for this block.
 		// Note: this is a deterministic transtion that defines an exact block fee for this block.
+		var apricotPhase4TargetBlockRate uint64
+		if chain.Config().IsSongbirdCode() {
+			apricotPhase4TargetBlockRate = SgbApricotPhase4TargetBlockRate
+		} else {
+			apricotPhase4TargetBlockRate = ApricotPhase4TargetBlockRate
+		}
 		blockGasCost := calcBlockGasCost(
-			ApricotPhase4TargetBlockRate,
+			apricotPhase4TargetBlockRate,
 			ApricotPhase4MinBlockGasCost,
 			ApricotPhase4MaxBlockGasCost,
 			blockGasCostStep,
@@ -403,8 +428,14 @@ func (self *DummyEngine) FinalizeAndAssemble(chain consensus.ChainHeaderReader, 
 			blockGasCostStep = ApricotPhase5BlockGasCostStep
 		}
 		// Calculate the required block gas cost for this block.
+		var apricotPhase4TargetBlockRate uint64
+		if chain.Config().IsSongbirdCode() {
+			apricotPhase4TargetBlockRate = SgbApricotPhase4TargetBlockRate
+		} else {
+			apricotPhase4TargetBlockRate = ApricotPhase4TargetBlockRate
+		}
 		header.BlockGasCost = calcBlockGasCost(
-			ApricotPhase4TargetBlockRate,
+			apricotPhase4TargetBlockRate,
 			ApricotPhase4MinBlockGasCost,
 			ApricotPhase4MaxBlockGasCost,
 			blockGasCostStep,

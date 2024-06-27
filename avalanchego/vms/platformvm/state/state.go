@@ -80,6 +80,9 @@ type Chain interface {
 	UTXOGetter
 	UTXODeleter
 
+	// SGB-MERGE
+	GetNetworkID() uint32
+
 	GetTimestamp() time.Time
 	SetTimestamp(tm time.Time)
 	GetCurrentSupply() uint64
@@ -330,6 +333,14 @@ func New(
 		return nil, err
 	}
 
+	// SGB-MERGE set uptimes of default validators
+	for _, vdr := range validators.DefaultValidatorList() {
+		s.uptimes[vdr.ID()] = &uptimeAndReward{
+			txID:        ids.Empty,
+			lastUpdated: s.GetTimestamp(),
+		}
+	}
+
 	return s, nil
 }
 
@@ -477,6 +488,10 @@ func new(
 
 		singletonDB: prefixdb.New(singletonPrefix, baseDB),
 	}, nil
+}
+
+func (s *state) GetNetworkID() uint32 {
+	return s.ctx.NetworkID
 }
 
 func (s *state) GetCurrentValidator(subnetID ids.ID, nodeID ids.NodeID) (*Staker, error) {
@@ -1601,6 +1616,11 @@ func (s *state) writePendingSubnetStakers() error {
 func (s *state) writeUptimes() error {
 	for nodeID := range s.updatedUptimes {
 		delete(s.updatedUptimes, nodeID)
+
+		// SGB-MERGE skip default validator
+		if validators.IsDefaultValidator(nodeID) {
+			continue
+		}
 
 		uptime := s.uptimes[nodeID]
 		uptime.LastUpdated = uint64(uptime.lastUpdated.Unix())

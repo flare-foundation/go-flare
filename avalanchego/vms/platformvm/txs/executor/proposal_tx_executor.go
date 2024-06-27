@@ -49,6 +49,10 @@ var (
 	errEmptyNodeID               = errors.New("validator nodeID cannot be empty")
 )
 
+var (
+	songbirdLatestStakingTime = time.Date(2024, time.December, 31, 0, 0, 0, 0, time.UTC)
+)
+
 type ProposalTxExecutor struct {
 	// inputs, to be filled before visitor methods are called
 	*Backend
@@ -864,6 +868,10 @@ func GetNextStakerChangeTime(state state.Chain) (time.Time, error) {
 	case hasPendingStaker:
 		return pendingStakerIterator.Value().NextTime, nil
 	default:
+		// SGB-MERGE
+		if state.GetNetworkID() == constants.SongbirdID || state.GetNetworkID() == constants.CostonID || state.GetNetworkID() == constants.LocalID {
+			return songbirdLatestStakingTime, nil
+		}
 		return time.Time{}, database.ErrNotFound
 	}
 }

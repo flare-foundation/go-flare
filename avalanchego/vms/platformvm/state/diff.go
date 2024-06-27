@@ -28,6 +28,9 @@ type Diff interface {
 }
 
 type diff struct {
+	// SGB-MERGE
+	networkID uint32
+
 	parentID      ids.ID
 	stateVersions Versions
 
@@ -68,11 +71,16 @@ func NewDiff(
 		return nil, fmt.Errorf("%w: %s", ErrMissingParentState, parentID)
 	}
 	return &diff{
+		networkID:     parentState.GetNetworkID(),
 		parentID:      parentID,
 		stateVersions: stateVersions,
 		timestamp:     parentState.GetTimestamp(),
 		currentSupply: parentState.GetCurrentSupply(),
 	}, nil
+}
+
+func (d *diff) GetNetworkID() uint32 {
+	return d.networkID
 }
 
 func (d *diff) GetTimestamp() time.Time {

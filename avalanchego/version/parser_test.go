@@ -6,6 +6,7 @@ package version
 import (
 	"testing"
 
+	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/stretchr/testify/require"
 )
 
@@ -33,6 +34,8 @@ func TestParse(t *testing.T) {
 }
 
 func TestParseApplication(t *testing.T) {
+	InitApplicationPrefix(constants.FlareID)
+
 	v, err := ParseApplication("avalanche/1.2.3")
 
 	require.NoError(t, err)

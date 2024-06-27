@@ -563,6 +563,10 @@ func (mr *MockStateMockRecorder) Abort() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Abort", reflect.TypeOf((*MockState)(nil).Abort))
 }
 
+func (m *MockState) GetNetworkID() uint32 {
+	return 0
+}
+
 // AddChain mocks base method.
 func (m *MockState) AddChain(createChainTx *txs.Tx) {
 	m.ctrl.T.Helper()

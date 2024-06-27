@@ -46,6 +46,17 @@ var DefaultFullGPOConfig = gasprice.Config{
 	MinGasUsed:          gasprice.DefaultMinGasUsed,
 }
 
+var DefaultFullGPOSgbConfig = gasprice.Config{
+	Blocks:              40,
+	Percentile:          60,
+	MaxLookbackSeconds:  gasprice.DefaultMaxLookbackSeconds,
+	MaxCallBlockHistory: gasprice.DefaultMaxCallBlockHistory,
+	MaxBlockHistory:     gasprice.DefaultMaxBlockHistory,
+	MinPrice:            gasprice.DefaultMinPrice,
+	MaxPrice:            gasprice.DefaultMaxPrice,
+	MinGasUsed:          gasprice.SgbDefaultMinGasUsed,
+}
+
 // DefaultConfig contains default settings for use on the Avalanche main net.
 var DefaultConfig = NewDefaultConfig()
 
@@ -64,6 +75,25 @@ func NewDefaultConfig() Config {
 		RPCGasCap:             25000000,
 		RPCEVMTimeout:         5 * time.Second,
 		GPO:                   DefaultFullGPOConfig,
+		RPCTxFeeCap:           1, // 1 AVAX
+	}
+}
+
+func NewDefaultSgbConfig() Config {
+	return Config{
+		NetworkId:             1,
+		LightPeers:            100,
+		UltraLightFraction:    75,
+		DatabaseCache:         512,
+		TrieCleanCache:        256,
+		TrieDirtyCache:        256,
+		TrieDirtyCommitTarget: 20,
+		SnapshotCache:         128,
+		Miner:                 miner.Config{},
+		TxPool:                core.DefaultTxPoolConfig,
+		RPCGasCap:             25000000,
+		RPCEVMTimeout:         5 * time.Second,
+		GPO:                   DefaultFullGPOSgbConfig,
 		RPCTxFeeCap:           1, // 1 AVAX
 	}
 }
