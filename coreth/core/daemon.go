@@ -21,7 +21,7 @@ import (
 var (
 	// Define activation times for submitter contract
 	submitterContractActivationTimeFlare  = big.NewInt(time.Date(2024, time.March, 26, 12, 0, 0, 0, time.UTC).Unix())
-	submitterContractActivationTimeCostwo = big.NewInt(time.Date(2024, time.February, 21, 14, 0, 0, 0, time.UTC).Unix())
+	submitterContractActivationTimeCostwo = big.NewInt(time.Date(2024, time.March, 7, 12, 0, 0, 0, time.UTC).Unix())
 
 	submitterContractActivationTimeSongbird = big.NewInt(time.Date(2024, time.March, 15, 12, 0, 0, 0, time.UTC).Unix())
 	submitterContractActivationTimeCoston   = big.NewInt(time.Date(2024, time.February, 29, 12, 0, 0, 0, time.UTC).Unix())
