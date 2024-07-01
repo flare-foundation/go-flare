@@ -29,6 +29,7 @@ package core
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -394,7 +395,13 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 			}
 		}
 	}
-
+	if errors.Is(vmerr, vmerrs.ErrToAddrProhibitedSoft) { // Only invalidate soft error here
+		return &ExecutionResult{
+			UsedGas:    st.gasUsed(),
+			Err:        vmerr,
+			ReturnData: ret,
+		}, vmerr
+	}
 	st.refundGas(rules.IsApricotPhase1)
 
 	if vmerr == nil && IsPrioritisedContractCall(chainID, timestamp, msg.To(), ret, st.initialGas) {

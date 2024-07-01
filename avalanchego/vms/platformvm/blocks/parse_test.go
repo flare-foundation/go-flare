@@ -1,10 +1,11 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package blocks
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -18,9 +19,10 @@ import (
 
 var preFundedKeys = crypto.BuildTestKeys()
 
-func TestStandardBlock(t *testing.T) {
-	// check standard block can be built and parsed
+func TestStandardBlocks(t *testing.T) {
+	// check Apricot standard block can be built and parsed
 	require := require.New(t)
+	blkTimestamp := time.Now()
 	parentID := ids.ID{'p', 'a', 'r', 'e', 'n', 't', 'I', 'D'}
 	height := uint64(2022)
 	txs, err := testDecisionTxs()
@@ -28,32 +30,52 @@ func TestStandardBlock(t *testing.T) {
 
 	for _, cdc := range []codec.Manager{Codec, GenesisCodec} {
 		// build block
-		standardBlk, err := NewStandardBlock(
-			parentID,
-			height,
-			txs,
-		)
+		apricotStandardBlk, err := NewApricotStandardBlock(parentID, height, txs)
 		require.NoError(err)
 
 		// parse block
-		parsed, err := Parse(cdc, standardBlk.Bytes())
+		parsed, err := Parse(cdc, apricotStandardBlk.Bytes())
 		require.NoError(err)
 
 		// compare content
-		require.Equal(standardBlk.ID(), parsed.ID())
-		require.Equal(standardBlk.Bytes(), parsed.Bytes())
-		require.Equal(standardBlk.Parent(), parsed.Parent())
-		require.Equal(standardBlk.Height(), parsed.Height())
+		require.Equal(apricotStandardBlk.ID(), parsed.ID())
+		require.Equal(apricotStandardBlk.Bytes(), parsed.Bytes())
+		require.Equal(apricotStandardBlk.Parent(), parsed.Parent())
+		require.Equal(apricotStandardBlk.Height(), parsed.Height())
 
-		parsedStandardBlk, ok := parsed.(*StandardBlock)
+		_, ok := parsed.(*ApricotStandardBlock)
 		require.True(ok)
-		require.Equal(txs, parsedStandardBlk.Transactions)
+		require.Equal(txs, parsed.Txs())
+
+		// check that banff standard block can be built and parsed
+		banffStandardBlk, err := NewBanffStandardBlock(blkTimestamp, parentID, height, txs)
+		require.NoError(err)
+
+		// parse block
+		parsed, err = Parse(cdc, banffStandardBlk.Bytes())
+		require.NoError(err)
+
+		// compare content
+		require.Equal(banffStandardBlk.ID(), parsed.ID())
+		require.Equal(banffStandardBlk.Bytes(), parsed.Bytes())
+		require.Equal(banffStandardBlk.Parent(), parsed.Parent())
+		require.Equal(banffStandardBlk.Height(), parsed.Height())
+		parsedBanffStandardBlk, ok := parsed.(*BanffStandardBlock)
+		require.True(ok)
+		require.Equal(txs, parsedBanffStandardBlk.Txs())
+
+		// timestamp check for banff blocks only
+		require.Equal(banffStandardBlk.Timestamp(), parsedBanffStandardBlk.Timestamp())
+
+		// backward compatibility check
+		require.Equal(parsed.Txs(), parsedBanffStandardBlk.Txs())
 	}
 }
 
-func TestProposalBlock(t *testing.T) {
-	// check proposal block can be built and parsed
+func TestProposalBlocks(t *testing.T) {
+	// check Apricot proposal block can be built and parsed
 	require := require.New(t)
+	blkTimestamp := time.Now()
 	parentID := ids.ID{'p', 'a', 'r', 'e', 'n', 't', 'I', 'D'}
 	height := uint64(2022)
 	tx, err := testProposalTx()
@@ -61,7 +83,7 @@ func TestProposalBlock(t *testing.T) {
 
 	for _, cdc := range []codec.Manager{Codec, GenesisCodec} {
 		// build block
-		proposalBlk, err := NewProposalBlock(
+		apricotProposalBlk, err := NewApricotProposalBlock(
 			parentID,
 			height,
 			tx,
@@ -69,64 +91,132 @@ func TestProposalBlock(t *testing.T) {
 		require.NoError(err)
 
 		// parse block
-		parsed, err := Parse(cdc, proposalBlk.Bytes())
+		parsed, err := Parse(cdc, apricotProposalBlk.Bytes())
 		require.NoError(err)
 
 		// compare content
-		require.Equal(proposalBlk.ID(), parsed.ID())
-		require.Equal(proposalBlk.Bytes(), parsed.Bytes())
-		require.Equal(proposalBlk.Parent(), parsed.Parent())
-		require.Equal(proposalBlk.Height(), parsed.Height())
+		require.Equal(apricotProposalBlk.ID(), parsed.ID())
+		require.Equal(apricotProposalBlk.Bytes(), parsed.Bytes())
+		require.Equal(apricotProposalBlk.Parent(), parsed.Parent())
+		require.Equal(apricotProposalBlk.Height(), parsed.Height())
 
-		parsedProposalBlk, ok := parsed.(*ProposalBlock)
+		parsedApricotProposalBlk, ok := parsed.(*ApricotProposalBlock)
 		require.True(ok)
-		require.Equal(tx, parsedProposalBlk.Tx)
+		require.Equal([]*txs.Tx{tx}, parsedApricotProposalBlk.Txs())
+
+		// check that banff proposal block can be built and parsed
+		banffProposalBlk, err := NewBanffProposalBlock(
+			blkTimestamp,
+			parentID,
+			height,
+			tx,
+		)
+		require.NoError(err)
+
+		// parse block
+		parsed, err = Parse(cdc, banffProposalBlk.Bytes())
+		require.NoError(err)
+
+		// compare content
+		require.Equal(banffProposalBlk.ID(), parsed.ID())
+		require.Equal(banffProposalBlk.Bytes(), parsed.Bytes())
+		require.Equal(banffProposalBlk.Parent(), banffProposalBlk.Parent())
+		require.Equal(banffProposalBlk.Height(), parsed.Height())
+		parsedBanffProposalBlk, ok := parsed.(*BanffProposalBlock)
+		require.True(ok)
+		require.Equal([]*txs.Tx{tx}, parsedBanffProposalBlk.Txs())
+
+		// timestamp check for banff blocks only
+		require.Equal(banffProposalBlk.Timestamp(), parsedBanffProposalBlk.Timestamp())
+
+		// backward compatibility check
+		require.Equal(parsedApricotProposalBlk.Txs(), parsedBanffProposalBlk.Txs())
 	}
 }
 
 func TestCommitBlock(t *testing.T) {
-	// check commit block can be built and parsed
+	// check Apricot commit block can be built and parsed
 	require := require.New(t)
+	blkTimestamp := time.Now()
 	parentID := ids.ID{'p', 'a', 'r', 'e', 'n', 't', 'I', 'D'}
 	height := uint64(2022)
 
 	for _, cdc := range []codec.Manager{Codec, GenesisCodec} {
 		// build block
-		commitBlk, err := NewCommitBlock(parentID, height)
+		apricotCommitBlk, err := NewApricotCommitBlock(parentID, height)
 		require.NoError(err)
 
 		// parse block
-		parsed, err := Parse(cdc, commitBlk.Bytes())
+		parsed, err := Parse(cdc, apricotCommitBlk.Bytes())
 		require.NoError(err)
 
 		// compare content
-		require.Equal(commitBlk.ID(), parsed.ID())
-		require.Equal(commitBlk.Bytes(), parsed.Bytes())
-		require.Equal(commitBlk.Parent(), parsed.Parent())
-		require.Equal(commitBlk.Height(), parsed.Height())
+		require.Equal(apricotCommitBlk.ID(), parsed.ID())
+		require.Equal(apricotCommitBlk.Bytes(), parsed.Bytes())
+		require.Equal(apricotCommitBlk.Parent(), parsed.Parent())
+		require.Equal(apricotCommitBlk.Height(), parsed.Height())
+
+		// check that banff commit block can be built and parsed
+		banffCommitBlk, err := NewBanffCommitBlock(blkTimestamp, parentID, height)
+		require.NoError(err)
+
+		// parse block
+		parsed, err = Parse(cdc, banffCommitBlk.Bytes())
+		require.NoError(err)
+
+		// compare content
+		require.Equal(banffCommitBlk.ID(), parsed.ID())
+		require.Equal(banffCommitBlk.Bytes(), parsed.Bytes())
+		require.Equal(banffCommitBlk.Parent(), banffCommitBlk.Parent())
+		require.Equal(banffCommitBlk.Height(), parsed.Height())
+
+		// timestamp check for banff blocks only
+		parsedBanffCommitBlk, ok := parsed.(*BanffCommitBlock)
+		require.True(ok)
+		require.Equal(banffCommitBlk.Timestamp(), parsedBanffCommitBlk.Timestamp())
 	}
 }
 
 func TestAbortBlock(t *testing.T) {
-	// check abort block can be built and parsed
+	// check Apricot abort block can be built and parsed
 	require := require.New(t)
+	blkTimestamp := time.Now()
 	parentID := ids.ID{'p', 'a', 'r', 'e', 'n', 't', 'I', 'D'}
 	height := uint64(2022)
 
 	for _, cdc := range []codec.Manager{Codec, GenesisCodec} {
 		// build block
-		abortBlk, err := NewAbortBlock(parentID, height)
+		apricotAbortBlk, err := NewApricotAbortBlock(parentID, height)
 		require.NoError(err)
 
 		// parse block
-		parsed, err := Parse(cdc, abortBlk.Bytes())
+		parsed, err := Parse(cdc, apricotAbortBlk.Bytes())
 		require.NoError(err)
 
 		// compare content
-		require.Equal(abortBlk.ID(), parsed.ID())
-		require.Equal(abortBlk.Bytes(), parsed.Bytes())
-		require.Equal(abortBlk.Parent(), parsed.Parent())
-		require.Equal(abortBlk.Height(), parsed.Height())
+		require.Equal(apricotAbortBlk.ID(), parsed.ID())
+		require.Equal(apricotAbortBlk.Bytes(), parsed.Bytes())
+		require.Equal(apricotAbortBlk.Parent(), parsed.Parent())
+		require.Equal(apricotAbortBlk.Height(), parsed.Height())
+
+		// check that banff abort block can be built and parsed
+		banffAbortBlk, err := NewBanffAbortBlock(blkTimestamp, parentID, height)
+		require.NoError(err)
+
+		// parse block
+		parsed, err = Parse(cdc, banffAbortBlk.Bytes())
+		require.NoError(err)
+
+		// compare content
+		require.Equal(banffAbortBlk.ID(), parsed.ID())
+		require.Equal(banffAbortBlk.Bytes(), parsed.Bytes())
+		require.Equal(banffAbortBlk.Parent(), banffAbortBlk.Parent())
+		require.Equal(banffAbortBlk.Height(), parsed.Height())
+
+		// timestamp check for banff blocks only
+		parsedBanffAbortBlk, ok := parsed.(*BanffAbortBlock)
+		require.True(ok)
+		require.Equal(banffAbortBlk.Timestamp(), parsedBanffAbortBlk.Timestamp())
 	}
 }
 
@@ -140,7 +230,7 @@ func TestAtomicBlock(t *testing.T) {
 
 	for _, cdc := range []codec.Manager{Codec, GenesisCodec} {
 		// build block
-		atomicBlk, err := NewAtomicBlock(
+		atomicBlk, err := NewApricotAtomicBlock(
 			parentID,
 			height,
 			tx,
@@ -157,9 +247,9 @@ func TestAtomicBlock(t *testing.T) {
 		require.Equal(atomicBlk.Parent(), parsed.Parent())
 		require.Equal(atomicBlk.Height(), parsed.Height())
 
-		parsedAtomicBlk, ok := parsed.(*AtomicBlock)
+		parsedAtomicBlk, ok := parsed.(*ApricotAtomicBlock)
 		require.True(ok)
-		require.Equal(tx, parsedAtomicBlk.Tx)
+		require.Equal([]*txs.Tx{tx}, parsedAtomicBlk.Txs())
 	}
 }
 
@@ -210,7 +300,7 @@ func testAtomicTx() (*txs.Tx, error) {
 
 func testDecisionTxs() ([]*txs.Tx, error) {
 	countTxs := 2
-	txes := make([]*txs.Tx, 0, countTxs)
+	decisionTxs := make([]*txs.Tx, 0, countTxs)
 	for i := 0; i < countTxs; i++ {
 		// Create the tx
 		utx := &txs.CreateChainTx{
@@ -253,9 +343,9 @@ func testDecisionTxs() ([]*txs.Tx, error) {
 		if err != nil {
 			return nil, err
 		}
-		txes = append(txes, tx)
+		decisionTxs = append(decisionTxs, tx)
 	}
-	return txes, nil
+	return decisionTxs, nil
 }
 
 func testProposalTx() (*txs.Tx, error) {

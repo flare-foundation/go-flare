@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package avm
@@ -98,11 +98,11 @@ func (t *txSemanticVerify) ExportTx(tx *txs.ExportTx) error {
 		}
 
 		assetID := out.AssetID()
-		if now.Before(t.vm.BlueberryTime) {
-			// TODO: Remove this check once the Blueberry network upgrade is
+		if !t.vm.IsBanffActivated(now) {
+			// TODO: Remove this check once the Banff network upgrade is
 			//       complete.
 			//
-			// Blueberry network upgrade allows exporting of all assets to the
+			// Banff network upgrade allows exporting of all assets to the
 			// P-chain.
 			if assetID != t.vm.ctx.AVAXAssetID && tx.DestinationChain == constants.PlatformChainID {
 				return errWrongAssetID

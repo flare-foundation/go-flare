@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package genesis
@@ -153,7 +153,7 @@ func TestGenesisFromFile(t *testing.T) {
 		err             string
 		expected        string
 	}{
-		"mainnet": {
+		"flare": {
 			networkID:    constants.FlareID,
 			customConfig: customGenesisConfigJSON,
 			err:          "cannot override genesis config for standard network flare (14)",
@@ -239,7 +239,7 @@ func TestGenesisFromFlag(t *testing.T) {
 		err          string
 		expected     string
 	}{
-		"mainnet": {
+		"flare": {
 			networkID: constants.FlareID,
 			err:       "cannot override genesis config for standard network flare (14)",
 		},

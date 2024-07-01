@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package genesis
@@ -400,7 +400,7 @@ func FromConfig(config *Config) ([]byte, ids.ID, error) {
 		delegationFee := json.Uint32(staker.DelegationFee)
 
 		platformvmArgs.Validators = append(platformvmArgs.Validators,
-			api.PrimaryValidator{
+			api.PermissionlessValidator{
 				Staker: api.Staker{
 					StartTime: json.Uint64(genesisTime.Unix()),
 					EndTime:   json.Uint64(endStakingTime.Unix()),

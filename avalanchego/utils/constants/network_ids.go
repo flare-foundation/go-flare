@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package constants
@@ -31,7 +31,6 @@ const (
 	CascadeName    = "cascade"
 	DenaliName     = "denali"
 	EverestName    = "everest"
-	TestnetName    = "testnet"
 	UnitTestName   = "testing"
 	LocalName      = "local"
 	FlareName      = "flare"
@@ -155,4 +154,12 @@ func NetworkID(networkName string) (uint32, error) {
 		return 0, fmt.Errorf("failed to parse %q as a network name", networkName)
 	}
 	return uint32(id), nil
+}
+
+func IsFlareNetworkID(networkID uint32) bool {
+	return networkID == FlareID || networkID == CostwoID || networkID == StagingID || networkID == LocalFlareID
+}
+
+func IsSgbNetworkID(networkID uint32) bool {
+	return networkID == SongbirdID || networkID == CostonID || networkID == LocalID
 }

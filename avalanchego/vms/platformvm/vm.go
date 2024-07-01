@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package platformvm
@@ -98,7 +98,7 @@ type VM struct {
 	validatorSetCaches map[ids.ID]cache.Cacher
 
 	// sliding window of blocks that were recently accepted
-	recentlyAccepted *window.Window
+	recentlyAccepted window.Window[ids.ID]
 
 	txBuilder         txbuilder.Builder
 	txExecutorBackend *txexecutor.Backend
@@ -118,9 +118,6 @@ func (vm *VM) Initialize(
 	appSender common.AppSender,
 ) error {
 	ctx.Log.Verbo("initializing platform chain")
-
-	// SGB-MERGE: This is a new line of code
-	validators.InitializeDefaultValidators(ctx.NetworkID)
 
 	registerer := prometheus.NewRegistry()
 	if err := ctx.Metrics.Register(registerer); err != nil {
@@ -144,7 +141,7 @@ func (vm *VM) Initialize(
 	}
 
 	vm.validatorSetCaches = make(map[ids.ID]cache.Cacher)
-	vm.recentlyAccepted = window.New(
+	vm.recentlyAccepted = window.New[ids.ID](
 		window.Config{
 			Clock:   &vm.clock,
 			MaxSize: maxRecentlyAcceptedWindowSize,
@@ -173,7 +170,7 @@ func (vm *VM) Initialize(
 
 	vm.txBuilder = txbuilder.New(
 		vm.ctx,
-		vm.Config,
+		&vm.Config,
 		&vm.clock,
 		vm.fx,
 		vm.state,
@@ -550,7 +547,7 @@ func (vm *VM) GetMinimumHeight() (uint64, error) {
 		return vm.GetCurrentHeight()
 	}
 
-	blk, err := vm.GetBlock(oldest.(ids.ID))
+	blk, err := vm.GetBlock(oldest)
 	if err != nil {
 		return 0, err
 	}

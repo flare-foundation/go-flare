@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package logging
@@ -36,14 +36,6 @@ func (NoLog) Trace(string, ...zap.Field) {}
 func (NoLog) Debug(string, ...zap.Field) {}
 
 func (NoLog) Verbo(string, ...zap.Field) {}
-
-func (NoLog) AssertNoError(error) {}
-
-func (NoLog) AssertTrue(bool, string, ...zap.Field) {}
-
-func (NoLog) AssertDeferredTrue(func() bool, string, ...zap.Field) {}
-
-func (NoLog) AssertDeferredNoError(func() error) {}
 
 func (NoLog) StopOnPanic() {}
 

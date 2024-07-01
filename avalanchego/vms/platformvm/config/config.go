@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package config
@@ -36,9 +36,6 @@ type Config struct {
 	// Set of subnets that this node is validating
 	WhitelistedSubnets ids.Set
 
-	// Fee that must be burned by every create staker transaction
-	AddStakerTxFee uint64
-
 	// Fee that is burned by every non-state creating transaction
 	TxFee uint64
 
@@ -48,8 +45,23 @@ type Config struct {
 	// Fee that must be burned by every subnet creating transaction after AP3
 	CreateSubnetTxFee uint64
 
+	// Fee that must be burned by every transform subnet transaction
+	TransformSubnetTxFee uint64
+
 	// Fee that must be burned by every blockchain creating transaction after AP3
 	CreateBlockchainTxFee uint64
+
+	// Transaction fee for adding a primary network validator
+	AddPrimaryNetworkValidatorFee uint64
+
+	// Transaction fee for adding a primary network delegator
+	AddPrimaryNetworkDelegatorFee uint64
+
+	// Transaction fee for adding a subnet validator
+	AddSubnetValidatorFee uint64
+
+	// Transaction fee for adding a subnet delegator
+	AddSubnetDelegatorFee uint64
 
 	// The minimum amount of tokens one must bond to be a validator
 	MinValidatorStake uint64
@@ -81,22 +93,34 @@ type Config struct {
 	// Time of the AP5 network upgrade
 	ApricotPhase5Time time.Time
 
-	// Time of the Blueberry network upgrade
-	BlueberryTime time.Time
+	// Time of the Banff network upgrade
+	BanffTime time.Time
 }
 
-func (c *Config) GetCreateBlockchainTxFee(t time.Time) uint64 {
-	if t.Before(c.ApricotPhase3Time) {
-		return c.CreateAssetTxFee
-	}
-	return c.CreateBlockchainTxFee
+func (c *Config) IsApricotPhase3Activated(timestamp time.Time) bool {
+	return !timestamp.Before(c.ApricotPhase3Time)
 }
 
-func (c *Config) GetCreateSubnetTxFee(t time.Time) uint64 {
-	if t.Before(c.ApricotPhase3Time) {
-		return c.CreateAssetTxFee
+func (c *Config) IsApricotPhase5Activated(timestamp time.Time) bool {
+	return !timestamp.Before(c.ApricotPhase5Time)
+}
+
+func (c *Config) IsBanffActivated(timestamp time.Time) bool {
+	return !timestamp.Before(c.BanffTime)
+}
+
+func (c *Config) GetCreateBlockchainTxFee(timestamp time.Time) uint64 {
+	if c.IsApricotPhase3Activated(timestamp) {
+		return c.CreateBlockchainTxFee
 	}
-	return c.CreateSubnetTxFee
+	return c.CreateAssetTxFee
+}
+
+func (c *Config) GetCreateSubnetTxFee(timestamp time.Time) uint64 {
+	if c.IsApricotPhase3Activated(timestamp) {
+		return c.CreateSubnetTxFee
+	}
+	return c.CreateAssetTxFee
 }
 
 // Create the blockchain described in [tx], but only if this node is a member of
