@@ -1,4 +1,4 @@
-FROM golang:1.18 AS build
+FROM golang:1.21 AS build
 
 RUN apt-get update -y && \
     apt-get install -y rsync
