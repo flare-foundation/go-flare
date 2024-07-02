@@ -183,10 +183,10 @@ var (
 		ApricotPhase3BlockTimestamp:     big.NewInt(0),
 		ApricotPhase4BlockTimestamp:     big.NewInt(0),
 		ApricotPhase5BlockTimestamp:     big.NewInt(0),
-		ApricotPhasePre6BlockTimestamp:  big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
-		ApricotPhase6BlockTimestamp:     big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
-		ApricotPhasePost6BlockTimestamp: big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
-		BanffBlockTimestamp:             big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhasePre6BlockTimestamp:  big.NewInt(time.Date(2024, time.July, 4, 10, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhase6BlockTimestamp:     big.NewInt(time.Date(2024, time.July, 4, 11, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhasePost6BlockTimestamp: big.NewInt(time.Date(2024, time.July, 4, 12, 0, 0, 0, time.UTC).Unix()),
+		BanffBlockTimestamp:             big.NewInt(time.Date(2024, time.July, 4, 13, 0, 0, 0, time.UTC).Unix()),
 	}
 
 	StagingChainConfig = &ChainConfig{

@@ -107,7 +107,7 @@ var (
 	ApricotPhase6Times = map[uint32]time.Time{
 		constants.MainnetID:    time.Date(2022, time.September, 6, 20, 0, 0, 0, time.UTC),
 		constants.FlareID:      time.Date(2024, time.June, 1, 0, 0, 0, 0, time.UTC),
-		constants.CostwoID:     time.Date(2024, time.June, 1, 0, 0, 0, 0, time.UTC),
+		constants.CostwoID:     time.Date(2024, time.July, 4, 11, 0, 0, 0, time.UTC),
 		constants.StagingID:    time.Date(2024, time.June, 1, 0, 0, 0, 0, time.UTC),
 		constants.LocalFlareID: time.Date(2024, time.June, 1, 0, 0, 0, 0, time.UTC),
 		constants.CostonID:     time.Date(2024, time.June, 1, 0, 0, 0, 0, time.UTC),
@@ -119,7 +119,7 @@ var (
 	BanffTimes = map[uint32]time.Time{
 		constants.MainnetID:    time.Date(2022, time.October, 18, 16, 0, 0, 0, time.UTC),
 		constants.FlareID:      time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
-		constants.CostwoID:     time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
+		constants.CostwoID:     time.Date(2024, time.July, 4, 13, 0, 0, 0, time.UTC),
 		constants.StagingID:    time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
 		constants.LocalFlareID: time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
 		constants.CostonID:     time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
