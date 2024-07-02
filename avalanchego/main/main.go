@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package main
@@ -45,6 +45,9 @@ func main() {
 		fmt.Printf("couldn't load node config: %s\n", err)
 		os.Exit(1)
 	}
+
+	// Flare specific: set the application prefix (flare for songbird and avalanche for flare)
+	version.InitApplicationPrefix(nodeConfig.NetworkID)
 
 	runner.Run(runnerConfig, nodeConfig)
 }

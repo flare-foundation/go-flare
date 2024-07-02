@@ -24,13 +24,14 @@ var (
 	ApricotPhase4BaseFeeChangeDenominator = new(big.Int).SetUint64(params.ApricotPhase4BaseFeeChangeDenominator)
 	ApricotPhase5BaseFeeChangeDenominator = new(big.Int).SetUint64(params.ApricotPhase5BaseFeeChangeDenominator)
 
-	ApricotPhase3BlockGasFee      uint64 = 1_000_000
-	ApricotPhase4MinBlockGasCost         = new(big.Int).Set(common.Big0)
-	ApricotPhase4MaxBlockGasCost         = big.NewInt(1_000_000)
-	ApricotPhase4BlockGasCostStep        = big.NewInt(50_000)
-	ApricotPhase4TargetBlockRate  uint64 = 2 // in seconds
-	ApricotPhase5BlockGasCostStep        = big.NewInt(200_000)
-	rollupWindow                  uint64 = 10
+	ApricotPhase3BlockGasFee        uint64 = 1_000_000
+	ApricotPhase4MinBlockGasCost           = new(big.Int).Set(common.Big0)
+	ApricotPhase4MaxBlockGasCost           = big.NewInt(1_000_000)
+	ApricotPhase4BlockGasCostStep          = big.NewInt(50_000)
+	ApricotPhase4TargetBlockRate    uint64 = 2 // in seconds
+	SgbApricotPhase4TargetBlockRate uint64 = 1 // in seconds
+	ApricotPhase5BlockGasCostStep          = big.NewInt(200_000)
+	rollupWindow                    uint64 = 10
 )
 
 // CalcBaseFee takes the previous header and the timestamp of its child block
@@ -76,7 +77,11 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header, timestamp uin
 	)
 	if isApricotPhase5 {
 		baseFeeChangeDenominator = ApricotPhase5BaseFeeChangeDenominator
-		parentGasTarget = params.ApricotPhase5TargetGas
+		if config.IsSongbirdCode() {
+			parentGasTarget = params.SgbApricotPhase5TargetGas
+		} else {
+			parentGasTarget = params.ApricotPhase5TargetGas
+		}
 	}
 	parentGasTargetBig := new(big.Int).SetUint64(parentGasTarget)
 
@@ -95,10 +100,17 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header, timestamp uin
 				parentExtraStateGasUsed = parent.ExtDataGasUsed.Uint64()
 			}
 		case isApricotPhase4:
+			var apricotPhase4TargetBlockRate uint64
+			if config.IsSongbirdCode() {
+				apricotPhase4TargetBlockRate = SgbApricotPhase4TargetBlockRate
+			} else {
+				apricotPhase4TargetBlockRate = ApricotPhase4TargetBlockRate
+			}
+
 			// The [blockGasCost] is paid by the effective tips in the block using
 			// the block's value of [baseFee].
 			blockGasCost = calcBlockGasCost(
-				ApricotPhase4TargetBlockRate,
+				apricotPhase4TargetBlockRate,
 				ApricotPhase4MinBlockGasCost,
 				ApricotPhase4MaxBlockGasCost,
 				ApricotPhase4BlockGasCostStep,

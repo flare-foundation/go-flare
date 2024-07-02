@@ -4,6 +4,7 @@
 package evm
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -25,8 +26,10 @@ import (
 )
 
 var (
-	_ UnsignedAtomicTx       = &UnsignedExportTx{}
-	_ secp256k1fx.UnsignedTx = &UnsignedExportTx{}
+	_                           UnsignedAtomicTx       = &UnsignedExportTx{}
+	_                           secp256k1fx.UnsignedTx = &UnsignedExportTx{}
+	errExportNonAVAXInputBanff                         = errors.New("export input cannot contain non-AVAX in Banff")
+	errExportNonAVAXOutputBanff                        = errors.New("export output cannot contain non-AVAX in Banff")
 )
 
 // UnsignedExportTx is an unsigned ExportTx
@@ -75,6 +78,10 @@ func (utx *UnsignedExportTx) Verify(
 		return errWrongBlockchainID
 	}
 
+	if rules.IsSongbirdCode && !rules.IsSongbirdTransition {
+		return errExportTxsDisabled
+	}
+
 	// Make sure that the tx has a valid peer chain ID
 	if rules.IsApricotPhase5 {
 		// Note that SameSubnet verifies that [tx.DestinationChain] isn't this
@@ -92,6 +99,9 @@ func (utx *UnsignedExportTx) Verify(
 		if err := in.Verify(); err != nil {
 			return err
 		}
+		if rules.IsBanff && in.AssetID != ctx.AVAXAssetID {
+			return errExportNonAVAXInputBanff
+		}
 	}
 
 	for _, out := range utx.ExportedOutputs {
@@ -101,6 +111,9 @@ func (utx *UnsignedExportTx) Verify(
 		assetID := out.AssetID()
 		if assetID != ctx.AVAXAssetID && utx.DestinationChain == constants.PlatformChainID {
 			return errWrongChainID
+		}
+		if rules.IsBanff && assetID != ctx.AVAXAssetID {
+			return errExportNonAVAXOutputBanff
 		}
 	}
 	if !avax.IsSortedTransferableOutputs(utx.ExportedOutputs, Codec) {

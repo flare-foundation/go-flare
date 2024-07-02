@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package throttling
@@ -428,7 +428,7 @@ func TestMsgThrottlerNextMsg(t *testing.T) {
 	firstMsgID := throttler.nodeToWaitingMsgID[vdr1ID]
 	firstMsg, exists := throttler.waitingToAcquire.Get(firstMsgID)
 	require.True(exists)
-	require.EqualValues(maxBytes-2, firstMsg.(*msgMetadata).bytesNeeded)
+	require.EqualValues(maxBytes-2, firstMsg.bytesNeeded)
 
 	select {
 	case <-doneVdr:

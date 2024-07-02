@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package version
@@ -28,11 +28,13 @@ func Parse(s string) (*Semantic, error) {
 }
 
 func ParseApplication(s string) (*Application, error) {
-	if !strings.HasPrefix(s, "avalanche/") {
+	prefix := GetApplicationPrefix()
+
+	if !strings.HasPrefix(s, prefix+"/") {
 		return nil, fmt.Errorf("application string %q missing required prefix", s)
 	}
 
-	s = s[10:]
+	s = s[(len(prefix) + 1):]
 	major, minor, patch, err := parseVersions(s)
 	if err != nil {
 		return nil, err

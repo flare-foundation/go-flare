@@ -5,6 +5,7 @@ package core
 
 import (
 	"fmt"
+	"math"
 	"math/big"
 	"os"
 	"time"
@@ -14,18 +15,69 @@ import (
 
 	"github.com/ava-labs/coreth/core/vm"
 	"github.com/ava-labs/coreth/params"
+	"github.com/ava-labs/coreth/utils"
 )
 
 var (
 	// Define activation times for submitter contract
 	submitterContractActivationTimeFlare  = big.NewInt(time.Date(2024, time.March, 26, 12, 0, 0, 0, time.UTC).Unix())
-	submitterContractActivationTimeCostwo = big.NewInt(time.Date(2024, time.March, 7, 12, 0, 0, 0, time.UTC).Unix())
+	submitterContractActivationTimeCostwo = big.NewInt(time.Date(2024, time.February, 21, 14, 0, 0, 0, time.UTC).Unix())
+
+	submitterContractActivationTimeSongbird = big.NewInt(time.Date(2024, time.March, 15, 12, 0, 0, 0, time.UTC).Unix())
+	submitterContractActivationTimeCoston   = big.NewInt(time.Date(2024, time.February, 29, 12, 0, 0, 0, time.UTC).Unix())
 
 	// Define ftso and submitter contract addresses
 	prioritisedFTSOContractAddress = common.HexToAddress("0x1000000000000000000000000000000000000003")
 
-	prioritisedSubmitterContractAddress    = common.HexToAddress("0x2cA6571Daa15ce734Bbd0Bf27D5C9D16787fc33f")
-	prioritisedSubmitterContractAddressEnv = common.HexToAddress(os.Getenv("SUBMITTER_CONTRACT_ADDRESS")) // for local and staging chains
+	prioritisedSubmitterContractAddress    = common.HexToAddress("0x2cA6571Daa15ce734Bbd0Bf27D5C9D16787fc33f") // for flare, costwo, songbird and coston
+	prioritisedSubmitterContractAddressEnv = common.HexToAddress(os.Getenv("SUBMITTER_CONTRACT_ADDRESS"))      // for local and staging chains
+)
+
+type prioritisedParams struct {
+	submitterActivationTime *big.Int
+	submitterAddress        common.Address
+	maxGasLimit             uint64
+}
+
+var (
+	prioritisedContractVariants = utils.NewChainValue(&prioritisedParams{
+		big.NewInt(0), common.Address{}, 0,
+	}).
+		AddValue(params.FlareChainID, &prioritisedParams{
+			submitterContractActivationTimeFlare,
+			prioritisedSubmitterContractAddress,
+			3000000,
+		}).
+		AddValue(params.CostwoChainID, &prioritisedParams{
+			submitterContractActivationTimeCostwo,
+			prioritisedSubmitterContractAddress,
+			3000000,
+		}).
+		AddValue(params.SongbirdChainID, &prioritisedParams{
+			submitterContractActivationTimeSongbird,
+			prioritisedSubmitterContractAddress,
+			math.MaxUint64,
+		}).
+		AddValue(params.CostonChainID, &prioritisedParams{
+			submitterContractActivationTimeCoston,
+			prioritisedSubmitterContractAddress,
+			math.MaxUint64,
+		}).
+		AddValue(params.LocalFlareChainID, &prioritisedParams{
+			big.NewInt(0),
+			prioritisedSubmitterContractAddressEnv,
+			3000000,
+		}).
+		AddValue(params.StagingChainID, &prioritisedParams{
+			big.NewInt(0),
+			prioritisedSubmitterContractAddressEnv,
+			3000000,
+		}).
+		AddValue(params.LocalChainID, &prioritisedParams{
+			big.NewInt(0),
+			prioritisedSubmitterContractAddressEnv,
+			math.MaxUint64,
+		})
 )
 
 // Define errors
@@ -52,19 +104,12 @@ func (e *ErrMintNegative) Error() string { return "mint request cannot be negati
 
 // Define interface for dependencies
 type EVMCaller interface {
+	GetChainID() *big.Int
 	DaemonCall(caller vm.ContractRef, addr common.Address, input []byte, gas uint64) (snapshot int, ret []byte, leftOverGas uint64, err error)
 	DaemonRevertToSnapshot(snapshot int)
 	GetBlockTime() *big.Int
 	GetGasLimit() uint64
 	AddBalance(addr common.Address, amount *big.Int)
-}
-
-// Define maximums that can change by block time
-func GetMaxFTSOGasLimit(blockTime *big.Int) uint64 {
-	switch {
-	default:
-		return 3000000
-	}
 }
 
 func GetDaemonGasMultiplier(blockTime *big.Int) uint64 {
@@ -88,42 +133,32 @@ func GetDaemonSelector(blockTime *big.Int) []byte {
 	}
 }
 
-func isPrioritisedFTSOContract(to *common.Address) bool {
-	return to != nil && *to == prioritisedFTSOContractAddress
-}
-
-func isPrioritisedSubmitterContract(chainID *big.Int, to *common.Address, blockTime *big.Int) bool {
-	switch {
-	case to == nil || chainID == nil || blockTime == nil:
-		return false
-	case chainID.Cmp(params.FlareChainID) == 0:
-		return *to == prioritisedSubmitterContractAddress &&
-			blockTime.Cmp(submitterContractActivationTimeFlare) > 0
-	case chainID.Cmp(params.CostwoChainID) == 0:
-		return *to == prioritisedSubmitterContractAddress &&
-			blockTime.Cmp(submitterContractActivationTimeCostwo) > 0
-	case chainID.Cmp(params.LocalFlareChainID) == 0 || chainID.Cmp(params.StagingChainID) == 0:
-		return *to == prioritisedSubmitterContractAddressEnv
-	default:
+func IsPrioritisedContractCall(chainID *big.Int, blockTime *big.Int, to *common.Address, ret []byte, initialGas uint64) bool {
+	if to == nil || chainID == nil || blockTime == nil {
 		return false
 	}
-}
 
-func IsPrioritisedContractCall(chainID *big.Int, to *common.Address, ret []byte, blockTime *big.Int) bool {
+	chainValue := prioritisedContractVariants.GetValue(chainID)
+
 	switch {
-	case isPrioritisedFTSOContract(to):
+	case initialGas > chainValue.maxGasLimit:
+		return false
+	case *to == prioritisedFTSOContractAddress:
 		return true
-	case isPrioritisedSubmitterContract(chainID, to, blockTime):
-		return !isZeroSlice(ret)
+	case *to == chainValue.submitterAddress && blockTime.Cmp(chainValue.submitterActivationTime) > 0 && !isZeroSlice(ret):
+		return true
 	default:
 		return false
 	}
 }
 
-func GetMaximumMintRequest(blockTime *big.Int) *big.Int {
+func GetMaximumMintRequest(chainID *big.Int, blockTime *big.Int) *big.Int {
 	switch {
-	default:
+	case chainID.Cmp(params.FlareChainID) == 0 || chainID.Cmp(params.CostwoChainID) == 0 || chainID.Cmp(params.LocalFlareChainID) == 0 || chainID.Cmp(params.StagingChainID) == 0:
 		maxRequest, _ := new(big.Int).SetString("60000000000000000000000000", 10)
+		return maxRequest
+	default: // Songbird, Coston
+		maxRequest, _ := new(big.Int).SetString("50000000000000000000000000", 10)
 		return maxRequest
 	}
 }
@@ -163,7 +198,7 @@ func daemon(evm EVMCaller) (int, *big.Int, error) {
 
 func mint(evm EVMCaller, mintRequest *big.Int) error {
 	// If the mint request is greater than zero and less than max
-	max := GetMaximumMintRequest(evm.GetBlockTime())
+	max := GetMaximumMintRequest(evm.GetChainID(), evm.GetBlockTime())
 	if mintRequest.Cmp(big.NewInt(0)) > 0 &&
 		mintRequest.Cmp(max) <= 0 {
 		// Mint the amount asked for on to the daemon contract
