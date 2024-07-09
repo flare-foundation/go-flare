@@ -180,7 +180,7 @@ func getCostonInflationSettings(currentTimestamp time.Time, config *config.Confi
 	default:
 		return InflationSettings{
 			MinValidatorStake:        100 * units.KiloAvax,
-			MaxValidatorStake:        500 * units.MegaAvax,
+			MaxValidatorStake:        1000 * units.MegaAvax,
 			MinDelegatorStake:        10 * units.KiloAvax,
 			MinDelegationFee:         0,
 			MinStakeDuration:         24 * time.Hour,
