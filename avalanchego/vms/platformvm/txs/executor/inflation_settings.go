@@ -188,7 +188,7 @@ func getCostonInflationSettings(currentTimestamp time.Time, config *config.Confi
 			MaxStakeDuration:         365 * 24 * time.Hour,
 			MinFutureStartTimeOffset: MaxFutureStartTime,
 			MaxValidatorWeightFactor: 15,
-			MinStakeStartTime:        time.Date(2024, time.July, 30, 0, 0, 0, 0, time.UTC),
+			MinStakeStartTime:        time.Date(2024, time.July, 30, 12, 0, 0, 0, time.UTC),
 		}
 	}
 }
