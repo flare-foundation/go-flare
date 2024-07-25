@@ -37,11 +37,24 @@ jobs:
         username: ${{ secrets.DOCKER_HUB_UID }}
         password: ${{ secrets.DOCKER_HUB_PAT }}
 
-    - name: Build and push default image
-      uses: docker/build-push-action@v3.2.0
-      with:
-        context: . # Because GH actions are for kids and put protection on everything; https://stackoverflow.com/a/71159809/11276254
-        push: true
-        tags: |
-          ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }}
-          ${{ secrets.DOCKER_HUB_REPO }}:${{ env.IMAGE_TAG }}
+    # - name: Build and push default image
+    #   uses: docker/build-push-action@v3.2.0
+    #   with:
+    #     context: . # Because GH actions are for kids and put protection on everything; https://stackoverflow.com/a/71159809/11276254
+    #     push: true
+    #     tags: |
+    #       ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }}
+    #       ${{ secrets.DOCKER_HUB_REPO }}:${{ env.IMAGE_TAG }}
+
+    - name: Docker login
+      run: |
+        echo "${DOCKER_PASSWORD}" | docker login ${DOCKER_REGISTRY} --username "${DOCKER_USERNAME}" --password-stdin
+        echo "${secrets.DOCKER_HUB_PAT}" | docker login --username "${secrets.DOCKER_HUB_UID}" --password-stdin
+
+    - name: Build image
+      run: |        
+        docker buildx build \
+          --platform linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6 \
+          --tag ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }} \
+          --file ./Dockerfile \
+          --output type=image,push=true .
