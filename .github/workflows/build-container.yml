@@ -49,7 +49,6 @@ jobs:
     - name: Docker login
       run: |
         echo "${DOCKER_PASSWORD}" | docker login ${DOCKER_REGISTRY} --username "${DOCKER_USERNAME}" --password-stdin
-        echo "${secrets.DOCKER_HUB_PAT}" | docker login --username "${secrets.DOCKER_HUB_UID}" --password-stdin
 
     - name: Build image
       run: |        
