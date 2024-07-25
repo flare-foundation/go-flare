@@ -31,16 +31,17 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    # - name: Login to docker.io
-    #   uses: docker/login-action@v2
-    #   with:
-    #     username: ${{ secrets.DOCKER_HUB_UID }}
-    #     password: ${{ secrets.DOCKER_HUB_PAT }}
+    - name: Login to docker.io
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKER_HUB_UID }}
+        password: ${{ secrets.DOCKER_HUB_PAT }}
 
     - name: Build image
       run: |        
         docker buildx build \
           --platform linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6 \
           --tag ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }} \
+          --tag ${{ secrets.DOCKER_HUB_REPO }}:${{ env.IMAGE_TAG }} \
           --file ./Dockerfile \
           --output type=image,push=true .
