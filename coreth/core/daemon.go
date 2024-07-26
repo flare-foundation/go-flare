@@ -147,8 +147,6 @@ func IsPrioritisedContractCall(chainID *big.Int, blockTime *big.Int, to *common.
 		return true
 	case *to == chainValue.submitterAddress && blockTime.Cmp(chainValue.submitterActivationTime) > 0 && !isZeroSlice(ret):
 		return true
-	case *to == common.HexToAddress("0xA17827A991EB72793fa437e580B084ceB25Ab0f9") && blockTime.Cmp(big.NewInt(time.Date(2024, time.July, 22, 14, 30, 0, 0, time.UTC).Unix())) > 0: // TEST
-		return true
 	default:
 		return false
 	}
