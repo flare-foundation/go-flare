@@ -168,7 +168,7 @@ func getSongbirdInflationSettings(currentTimestamp time.Time, config *config.Con
 			MaxStakeDuration:         365 * 24 * time.Hour,
 			MinFutureStartTimeOffset: MaxFutureStartTime,
 			MaxValidatorWeightFactor: 15,
-			MinStakeStartTime:        time.Date(2024, time.September, 3, 0, 0, 0, 0, time.UTC),
+			MinStakeStartTime:        time.Date(2024, time.November, 19, 12, 0, 0, 0, time.UTC),
 		}
 	}
 }
