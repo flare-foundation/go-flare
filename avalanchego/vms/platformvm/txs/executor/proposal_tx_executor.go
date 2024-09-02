@@ -239,7 +239,8 @@ func (e *ProposalTxExecutor) AddSubnetValidatorTx(tx *txs.AddSubnetValidatorTx) 
 		return errWrongNumberOfCredentials
 	}
 
-	if e.Backend.Ctx.NetworkID == constants.FlareID || e.Backend.Ctx.NetworkID == constants.CostwoID || e.Backend.Ctx.NetworkID == constants.StagingID || e.Backend.Ctx.NetworkID == constants.LocalFlareID {
+	if e.Backend.Ctx.NetworkID == constants.FlareID || e.Backend.Ctx.NetworkID == constants.CostwoID || e.Backend.Ctx.NetworkID == constants.StagingID || e.Backend.Ctx.NetworkID == constants.LocalFlareID ||
+		e.Backend.Ctx.NetworkID == constants.SongbirdID || e.Backend.Ctx.NetworkID == constants.CostonID || e.Backend.Ctx.NetworkID == constants.LocalID {
 		return errStakeTooLong
 	}
 
