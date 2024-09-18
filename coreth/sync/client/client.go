@@ -43,6 +43,11 @@ var (
 		Minor: 7,
 		Patch: 13,
 	}
+	StateSyncVersionSgb = &version.Application{
+		Major: 0,
+		Minor: 6,
+		Patch: 6,
+	}
 	errEmptyResponse          = errors.New("empty response")
 	errTooManyBlocks          = errors.New("response contains more blocks than requested")
 	errHashMismatch           = errors.New("hash does not match expected value")
@@ -82,6 +87,7 @@ type client struct {
 	stateSyncNodeIdx uint32
 	stats            stats.ClientSyncerStats
 	blockParser      EthBlockParser
+	isSongbirdCode   bool
 }
 
 type ClientConfig struct {
@@ -90,6 +96,7 @@ type ClientConfig struct {
 	Stats            stats.ClientSyncerStats
 	StateSyncNodeIDs []ids.NodeID
 	BlockParser      EthBlockParser
+	IsSongbirdCode   bool
 }
 
 type EthBlockParser interface {
@@ -103,6 +110,7 @@ func NewClient(config *ClientConfig) *client {
 		stats:          config.Stats,
 		stateSyncNodes: config.StateSyncNodeIDs,
 		blockParser:    config.BlockParser,
+		isSongbirdCode: config.IsSongbirdCode,
 	}
 }
 
@@ -325,7 +333,11 @@ func (c *client) get(ctx context.Context, request message.Request, parseFn parse
 			start    time.Time = time.Now()
 		)
 		if len(c.stateSyncNodes) == 0 {
-			response, nodeID, err = c.networkClient.RequestAny(StateSyncVersion, requestBytes)
+			minVersion := StateSyncVersion
+			if c.isSongbirdCode {
+				minVersion = StateSyncVersionSgb
+			}
+			response, nodeID, err = c.networkClient.RequestAny(minVersion, requestBytes)
 		} else {
 			// get the next nodeID using the nodeIdx offset. If we're out of nodes, loop back to 0
 			// we do this every attempt to ensure we get a different node each time if possible.

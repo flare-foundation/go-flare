@@ -606,6 +606,7 @@ func (vm *VM) initializeStateSyncClient(lastAcceptedHeight uint64) error {
 				Stats:            stats.NewClientSyncerStats(),
 				StateSyncNodeIDs: stateSyncIDs,
 				BlockParser:      vm,
+				IsSongbirdCode:   vm.chainConfig.IsSongbirdCode(),
 			},
 		),
 		enabled:            vm.config.StateSyncEnabled,
