@@ -124,7 +124,6 @@ func (c Config) Unparse() (UnparsedConfig, error) {
 }
 
 func (c *Config) InitialSupply() (uint64, error) {
-	// SGB-MERGE
 	// For songbird, coston and local networks, the initial supply is 1
 	if c.NetworkID == constants.SongbirdID || c.NetworkID == constants.CostonID || c.NetworkID == constants.LocalID {
 		return 1, nil

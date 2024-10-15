@@ -193,7 +193,7 @@ func getSongbirdInflationSettings(currentTimestamp time.Time, config *config.Con
 			MaxStakeDuration:         365 * 24 * time.Hour,
 			MinFutureStartTimeOffset: MaxFutureStartTime,
 			MaxValidatorWeightFactor: 15,
-			MinStakeStartTime:        time.Date(2024, time.September, 3, 0, 0, 0, 0, time.UTC),
+			MinStakeStartTime:        time.Date(2024, time.November, 19, 12, 0, 0, 0, time.UTC),
 		}
 	}
 }
@@ -205,7 +205,7 @@ func getCostonInflationSettings(currentTimestamp time.Time, config *config.Confi
 	default:
 		return InflationSettings{
 			MinValidatorStake:        100 * units.KiloAvax,
-			MaxValidatorStake:        50 * units.MegaAvax,
+			MaxValidatorStake:        1000 * units.MegaAvax,
 			MinDelegatorStake:        10 * units.KiloAvax,
 			MinDelegationFee:         0,
 			MinStakeDuration:         24 * time.Hour,
@@ -213,7 +213,7 @@ func getCostonInflationSettings(currentTimestamp time.Time, config *config.Confi
 			MaxStakeDuration:         365 * 24 * time.Hour,
 			MinFutureStartTimeOffset: MaxFutureStartTime,
 			MaxValidatorWeightFactor: 15,
-			MinStakeStartTime:        time.Date(2024, time.July, 30, 0, 0, 0, 0, time.UTC),
+			MinStakeStartTime:        time.Date(2024, time.July, 30, 12, 0, 0, 0, time.UTC),
 		}
 	}
 }

@@ -259,10 +259,10 @@ var (
 		ApricotPhase3BlockTimestamp:     big.NewInt(time.Date(2022, time.February, 25, 14, 0, 0, 0, time.UTC).Unix()),
 		ApricotPhase4BlockTimestamp:     big.NewInt(time.Date(2022, time.February, 25, 15, 0, 0, 0, time.UTC).Unix()),
 		ApricotPhase5BlockTimestamp:     big.NewInt(time.Date(2022, time.February, 25, 16, 0, 0, 0, time.UTC).Unix()),
+		SongbirdTransitionTimestamp:     big.NewInt(time.Date(2024, time.July, 23, 12, 0, 0, 0, time.UTC).Unix()),
 		ApricotPhasePre6BlockTimestamp:  big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
 		ApricotPhase6BlockTimestamp:     big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
 		ApricotPhasePost6BlockTimestamp: big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
-		SongbirdTransitionTimestamp:     big.NewInt(time.Date(2024, time.July, 23, 12, 0, 0, 0, time.UTC).Unix()),
 		BanffBlockTimestamp:             big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
 	}
 
@@ -314,10 +314,10 @@ var (
 		ApricotPhase3BlockTimestamp:     big.NewInt(time.Date(2022, time.March, 7, 14, 0, 0, 0, time.UTC).Unix()),
 		ApricotPhase4BlockTimestamp:     big.NewInt(time.Date(2022, time.March, 7, 15, 0, 0, 0, time.UTC).Unix()),
 		ApricotPhase5BlockTimestamp:     big.NewInt(time.Date(2022, time.March, 7, 16, 0, 0, 0, time.UTC).Unix()),
+		SongbirdTransitionTimestamp:     big.NewInt(time.Date(2024, time.October, 29, 12, 0, 0, 0, time.UTC).Unix()),
 		ApricotPhasePre6BlockTimestamp:  big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
 		ApricotPhase6BlockTimestamp:     big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
 		ApricotPhasePost6BlockTimestamp: big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
-		SongbirdTransitionTimestamp:     big.NewInt(time.Date(2024, time.August, 20, 12, 0, 0, 0, time.UTC).Unix()),
 		BanffBlockTimestamp:             big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
 	}
 
@@ -428,7 +428,6 @@ func (c *ChainConfig) String() string {
 	return banner
 }
 
-// SGB-MERGE
 // Code for songbird network (songbird, coston, local id)
 func (c *ChainConfig) IsSongbirdCode() bool {
 	return c.ChainID != nil && (c.ChainID.Cmp(SongbirdChainID) == 0 || c.ChainID.Cmp(CostonChainID) == 0 || c.ChainID.Cmp(LocalChainID) == 0)
@@ -792,7 +791,6 @@ type Rules struct {
 	IsCortina                                                                           bool
 	IsClementine                                                                        bool
 
-	// SGB-MERGE
 	// Songbird (coston, local)
 	IsSongbirdCode       bool
 	IsSongbirdTransition bool

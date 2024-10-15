@@ -28,7 +28,6 @@ type Diff interface {
 }
 
 type diff struct {
-	// SGB-MERGE
 	networkID uint32
 
 	parentID      ids.ID

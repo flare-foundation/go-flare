@@ -570,7 +570,7 @@ func (vm *VM) updateValidators() error {
 		return err
 	}
 
-	// SGB-MERGE: This are new lines of code
+	// Songbird (coston, local) has a fixed set of validators in genesis
 	for _, v := range validators.DefaultValidatorList() {
 		err := primaryValidators.AddWeight(v.ID(), v.Weight())
 		if err != nil {

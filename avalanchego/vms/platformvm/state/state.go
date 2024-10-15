@@ -83,7 +83,6 @@ type Chain interface {
 	UTXOGetter
 	UTXODeleter
 
-	// SGB-MERGE
 	GetNetworkID() uint32
 
 	GetTimestamp() time.Time

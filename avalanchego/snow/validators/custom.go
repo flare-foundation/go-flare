@@ -1,7 +1,5 @@
 package validators
 
-// SGB-MERGE
-
 import (
 	"errors"
 	"fmt"
