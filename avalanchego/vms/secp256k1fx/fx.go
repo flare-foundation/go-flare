@@ -4,14 +4,17 @@
 package secp256k1fx
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 
 	"github.com/ava-labs/avalanchego/cache"
+	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/crypto"
 	"github.com/ava-labs/avalanchego/utils/hashing"
 	"github.com/ava-labs/avalanchego/utils/wrappers"
 	"github.com/ava-labs/avalanchego/vms/components/verify"
+	"github.com/ava-labs/coreth/accounts"
 )
 
 const (
@@ -184,6 +187,8 @@ func (fx *Fx) VerifyCredentials(utx UnsignedTx, in *Input, cred *Credential, out
 	}
 
 	txHash := hashing.ComputeHash256(utx.Bytes())
+	txHashStr := hex.EncodeToString(txHash)
+	txHashEth := accounts.TextHash([]byte(txHashStr))
 	for i, index := range in.SigIndices {
 		// Make sure the input references an address that exists
 		if index >= uint32(len(out.Addrs)) {
@@ -191,15 +196,27 @@ func (fx *Fx) VerifyCredentials(utx UnsignedTx, in *Input, cred *Credential, out
 		}
 		// Make sure each signature in the signature list is from an owner of
 		// the output being consumed
-		sig := cred.Sigs[i]
-		pk, err := fx.SECPFactory.RecoverHashPublicKey(txHash, sig[:])
+		sig := cred.Sigs[i][:]
+		expectedAddress := out.Addrs[index]
+
+		// Try to recover the address from the signature of the transaction hash without a prefix
+		// (Standard Avalanche approach, but unsupported/deprecated by most signing tools)
+		recoveredAddress, err := fx.recoverAddress(txHash, sig)
 		if err != nil {
 			return err
 		}
-		if expectedAddress := out.Addrs[index]; expectedAddress != pk.Address() {
-			return fmt.Errorf("expected signature from %s but got from %s",
-				expectedAddress,
-				pk.Address())
+		if recoveredAddress == expectedAddress {
+			continue
+		}
+
+		// Try to recover the address from the signature of the prefixed message hash
+		// (with the standard Ethereum prefix, see accounts.TextHash)
+		recoveredAddress, err = fx.recoverAddress(txHashEth, sig)
+		if err != nil {
+			return err
+		}
+		if recoveredAddress != expectedAddress {
+			return fmt.Errorf("expected signature from %s", expectedAddress)
 		}
 	}
 
@@ -220,4 +237,12 @@ func (fx *Fx) CreateOutput(amount uint64, ownerIntf interface{}) (interface{}, e
 		Amt:          amount,
 		OutputOwners: *owner,
 	}, nil
+}
+
+func (fx *Fx) recoverAddress(txHash []byte, sig []byte) (ids.ShortID, error) {
+	pk, err := fx.SECPFactory.RecoverHashPublicKey(txHash, sig)
+	if err != nil {
+		return ids.ShortEmpty, err
+	}
+	return pk.Address(), nil
 }

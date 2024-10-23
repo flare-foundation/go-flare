@@ -4,10 +4,12 @@
 package evm
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
 
+	"github.com/ava-labs/coreth/accounts"
 	"github.com/ava-labs/coreth/core/state"
 	"github.com/ava-labs/coreth/params"
 
@@ -16,6 +18,7 @@ import (
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/crypto"
+	"github.com/ava-labs/avalanchego/utils/hashing"
 	"github.com/ava-labs/avalanchego/utils/math"
 	"github.com/ava-labs/avalanchego/utils/wrappers"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
@@ -219,6 +222,9 @@ func (utx *UnsignedExportTx) SemanticVerify(
 		return fmt.Errorf("export tx contained mismatched number of inputs/credentials (%d vs. %d)", len(utx.Ins), len(stx.Creds))
 	}
 
+	txHash := hashing.ComputeHash256(utx.Bytes())
+	txHashStr := hex.EncodeToString(txHash)
+	txHashEth := accounts.TextHash([]byte(txHashStr))
 	for i, input := range utx.Ins {
 		cred, ok := stx.Creds[i].(*secp256k1fx.Credential)
 		if !ok {
@@ -231,16 +237,26 @@ func (utx *UnsignedExportTx) SemanticVerify(
 		if len(cred.Sigs) != 1 {
 			return fmt.Errorf("expected one signature for EVM Input Credential, but found: %d", len(cred.Sigs))
 		}
-		pubKeyIntf, err := vm.secpFactory.RecoverPublicKey(utx.Bytes(), cred.Sigs[0][:])
+
+		sig := cred.Sigs[0][:]
+
+		// Verify the address recovered from the signature of the transaction hash without a prefix
+		// (Standard Avalanche approach, but unsupported/deprecated by most signing tools)
+		recoveredAddress, err := recoverAddress(vm, txHash, sig)
 		if err != nil {
 			return err
 		}
-		pubKey, ok := pubKeyIntf.(*crypto.PublicKeySECP256K1R)
-		if !ok {
-			// This should never happen
-			return fmt.Errorf("expected *crypto.PublicKeySECP256K1R but got %T", pubKeyIntf)
+		if input.Address == recoveredAddress {
+			continue
 		}
-		if input.Address != PublicKeyToEthAddress(pubKey) {
+
+		// Verify the address recovered from the signature of the transaction hash with the
+		// standard Ethereum prefix (see accounts.TextHash)
+		recoveredAddress, err = recoverAddress(vm, txHashEth, sig)
+		if err != nil {
+			return err
+		}
+		if input.Address != recoveredAddress {
 			return errPublicKeySignatureMismatch
 		}
 	}
@@ -405,4 +421,18 @@ func (utx *UnsignedExportTx) EVMStateTransfer(ctx *snow.Context, state *state.St
 		state.SetNonce(addr, nonce+1)
 	}
 	return nil
+}
+
+// Recover the address from the signature of the transaction hash
+func recoverAddress(vm *VM, txHash []byte, sig []byte) (common.Address, error) {
+	pubKeyIntf, err := vm.secpFactory.RecoverHashPublicKey(txHash, sig)
+	if err != nil {
+		return common.Address{}, err
+	}
+	pubKey, ok := pubKeyIntf.(*crypto.PublicKeySECP256K1R)
+	if !ok {
+		// This should never happen
+		return common.Address{}, fmt.Errorf("expected *crypto.PublicKeySECP256K1R but got %T", pubKeyIntf)
+	}
+	return PublicKeyToEthAddress(pubKey), nil
 }
