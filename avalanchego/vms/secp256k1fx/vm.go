@@ -4,10 +4,7 @@
 package secp256k1fx
 
 import (
-	"time"
-
 	"github.com/ava-labs/avalanchego/codec"
-	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 )
@@ -17,8 +14,7 @@ type VM interface {
 	CodecRegistry() codec.Registry
 	Clock() *mockable.Clock
 	Logger() logging.Logger
-	GetTimestamp() time.Time
-	GetNetworkID() uint32
+	EthVerificationEnabled() bool
 }
 
 var _ VM = &TestVM{}
@@ -33,5 +29,4 @@ type TestVM struct {
 func (vm *TestVM) Clock() *mockable.Clock        { return &vm.CLK }
 func (vm *TestVM) CodecRegistry() codec.Registry { return vm.Codec }
 func (vm *TestVM) Logger() logging.Logger        { return vm.Log }
-func (vm *TestVM) GetTimestamp() time.Time       { return vm.CLK.Time() }
-func (vm *TestVM) GetNetworkID() uint32          { return constants.FlareID }
+func (vm *TestVM) EthVerificationEnabled() bool  { return false }

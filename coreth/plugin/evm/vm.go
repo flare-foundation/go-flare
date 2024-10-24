@@ -1731,6 +1731,11 @@ func (vm *VM) readLastAccepted() (common.Hash, uint64, error) {
 	}
 }
 
+// To implement secp256k1fx.VM interface.
+// Verification of export transaction inputs is done in coreth/plugin/evm/export_tx.go,
+// so we always return false here.
+func (vm *VM) EthVerificationEnabled() bool { return false }
+
 // attachEthService registers the backend RPC services provided by Ethereum
 // to the provided handler under their assigned namespaces.
 func attachEthService(handler *rpc.Server, apis []rpc.API, names []string) error {
