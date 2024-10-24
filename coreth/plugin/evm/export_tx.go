@@ -252,13 +252,17 @@ func (utx *UnsignedExportTx) SemanticVerify(
 
 		// Verify the address recovered from the signature of the transaction hash with the
 		// standard Ethereum prefix (see accounts.TextHash)
-		recoveredAddress, err = recoverAddress(vm, txHashEth, sig)
-		if err != nil {
-			return err
+		if rules.IsBanff {
+			recoveredAddress, err = recoverAddress(vm, txHashEth, sig)
+			if err != nil {
+				return err
+			}
+			if input.Address == recoveredAddress {
+				continue
+			}
 		}
-		if input.Address != recoveredAddress {
-			return errPublicKeySignatureMismatch
-		}
+
+		return errPublicKeySignatureMismatch
 	}
 
 	return nil

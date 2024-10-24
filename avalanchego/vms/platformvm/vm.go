@@ -632,3 +632,7 @@ func (vm *VM) getPercentConnected(subnetID ids.ID) (float64, error) {
 	}
 	return float64(connectedStake) / float64(vdrSetWeight), nil
 }
+
+func (vm *VM) GetNetworkID() uint32 { return vm.ctx.NetworkID }
+
+func (vm *VM) GetTimestamp() time.Time { return vm.state.GetTimestamp() }

@@ -13,6 +13,7 @@ import (
 	"github.com/ava-labs/avalanchego/utils/crypto"
 	"github.com/ava-labs/avalanchego/utils/hashing"
 	"github.com/ava-labs/avalanchego/utils/wrappers"
+	"github.com/ava-labs/avalanchego/version"
 	"github.com/ava-labs/avalanchego/vms/components/verify"
 	"github.com/ava-labs/coreth/accounts"
 )
@@ -189,6 +190,7 @@ func (fx *Fx) VerifyCredentials(utx UnsignedTx, in *Input, cred *Credential, out
 	txHash := hashing.ComputeHash256(utx.Bytes())
 	txHashStr := hex.EncodeToString(txHash)
 	txHashEth := accounts.TextHash([]byte(txHashStr))
+	isEthSigningEnabled := fx.isBanffActivated()
 	for i, index := range in.SigIndices {
 		// Make sure the input references an address that exists
 		if index >= uint32(len(out.Addrs)) {
@@ -211,13 +213,17 @@ func (fx *Fx) VerifyCredentials(utx UnsignedTx, in *Input, cred *Credential, out
 
 		// Try to recover the address from the signature of the prefixed message hash
 		// (with the standard Ethereum prefix, see accounts.TextHash)
-		recoveredAddress, err = fx.recoverAddress(txHashEth, sig)
-		if err != nil {
-			return err
+		if isEthSigningEnabled {
+			recoveredAddress, err = fx.recoverAddress(txHashEth, sig)
+			if err != nil {
+				return err
+			}
+			if recoveredAddress == expectedAddress {
+				continue
+			}
 		}
-		if recoveredAddress != expectedAddress {
-			return fmt.Errorf("expected signature from %s", expectedAddress)
-		}
+
+		return fmt.Errorf("expected signature from %s", expectedAddress)
 	}
 
 	return nil
@@ -245,4 +251,9 @@ func (fx *Fx) recoverAddress(txHash []byte, sig []byte) (ids.ShortID, error) {
 		return ids.ShortEmpty, err
 	}
 	return pk.Address(), nil
+}
+
+func (fx *Fx) isBanffActivated() bool {
+	banffTime := version.GetBanffTime(fx.VM.GetNetworkID())
+	return !fx.VM.GetTimestamp().Before(banffTime)
 }

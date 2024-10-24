@@ -5,8 +5,10 @@ package txs
 
 import (
 	"reflect"
+	"time"
 
 	"github.com/ava-labs/avalanchego/codec"
+	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 	"github.com/ava-labs/avalanchego/utils/wrappers"
@@ -46,3 +48,5 @@ type fxVM struct {
 func (vm *fxVM) Clock() *mockable.Clock        { return vm.clock }
 func (vm *fxVM) CodecRegistry() codec.Registry { return vm.codecRegistry }
 func (vm *fxVM) Logger() logging.Logger        { return vm.log }
+func (vm *fxVM) GetTimestamp() time.Time       { return vm.clock.Time() }
+func (vm *fxVM) GetNetworkID() uint32          { return constants.FlareID }

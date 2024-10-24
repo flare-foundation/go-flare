@@ -341,6 +341,8 @@ type fxVMInt struct {
 func (fvi *fxVMInt) CodecRegistry() codec.Registry { return fvi.registry }
 func (fvi *fxVMInt) Clock() *mockable.Clock        { return fvi.clk }
 func (fvi *fxVMInt) Logger() logging.Logger        { return fvi.log }
+func (fvi *fxVMInt) GetTimestamp() time.Time       { return fvi.clk.Time() }
+func (fvi *fxVMInt) GetNetworkID() uint32          { return testNetworkID }
 
 func defaultFx(clk *mockable.Clock, log logging.Logger, isBootstrapped bool) fx.Fx {
 	fxVMInt := &fxVMInt{
