@@ -404,7 +404,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	}
 	st.refundGas(rules.IsApricotPhase1)
 
-	if vmerr == nil && IsPrioritisedContractCall(chainID, timestamp, msg.To(), ret, st.initialGas) {
+	if vmerr == nil && IsPrioritisedContractCall(chainID, timestamp, msg.To(), st.data, ret, st.initialGas) {
 		nominalGasUsed := params.TxGas // 21000
 		nominalFee := new(big.Int).Mul(new(big.Int).SetUint64(nominalGasUsed), new(big.Int).SetUint64(nominalGasPrice))
 		actualGasUsed := st.gasUsed()

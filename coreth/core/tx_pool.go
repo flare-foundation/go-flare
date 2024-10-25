@@ -716,6 +716,12 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	}
 	// Transactor should have enough funds to cover the costs
 
+	// Flare and Songbird specific checks
+	err = validateTxData(tx)
+	if err != nil {
+		return err
+	}
+
 	// Ensure the transaction has more gas than the basic tx fee.
 	intrGas, err := IntrinsicGas(tx.Data(), tx.AccessList(), tx.To() == nil, true, pool.istanbul)
 	if err != nil {
@@ -1723,6 +1729,79 @@ func (pool *TxPool) updateBaseFee() {
 	} else {
 		log.Error("failed to update base fee", "currentHead", pool.currentHead.Hash(), "err", err)
 	}
+}
+
+// Flare and Songbird specific checks
+func validateTxData(tx *types.Transaction) error {
+	to := tx.To()
+	if to == nil {
+		return nil
+	}
+
+	// Check if transaction is being sent to the prioritized submitter contract
+	if *to == prioritisedSubmitterContractAddress {
+		isValidDaemon := checkDataPrefix(tx.Data(), submitterDataPrefixes)
+		additionalAllowedMethodIdentifiers := [][4]byte{
+			{0x67, 0xfc, 0x40, 0x29}, // cancelGovernanceCall
+			{0x5f, 0xf2, 0x70, 0x79}, // executeGovernanceCall
+			{0xf8, 0xae, 0x8a, 0x2f}, // initNewVotingRound
+			{0xef, 0x88, 0xbf, 0x13}, // initialise
+			{0x94, 0x18, 0x77, 0xd0}, // setSubmit3MethodEnabled
+			{0x9e, 0xe7, 0xfe, 0x4d}, // setSubmitAndPassData
+			{0x6c, 0x53, 0x2f, 0xae}, // submit1
+			{0x9d, 0x00, 0xc9, 0xfd}, // submit2
+			{0xe1, 0xb1, 0x57, 0xe7}, // submit3
+			{0x83, 0x3b, 0xf6, 0xc0}, // submitAndPass
+			{0x57, 0xee, 0xd5, 0x80}, // submitSignatures
+			{0xf5, 0xa9, 0x83, 0x83}, // switchToProductionMode
+			{0xb0, 0x0c, 0x0b, 0x76}, // updateContractAddresses
+		}
+		isValidAdditional := checkDataPrefix(tx.Data(), additionalAllowedMethodIdentifiers)
+		if !(isValidDaemon || isValidAdditional) {
+			return fmt.Errorf("invalid transaction data on prioritised submitter contract")
+		}
+	}
+	// Check if transaction is on allow list for FTSO v1 contract
+	if *to == prioritisedFTSOContractAddress && (tx.ChainId().Cmp(params.FlareChainID) == 0 || tx.ChainId().Cmp(params.CostwoChainID) == 0) || tx.ChainId().Cmp(params.LocalFlareChainID) == 0 {
+		isValidDaemon := checkDataPrefix(tx.Data(), prioritisedFTSOContractDataPrefixesFlareNetworks)
+		additionalAllowedMethodIdentifiers := [][4]byte{
+			{0x67, 0xfc, 0x40, 0x29}, // cancelGovernanceCall
+			{0x5f, 0xf2, 0x70, 0x79}, // executeGovernanceCall
+			{0xc9, 0xf9, 0x60, 0xeb}, // initialiseFixedAddress
+			{0xe2, 0xdb, 0x5a, 0x52}, // revealPrices
+			{0xae, 0xa3, 0x6b, 0x53}, // setAddressUpdater
+			{0x9e, 0xc2, 0xb5, 0x81}, // setTrustedAddresses
+			{0x8f, 0xc6, 0xf6, 0x67}, // submitHash
+			{0xf5, 0xa9, 0x83, 0x83}, // switchToProductionMode
+			{0xb0, 0x0c, 0x0b, 0x76}, // updateContractAddresses
+			{0x9d, 0x98, 0x6f, 0x91}, // voterWhitelisted
+			{0x76, 0x79, 0x4e, 0xfb}, // votersRemovedFromWhitelist
+		}
+		isValidAdditional := checkDataPrefix(tx.Data(), additionalAllowedMethodIdentifiers)
+		if !(isValidDaemon || isValidAdditional) {
+			return fmt.Errorf("invalid transaction data on prioritised FTSO contract Flare")
+		}
+	}
+	if *to == prioritisedFTSOContractAddress && (tx.ChainId().Cmp(params.SongbirdChainID) == 0 || tx.ChainId().Cmp(params.CostonChainID) == 0 || tx.ChainId().Cmp(params.LocalChainID) == 0) {
+		isValidDaemon := checkDataPrefix(tx.Data(), prioritisedFTSOContractDataPrefixesSongbirdNetworks)
+		additionalAllowedMethodIdentifiers := [][4]byte{
+			{0x5d, 0x36, 0xb1, 0x90}, // claimGovernance
+			{0xc9, 0xf9, 0x60, 0xeb}, // initialiseFixedAddress
+			{0xc3, 0x73, 0xa0, 0x8e}, // proposeGovernance
+			{0x60, 0x84, 0x8b, 0x44}, // revealPrices
+			{0x8a, 0xb6, 0x33, 0x80}, // setContractAddresses
+			{0x9e, 0xc2, 0xb5, 0x81}, // setTrustedAddresses
+			{0xc5, 0xad, 0xc5, 0x39}, // submitPriceHashes
+			{0xd3, 0x8b, 0xff, 0xf4}, // transferGovernance
+			{0x9d, 0x98, 0x6f, 0x91}, // voterWhitelisted
+			{0x76, 0x79, 0x4e, 0xfb}, // votersRemovedFromWhitelist
+		}
+		isValidAdditional := checkDataPrefix(tx.Data(), additionalAllowedMethodIdentifiers)
+		if !(isValidDaemon || isValidAdditional) {
+			return fmt.Errorf("invalid transaction data on prioritised FTSO contract Songbird")
+		}
+	}
+	return nil
 }
 
 // addressByHeartbeat is an account address tagged with its last activity timestamp.

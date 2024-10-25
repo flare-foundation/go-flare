@@ -4,6 +4,7 @@
 package core
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"math/big"
@@ -31,52 +32,99 @@ var (
 
 	prioritisedSubmitterContractAddress    = common.HexToAddress("0x2cA6571Daa15ce734Bbd0Bf27D5C9D16787fc33f") // for flare, costwo, songbird and coston
 	prioritisedSubmitterContractAddressEnv = common.HexToAddress(os.Getenv("SUBMITTER_CONTRACT_ADDRESS"))      // for local and staging chains
+
+	// Define data prefixes for submitter and prioritized ftso contracts
+	submitterDataPrefixes = [][4]byte{
+		{0x6c, 0x53, 0x2f, 0xae},
+		{0x9d, 0x00, 0xc9, 0xfd},
+		{0xe1, 0xb1, 0x57, 0xe7},
+		{0x57, 0xee, 0xd5, 0x80},
+		{0x83, 0x3b, 0xf6, 0xc0},
+	}
+
+	prioritisedFTSOContractDataPrefixesFlareNetworks = [][4]byte{
+		{0x8f, 0xc6, 0xf6, 0x67},
+		{0xe2, 0xdb, 0x5a, 0x52},
+	}
+
+	prioritisedFTSOContractDataPrefixesSongbirdNetworks = [][4]byte{
+		{0xc5, 0xad, 0xc5, 0x39},
+		{0x60, 0x84, 0x8b, 0x44},
+	}
+)
+
+const (
+	prioritisedCallDataCap = 4500 // 4500 bytes
 )
 
 type prioritisedParams struct {
-	submitterActivationTime *big.Int
-	submitterAddress        common.Address
-	maxGasLimit             uint64
+	submitterActivationTime  *big.Int
+	submitterAddress         common.Address
+	maxGasLimit              uint64
+	dataPrefixActivationTime *big.Int
+	submitterDataPrefixes    [][4]byte
+	ftsoDataPrefixes         [][4]byte
 }
 
 var (
 	prioritisedContractVariants = utils.NewChainValue(&prioritisedParams{
-		big.NewInt(0), common.Address{}, 0,
+		big.NewInt(0), common.Address{}, 0, big.NewInt(0), [][4]byte{}, [][4]byte{},
 	}).
 		AddValue(params.FlareChainID, &prioritisedParams{
 			submitterContractActivationTimeFlare,
 			prioritisedSubmitterContractAddress,
 			3000000,
+			big.NewInt(time.Date(2024, time.October, 10, 15, 0, 0, 0, time.UTC).Unix()),
+			submitterDataPrefixes,
+			prioritisedFTSOContractDataPrefixesFlareNetworks,
 		}).
 		AddValue(params.CostwoChainID, &prioritisedParams{
 			submitterContractActivationTimeCostwo,
 			prioritisedSubmitterContractAddress,
 			3000000,
+			big.NewInt(time.Date(2024, time.October, 10, 10, 0, 0, 0, time.UTC).Unix()),
+			submitterDataPrefixes,
+			prioritisedFTSOContractDataPrefixesFlareNetworks,
 		}).
 		AddValue(params.SongbirdChainID, &prioritisedParams{
 			submitterContractActivationTimeSongbird,
 			prioritisedSubmitterContractAddress,
 			math.MaxUint64,
+			big.NewInt(time.Date(2024, time.October, 10, 13, 0, 0, 0, time.UTC).Unix()),
+			submitterDataPrefixes,
+			prioritisedFTSOContractDataPrefixesSongbirdNetworks,
 		}).
 		AddValue(params.CostonChainID, &prioritisedParams{
 			submitterContractActivationTimeCoston,
 			prioritisedSubmitterContractAddress,
 			math.MaxUint64,
+			big.NewInt(time.Date(2024, time.October, 10, 8, 0, 0, 0, time.UTC).Unix()),
+			submitterDataPrefixes,
+			prioritisedFTSOContractDataPrefixesSongbirdNetworks,
 		}).
 		AddValue(params.LocalFlareChainID, &prioritisedParams{
 			big.NewInt(0),
 			prioritisedSubmitterContractAddressEnv,
 			3000000,
+			big.NewInt(0),
+			[][4]byte{},
+			[][4]byte{},
 		}).
 		AddValue(params.StagingChainID, &prioritisedParams{
 			big.NewInt(0),
 			prioritisedSubmitterContractAddressEnv,
 			3000000,
+			big.NewInt(0),
+			[][4]byte{},
+			[][4]byte{},
 		}).
 		AddValue(params.LocalChainID, &prioritisedParams{
 			big.NewInt(0),
 			prioritisedSubmitterContractAddressEnv,
 			math.MaxUint64,
+			big.NewInt(0),
+			[][4]byte{},
+			[][4]byte{},
 		})
 )
 
@@ -133,7 +181,7 @@ func GetDaemonSelector(blockTime *big.Int) []byte {
 	}
 }
 
-func IsPrioritisedContractCall(chainID *big.Int, blockTime *big.Int, to *common.Address, ret []byte, initialGas uint64) bool {
+func IsPrioritisedContractCall(chainID *big.Int, blockTime *big.Int, to *common.Address, data []byte, ret []byte, initialGas uint64) bool {
 	if to == nil || chainID == nil || blockTime == nil {
 		return false
 	}
@@ -144,8 +192,14 @@ func IsPrioritisedContractCall(chainID *big.Int, blockTime *big.Int, to *common.
 	case initialGas > chainValue.maxGasLimit:
 		return false
 	case *to == prioritisedFTSOContractAddress:
+		if blockTime.Cmp(chainValue.dataPrefixActivationTime) > 0 {
+			return checkDataPrefix(data, chainValue.ftsoDataPrefixes)
+		}
 		return true
 	case *to == chainValue.submitterAddress && blockTime.Cmp(chainValue.submitterActivationTime) > 0 && !isZeroSlice(ret):
+		if blockTime.Cmp(chainValue.dataPrefixActivationTime) > 0 {
+			return len(data) <= prioritisedCallDataCap && checkDataPrefix(data, chainValue.submitterDataPrefixes)
+		}
 		return true
 	default:
 		return false
@@ -240,4 +294,17 @@ func isZeroSlice(s []byte) bool {
 		}
 	}
 	return true
+}
+
+func checkDataPrefix(data []byte, prefixes [][4]byte) bool {
+	if len(data) < 4 {
+		return false
+	}
+	dataPrefix := data[:4]
+	for _, prefix := range prefixes {
+		if bytes.Equal(dataPrefix, prefix[:]) {
+			return true
+		}
+	}
+	return false
 }
