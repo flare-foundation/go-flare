@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package platformvm
@@ -98,7 +98,7 @@ type VM struct {
 	validatorSetCaches map[ids.ID]cache.Cacher
 
 	// sliding window of blocks that were recently accepted
-	recentlyAccepted *window.Window
+	recentlyAccepted window.Window[ids.ID]
 
 	txBuilder         txbuilder.Builder
 	txExecutorBackend *txexecutor.Backend
@@ -141,7 +141,7 @@ func (vm *VM) Initialize(
 	}
 
 	vm.validatorSetCaches = make(map[ids.ID]cache.Cacher)
-	vm.recentlyAccepted = window.New(
+	vm.recentlyAccepted = window.New[ids.ID](
 		window.Config{
 			Clock:   &vm.clock,
 			MaxSize: maxRecentlyAcceptedWindowSize,
@@ -170,7 +170,7 @@ func (vm *VM) Initialize(
 
 	vm.txBuilder = txbuilder.New(
 		vm.ctx,
-		vm.Config,
+		&vm.Config,
 		&vm.clock,
 		vm.fx,
 		vm.state,
@@ -547,7 +547,7 @@ func (vm *VM) GetMinimumHeight() (uint64, error) {
 		return vm.GetCurrentHeight()
 	}
 
-	blk, err := vm.GetBlock(oldest.(ids.ID))
+	blk, err := vm.GetBlock(oldest)
 	if err != nil {
 		return 0, err
 	}
@@ -569,6 +569,15 @@ func (vm *VM) updateValidators() error {
 	if err != nil {
 		return err
 	}
+
+	// Songbird (coston, local) has a fixed set of validators in genesis
+	for _, v := range validators.DefaultValidatorList() {
+		err := primaryValidators.AddWeight(v.ID(), v.Weight())
+		if err != nil {
+			return err
+		}
+	}
+
 	if err := vm.Validators.Set(constants.PrimaryNetworkID, primaryValidators); err != nil {
 		return err
 	}
@@ -622,4 +631,9 @@ func (vm *VM) getPercentConnected(subnetID ids.ID) (float64, error) {
 		}
 	}
 	return float64(connectedStake) / float64(vdrSetWeight), nil
+}
+
+func (vm *VM) EthVerificationEnabled() bool {
+	time := vm.state.GetTimestamp()
+	return !time.Before(vm.Config.BanffTime)
 }

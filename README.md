@@ -1,14 +1,22 @@
 # go-flare
 
-go-flare is a modified version of [avalanchego@v1.7.18](https://github.com/ava-labs/avalanchego/releases/tag/v1.7.18) + [coreth@v0.8.16](https://github.com/ava-labs/coreth/releases/tag/v0.8.16) that incorporates the Flare Time Series Oracle (FTSO) and State Connector. 
+go-flare is a modified version of [avalanchego@v1.9.0](https://github.com/ava-labs/avalanchego/releases/tag/v1.7.18) + [coreth@v0.11.0](https://github.com/ava-labs/coreth/releases/tag/v0.11.0) that incorporates the Flare Specific Features such as Prioritized contract handling and invoking Flare daemon contract.
+
+This code also supports Songbird Network (and Coston testnet) node deployment from the version v0.6.6 onward.
+
+All nodes should upgrade to the version 1.9.0 **before the following dates**:
+- Coston2 network: November 26, 2024 at 12:00:00 UTC
+- Flare network: December 17, 2024 at 12:00:00 UTC
+- Coston network: January 7, 2025 at 12:00:00 UTC
+- Songbird network: January 28, 2025 at 12:00:00 UTC
 
 ## System Requirements
-- go version 1.18.5
+- go version 1.21.8
 - gcc, g++ and jq
 - CPU: Equivalent of 8 AWS vCPU
 - RAM: 16 GiB
-- Storage: 1TB
-- OS: Ubuntu 18.04/20.04 or macOS >= 10.15 (Catalina)
+- Storage: 1TB Flare / 3.5TB Songbird
+- OS: Ubuntu 20.04/22.04
 
 ## Compilation
 

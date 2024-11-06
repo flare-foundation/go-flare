@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package chains
@@ -72,10 +72,10 @@ var (
 
 // Manager manages the chains running on this node.
 // It can:
-//   * Create a chain
-//   * Add a registrant. When a chain is created, each registrant calls
+//   - Create a chain
+//   - Add a registrant. When a chain is created, each registrant calls
 //     RegisterChain with the new chain as the argument.
-//   * Manage the aliases of chains
+//   - Manage the aliases of chains
 type Manager interface {
 	ids.Aliaser
 
@@ -148,6 +148,7 @@ type ManagerConfig struct {
 	ConsensusAcceptorGroup      snow.AcceptorGroup
 	DBManager                   dbManager.Manager
 	MsgCreator                  message.Creator    // message creator, shared with network
+	MsgCreatorWithProto         message.Creator    // message creator using protobufs, shared with network
 	Router                      router.Router      // Routes incoming messages to the appropriate chain
 	Net                         network.Network    // Sends consensus messages to other validators
 	ConsensusParams             avcon.Parameters   // The consensus parameters (alpha, beta, etc.) for new chains
@@ -187,6 +188,7 @@ type ManagerConfig struct {
 
 	ApricotPhase4Time            time.Time
 	ApricotPhase4MinPChainHeight uint64
+	BanffTime                    time.Time
 
 	// Tracks CPU/disk usage caused by each peer.
 	ResourceTracker timetracker.ResourceTracker
@@ -319,7 +321,12 @@ func (m *manager) ForceCreateChain(chainParams ChainParameters) {
 	m.chainsLock.Unlock()
 
 	// Associate the newly created chain with its default alias
-	m.Log.AssertNoError(m.Alias(chainParams.ID, chainParams.ID.String()))
+	if err := m.Alias(chainParams.ID, chainParams.ID.String()); err != nil {
+		m.Log.Error("failed to alias the new chain with itself",
+			zap.Stringer("chainID", chainParams.ID),
+			zap.Error(err),
+		)
+	}
 
 	// Notify those that registered to be notified when a new chain is created
 	m.notifyRegistrants(chain.Name, chain.Engine)
@@ -567,6 +574,8 @@ func (m *manager) createAvalancheChain(
 	sender, err := sender.New(
 		ctx,
 		m.MsgCreator,
+		m.MsgCreatorWithProto,
+		m.BanffTime,
 		m.Net,
 		m.ManagerConfig.Router,
 		m.TimeoutManager,
@@ -753,6 +762,8 @@ func (m *manager) createSnowmanChain(
 	sender, err := sender.New(
 		ctx,
 		m.MsgCreator,
+		m.MsgCreatorWithProto,
+		m.BanffTime,
 		m.Net,
 		m.ManagerConfig.Router,
 		m.TimeoutManager,
@@ -795,8 +806,12 @@ func (m *manager) createSnowmanChain(
 		return nil, fmt.Errorf("error while fetching chain config: %w", err)
 	}
 
-	// enable ProposerVM on this VM
-	vm = proposervm.New(vm, m.ApricotPhase4Time, m.ApricotPhase4MinPChainHeight)
+	vm = proposervm.New(
+		vm,
+		m.ApricotPhase4Time,
+		m.ApricotPhase4MinPChainHeight,
+		m.BanffTime,
+	)
 
 	if m.MeterVMEnabled {
 		vm = metervm.NewBlockVM(vm)

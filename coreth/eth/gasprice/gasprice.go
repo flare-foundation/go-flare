@@ -68,7 +68,8 @@ var (
 	DefaultMaxPrice           = big.NewInt(150 * params.GWei)
 	DefaultMinPrice           = big.NewInt(0 * params.GWei)
 	DefaultMinBaseFee         = big.NewInt(params.ApricotPhase3InitialBaseFee)
-	DefaultMinGasUsed         = big.NewInt(6_000_000) // block gas limit is 8,000,000
+	DefaultMinGasUsed         = big.NewInt(6_000_000)  // block gas limit is 8,000,000
+	SgbDefaultMinGasUsed      = big.NewInt(12_000_000) // block gas target is 15,000,000
 	DefaultMaxLookbackSeconds = uint64(80)
 )
 
@@ -165,7 +166,11 @@ func NewOracle(backend OracleBackend, config Config) *Oracle {
 	}
 	minGasUsed := config.MinGasUsed
 	if minGasUsed == nil || minGasUsed.Int64() < 0 {
-		minGasUsed = DefaultMinGasUsed
+		if backend.ChainConfig().IsSongbirdCode() {
+			minGasUsed = SgbDefaultMinGasUsed
+		} else {
+			minGasUsed = DefaultMinGasUsed
+		}
 		log.Warn("Sanitizing invalid gasprice oracle min gas used", "provided", config.MinGasUsed, "updated", minGasUsed)
 	}
 	maxCallBlockHistory := config.MaxCallBlockHistory

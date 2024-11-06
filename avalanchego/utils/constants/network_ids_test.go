@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package constants
@@ -17,12 +17,12 @@ func TestGetHRP(t *testing.T) {
 			hrp: MainnetHRP,
 		},
 		{
-			id:  TestnetID,
-			hrp: FujiHRP,
+			id:  CostonID,
+			hrp: CostonHRP,
 		},
 		{
-			id:  FujiID,
-			hrp: FujiHRP,
+			id:  SongbirdID,
+			hrp: SongbirdName,
 		},
 		{
 			id:  LocalID,
@@ -69,12 +69,12 @@ func TestNetworkName(t *testing.T) {
 			name: MainnetName,
 		},
 		{
-			id:   TestnetID,
-			name: FujiName,
+			id:   CostonID,
+			name: CostonName,
 		},
 		{
-			id:   FujiID,
-			name: FujiName,
+			id:   SongbirdID,
+			name: SongbirdName,
 		},
 		{
 			id:   LocalID,
@@ -126,12 +126,8 @@ func TestNetworkID(t *testing.T) {
 			id:   MainnetID,
 		},
 		{
-			name: TestnetName,
-			id:   TestnetID,
-		},
-		{
-			name: FujiName,
-			id:   FujiID,
+			name: SongbirdName,
+			id:   SongbirdID,
 		},
 		{
 			name: LocalName,

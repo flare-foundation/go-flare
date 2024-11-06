@@ -46,6 +46,17 @@ var DefaultFullGPOConfig = gasprice.Config{
 	MinGasUsed:          gasprice.DefaultMinGasUsed,
 }
 
+var DefaultFullGPOSgbConfig = gasprice.Config{
+	Blocks:              40,
+	Percentile:          60,
+	MaxLookbackSeconds:  gasprice.DefaultMaxLookbackSeconds,
+	MaxCallBlockHistory: gasprice.DefaultMaxCallBlockHistory,
+	MaxBlockHistory:     gasprice.DefaultMaxBlockHistory,
+	MinPrice:            gasprice.DefaultMinPrice,
+	MaxPrice:            gasprice.DefaultMaxPrice,
+	MinGasUsed:          gasprice.SgbDefaultMinGasUsed,
+}
+
 // DefaultConfig contains default settings for use on the Avalanche main net.
 var DefaultConfig = NewDefaultConfig()
 
@@ -59,11 +70,31 @@ func NewDefaultConfig() Config {
 		TrieDirtyCache:        256,
 		TrieDirtyCommitTarget: 20,
 		SnapshotCache:         128,
+		FilterLogCacheSize:    32,
 		Miner:                 miner.Config{},
 		TxPool:                core.DefaultTxPoolConfig,
 		RPCGasCap:             25000000,
 		RPCEVMTimeout:         5 * time.Second,
 		GPO:                   DefaultFullGPOConfig,
+		RPCTxFeeCap:           1, // 1 AVAX
+	}
+}
+
+func NewDefaultSgbConfig() Config {
+	return Config{
+		NetworkId:             1,
+		LightPeers:            100,
+		UltraLightFraction:    75,
+		DatabaseCache:         512,
+		TrieCleanCache:        256,
+		TrieDirtyCache:        256,
+		TrieDirtyCommitTarget: 20,
+		SnapshotCache:         128,
+		Miner:                 miner.Config{},
+		TxPool:                core.DefaultTxPoolConfig,
+		RPCGasCap:             25000000,
+		RPCEVMTimeout:         5 * time.Second,
+		GPO:                   DefaultFullGPOSgbConfig,
 		RPCTxFeeCap:           1, // 1 AVAX
 	}
 }
@@ -118,6 +149,9 @@ type Config struct {
 	SnapshotCache         int
 	Preimages             bool
 
+	// This is the number of blocks for which logs will be cached in the filter system.
+	FilterLogCacheSize int
+
 	// Mining options
 	Miner miner.Config
 
@@ -140,7 +174,7 @@ type Config struct {
 	RPCEVMTimeout time.Duration
 
 	// RPCTxFeeCap is the global transaction fee(price * gaslimit) cap for
-	// send-transction variants. The unit is ether.
+	// send-transaction variants. The unit is ether.
 	RPCTxFeeCap float64 `toml:",omitempty"`
 
 	// AllowUnfinalizedQueries allow unfinalized queries
