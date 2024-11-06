@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package secp256k1fx
@@ -14,6 +14,7 @@ type VM interface {
 	CodecRegistry() codec.Registry
 	Clock() *mockable.Clock
 	Logger() logging.Logger
+	EthVerificationEnabled() bool
 }
 
 var _ VM = &TestVM{}
@@ -28,3 +29,4 @@ type TestVM struct {
 func (vm *TestVM) Clock() *mockable.Clock        { return &vm.CLK }
 func (vm *TestVM) CodecRegistry() codec.Registry { return vm.Codec }
 func (vm *TestVM) Logger() logging.Logger        { return vm.Log }
+func (vm *TestVM) EthVerificationEnabled() bool  { return false }

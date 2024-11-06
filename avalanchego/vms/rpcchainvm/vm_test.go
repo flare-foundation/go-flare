@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package rpcchainvm
@@ -146,7 +146,7 @@ func Test_VMCreateHandlers(t *testing.T) {
 			require.NoErrorf(err, "failed to create listener: %v", err)
 
 			go func() {
-				err := http.Serve(listener, r)
+				err := http.Serve(listener, r) // #nosec G114
 				require.NoErrorf(err, "failed to serve HTTP: %v", err)
 			}()
 

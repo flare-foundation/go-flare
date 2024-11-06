@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package queue
@@ -201,8 +201,10 @@ func (j *Jobs) ExecuteAll(ctx *snow.ConsensusContext, halter common.Haltable, re
 				)
 			}
 		}
-		j.etaMetric.Set(0)
 	}
+
+	// Now that executing has finished, zero out the ETA.
+	j.etaMetric.Set(0)
 
 	if !restarted {
 		ctx.Log.Info("executed operations",

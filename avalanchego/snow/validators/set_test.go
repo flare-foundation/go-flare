@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package validators
@@ -6,10 +6,12 @@ package validators
 import (
 	"math"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils/constants"
 )
 
 func TestSetSet(t *testing.T) {
@@ -415,4 +417,37 @@ func TestSetValidatorSetCallback(t *testing.T) {
 	err = s.Set(newValidators)
 	require.NoError(t, err)
 	require.Equal(t, 4, callcount)
+}
+
+func TestDefaultValidatorExpiration(t *testing.T) {
+	set := NewSet()
+
+	t.Setenv("CUSTOM_VALIDATORS", "NodeID-5dDZXn99LCkDoEi6t9gTitZuQmhokxQTc,NodeID-AQghDJTU3zuQj73itPtfTZz6CxsTQVD3R")
+	t.Setenv("CUSTOM_VALIDATORS_EXPIRATION", "2024-02-01T00:00:00Z")
+
+	vs := defaultValidatorSet{}
+	vs.initialize(constants.LocalID, time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC))
+
+	require.Len(t, vs.list(), 2)
+
+	for _, v := range vs.list() {
+		require.NoError(t, set.AddWeight(v.ID(), v.Weight()))
+	}
+
+	require.Equal(t, 2, set.Len())
+
+	// Get expired validators
+	expVdrs := vs.expiredValidators(constants.LocalID, time.Date(2024, time.February, 2, 0, 0, 0, 0, time.UTC))
+	require.Len(t, expVdrs, 2)
+
+	// Remove expired validators
+	for _, v := range expVdrs {
+		require.NoError(t, set.RemoveWeight(v.ID(), v.Weight()))
+	}
+	require.Equal(t, 0, set.Len())
+
+	// Removing expired validators again should not error
+	for _, v := range expVdrs {
+		require.NoError(t, set.RemoveWeight(v.ID(), v.Weight()))
+	}
 }

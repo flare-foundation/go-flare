@@ -45,6 +45,7 @@ import (
 	"github.com/ava-labs/coreth/core/state"
 	"github.com/ava-labs/coreth/core/types"
 	"github.com/ava-labs/coreth/params"
+	"github.com/ava-labs/coreth/vmerrs"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
@@ -128,12 +129,24 @@ func (w *worker) commitNewWork() (*types.Block, error) {
 	}
 
 	var gasLimit uint64
-	if w.chainConfig.IsApricotPhase1(big.NewInt(timestamp)) {
-		gasLimit = params.ApricotPhase1GasLimit
+	if w.chainConfig.IsSongbirdCode() {
+		if w.chainConfig.IsSongbirdTransition(big.NewInt(timestamp)) {
+			gasLimit = params.SgbTransitionGasLimit
+		} else if w.chainConfig.IsApricotPhase5(big.NewInt(timestamp)) {
+			gasLimit = params.SgbApricotPhase5GasLimit
+		} else if w.chainConfig.IsApricotPhase1(big.NewInt(timestamp)) {
+			gasLimit = params.ApricotPhase1GasLimit
+		} else {
+			gasLimit = core.CalcGasLimit(parent.GasUsed(), parent.GasLimit(), params.ApricotPhase1GasLimit, params.ApricotPhase1GasLimit)
+		}
 	} else {
-		// The gas limit is set in phase1 to ApricotPhase1GasLimit because the ceiling and floor were set to the same value
-		// such that the gas limit converged to it. Since this is hardbaked now, we remove the ability to configure it.
-		gasLimit = core.CalcGasLimit(parent.GasUsed(), parent.GasLimit(), params.ApricotPhase1GasLimit, params.ApricotPhase1GasLimit)
+		if w.chainConfig.IsApricotPhase1(big.NewInt(timestamp)) {
+			gasLimit = params.ApricotPhase1GasLimit
+		} else {
+			// The gas limit is set in phase1 to ApricotPhase1GasLimit because the ceiling and floor were set to the same value
+			// such that the gas limit converged to it. Since this is hardbaked now, we remove the ability to configure it.
+			gasLimit = core.CalcGasLimit(parent.GasUsed(), parent.GasLimit(), params.ApricotPhase1GasLimit, params.ApricotPhase1GasLimit)
+		}
 	}
 	num := parent.Number()
 	header := &types.Header{
@@ -287,6 +300,10 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 			log.Trace("Skipping unsupported transaction type", "sender", from, "type", tx.Type())
 			txs.Pop()
 
+		case errors.Is(err, vmerrs.ErrToAddrProhibitedSoft):
+			log.Warn("Tx dropped: failed verification", "tx", tx.Hash(), "sender", from, "data", tx.Data(), "err", err)
+			w.eth.TxPool().RemoveTx(tx.Hash())
+			txs.Pop()
 		default:
 			// Strange error, discard the transaction and get the next in line (note, the
 			// nonce-too-high clause will prevent us from executing in vain).

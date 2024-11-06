@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package builder
@@ -14,7 +14,6 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/crypto"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
-	"github.com/ava-labs/avalanchego/vms/platformvm/blocks"
 	"github.com/ava-labs/avalanchego/vms/platformvm/status"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
@@ -53,7 +52,7 @@ func TestAtomicTxImports(t *testing.T) {
 			},
 		},
 	}
-	utxoBytes, err := blocks.Codec.Marshal(txs.Version, utxo)
+	utxoBytes, err := txs.Codec.Marshal(txs.Version, utxo)
 	require.NoError(err)
 
 	inputID := utxo.InputID()
@@ -78,8 +77,8 @@ func TestAtomicTxImports(t *testing.T) {
 
 	env.state.SetTimestamp(env.config.ApricotPhase5Time.Add(100 * time.Second))
 
-	env.Builder.AddDecisionTx(tx)
-	b, err := env.BuildBlock()
+	require.NoError(env.Builder.Add(tx))
+	b, err := env.Builder.BuildBlock()
 	require.NoError(err)
 	// Test multiple verify calls work
 	require.NoError(b.Verify())

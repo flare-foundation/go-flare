@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package genesis
@@ -40,8 +40,18 @@ type TxFeeConfig struct {
 	CreateAssetTxFee uint64 `json:"createAssetTxFee"`
 	// Transaction fee for create subnet transactions
 	CreateSubnetTxFee uint64 `json:"createSubnetTxFee"`
+	// Transaction fee for transform subnet transactions
+	TransformSubnetTxFee uint64 `json:"transformSubnetTxFee"`
 	// Transaction fee for create blockchain transactions
 	CreateBlockchainTxFee uint64 `json:"createBlockchainTxFee"`
+	// Transaction fee for adding a primary network validator
+	AddPrimaryNetworkValidatorFee uint64 `json:"addPrimaryNetworkValidatorFee"`
+	// Transaction fee for adding a primary network delegator
+	AddPrimaryNetworkDelegatorFee uint64 `json:"addPrimaryNetworkDelegatorFee"`
+	// Transaction fee for adding a subnet validator
+	AddSubnetValidatorFee uint64 `json:"addSubnetValidatorFee"`
+	// Transaction fee for adding a subnet delegator
+	AddSubnetDelegatorFee uint64 `json:"addSubnetDelegatorFee"`
 }
 
 type Params struct {
@@ -53,8 +63,6 @@ func GetTxFeeConfig(networkID uint32) TxFeeConfig {
 	switch networkID {
 	case constants.MainnetID:
 		return MainnetParams.TxFeeConfig
-	case constants.FujiID:
-		return FujiParams.TxFeeConfig
 	case constants.LocalID:
 		return LocalParams.TxFeeConfig
 	case constants.FlareID:
@@ -65,6 +73,10 @@ func GetTxFeeConfig(networkID uint32) TxFeeConfig {
 		return StagingParams.TxFeeConfig
 	case constants.LocalFlareID:
 		return LocalFlareParams.TxFeeConfig
+	case constants.SongbirdID:
+		return SongbirdParams.TxFeeConfig
+	case constants.CostonID:
+		return CostonParams.TxFeeConfig
 	default:
 		return LocalParams.TxFeeConfig
 	}
@@ -74,8 +86,6 @@ func GetStakingConfig(networkID uint32) StakingConfig {
 	switch networkID {
 	case constants.MainnetID:
 		return MainnetParams.StakingConfig
-	case constants.FujiID:
-		return FujiParams.StakingConfig
 	case constants.LocalID:
 		return LocalParams.StakingConfig
 	case constants.FlareID:
@@ -86,6 +96,10 @@ func GetStakingConfig(networkID uint32) StakingConfig {
 		return StagingParams.StakingConfig
 	case constants.LocalFlareID:
 		return LocalFlareParams.StakingConfig
+	case constants.SongbirdID:
+		return SongbirdParams.StakingConfig
+	case constants.CostonID:
+		return CostonParams.StakingConfig
 	default:
 		return LocalParams.StakingConfig
 	}
