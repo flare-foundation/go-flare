@@ -4,7 +4,7 @@ go-flare is a modified version of [avalanchego@v1.9.0](https://github.com/ava-la
 
 This code also supports Songbird Network (and Coston testnet) node deployment from the version v0.6.6 onward.
 
-The networks should upgrade to this version **before the following dates**:
+All nodes should upgrade to the version 1.9.0 **before the following dates**:
 - Coston2 network: November 26, 2024 at 12:00:00 UTC
 - Flare network: December 17, 2024 at 12:00:00 UTC
 - Coston network: January 7, 2025 at 12:00:00 UTC
