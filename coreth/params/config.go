@@ -158,10 +158,10 @@ var (
 		ApricotPhase3BlockTimestamp:     big.NewInt(0),
 		ApricotPhase4BlockTimestamp:     big.NewInt(0),
 		ApricotPhase5BlockTimestamp:     big.NewInt(0),
-		ApricotPhasePre6BlockTimestamp:  big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
-		ApricotPhase6BlockTimestamp:     big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
-		ApricotPhasePost6BlockTimestamp: big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
-		BanffBlockTimestamp:             big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhasePre6BlockTimestamp:  big.NewInt(time.Date(2024, time.December, 17, 12, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhase6BlockTimestamp:     big.NewInt(time.Date(2024, time.December, 17, 13, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhasePost6BlockTimestamp: big.NewInt(time.Date(2024, time.December, 17, 14, 0, 0, 0, time.UTC).Unix()),
+		BanffBlockTimestamp:             big.NewInt(time.Date(2024, time.December, 17, 15, 0, 0, 0, time.UTC).Unix()),
 	}
 
 	CostwoChainConfig = &ChainConfig{
@@ -183,10 +183,10 @@ var (
 		ApricotPhase3BlockTimestamp:     big.NewInt(0),
 		ApricotPhase4BlockTimestamp:     big.NewInt(0),
 		ApricotPhase5BlockTimestamp:     big.NewInt(0),
-		ApricotPhasePre6BlockTimestamp:  big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
-		ApricotPhase6BlockTimestamp:     big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
-		ApricotPhasePost6BlockTimestamp: big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
-		BanffBlockTimestamp:             big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhasePre6BlockTimestamp:  big.NewInt(time.Date(2024, time.November, 26, 12, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhase6BlockTimestamp:     big.NewInt(time.Date(2024, time.November, 26, 13, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhasePost6BlockTimestamp: big.NewInt(time.Date(2024, time.November, 26, 14, 0, 0, 0, time.UTC).Unix()),
+		BanffBlockTimestamp:             big.NewInt(time.Date(2024, time.November, 26, 15, 0, 0, 0, time.UTC).Unix()),
 	}
 
 	StagingChainConfig = &ChainConfig{
@@ -208,10 +208,10 @@ var (
 		ApricotPhase3BlockTimestamp:     big.NewInt(0),
 		ApricotPhase4BlockTimestamp:     big.NewInt(0),
 		ApricotPhase5BlockTimestamp:     big.NewInt(0),
-		ApricotPhasePre6BlockTimestamp:  big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
-		ApricotPhase6BlockTimestamp:     big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
-		ApricotPhasePost6BlockTimestamp: big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
-		BanffBlockTimestamp:             big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhasePre6BlockTimestamp:  big.NewInt(0),
+		ApricotPhase6BlockTimestamp:     big.NewInt(0),
+		ApricotPhasePost6BlockTimestamp: big.NewInt(0),
+		BanffBlockTimestamp:             big.NewInt(0),
 	}
 
 	LocalFlareChainConfig = &ChainConfig{
@@ -236,7 +236,7 @@ var (
 		ApricotPhasePre6BlockTimestamp:  big.NewInt(0),
 		ApricotPhase6BlockTimestamp:     big.NewInt(0),
 		ApricotPhasePost6BlockTimestamp: big.NewInt(0),
-		BanffBlockTimestamp:             big.NewInt(time.Date(2024, time.May, 29, 9, 15, 0, 0, time.UTC).Unix()),
+		BanffBlockTimestamp:             big.NewInt(0),
 	}
 
 	// CostonChainConfig is the configuration for the Coston test network.
@@ -260,10 +260,10 @@ var (
 		ApricotPhase4BlockTimestamp:     big.NewInt(time.Date(2022, time.February, 25, 15, 0, 0, 0, time.UTC).Unix()),
 		ApricotPhase5BlockTimestamp:     big.NewInt(time.Date(2022, time.February, 25, 16, 0, 0, 0, time.UTC).Unix()),
 		SongbirdTransitionTimestamp:     big.NewInt(time.Date(2024, time.July, 23, 12, 0, 0, 0, time.UTC).Unix()),
-		ApricotPhasePre6BlockTimestamp:  big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
-		ApricotPhase6BlockTimestamp:     big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
-		ApricotPhasePost6BlockTimestamp: big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
-		BanffBlockTimestamp:             big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhasePre6BlockTimestamp:  big.NewInt(time.Date(2025, time.January, 7, 12, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhase6BlockTimestamp:     big.NewInt(time.Date(2025, time.January, 7, 13, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhasePost6BlockTimestamp: big.NewInt(time.Date(2025, time.January, 7, 14, 0, 0, 0, time.UTC).Unix()),
+		BanffBlockTimestamp:             big.NewInt(time.Date(2025, time.January, 7, 15, 0, 0, 0, time.UTC).Unix()),
 	}
 
 	// LocalChainConfig is the configuration for the Songbird Local network.
@@ -286,11 +286,11 @@ var (
 		ApricotPhase3BlockTimestamp:     big.NewInt(0),
 		ApricotPhase4BlockTimestamp:     big.NewInt(0),
 		ApricotPhase5BlockTimestamp:     big.NewInt(0),
+		SongbirdTransitionTimestamp:     big.NewInt(0),
 		ApricotPhasePre6BlockTimestamp:  big.NewInt(0),
 		ApricotPhase6BlockTimestamp:     big.NewInt(0),
 		ApricotPhasePost6BlockTimestamp: big.NewInt(0),
-		SongbirdTransitionTimestamp:     big.NewInt(0),
-		BanffBlockTimestamp:             big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
+		BanffBlockTimestamp:             big.NewInt(0),
 		// TODO add Cortina timestamp
 	}
 
@@ -315,10 +315,10 @@ var (
 		ApricotPhase4BlockTimestamp:     big.NewInt(time.Date(2022, time.March, 7, 15, 0, 0, 0, time.UTC).Unix()),
 		ApricotPhase5BlockTimestamp:     big.NewInt(time.Date(2022, time.March, 7, 16, 0, 0, 0, time.UTC).Unix()),
 		SongbirdTransitionTimestamp:     big.NewInt(time.Date(2024, time.October, 29, 12, 0, 0, 0, time.UTC).Unix()),
-		ApricotPhasePre6BlockTimestamp:  big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
-		ApricotPhase6BlockTimestamp:     big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
-		ApricotPhasePost6BlockTimestamp: big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
-		BanffBlockTimestamp:             big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhasePre6BlockTimestamp:  big.NewInt(time.Date(2025, time.January, 28, 12, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhase6BlockTimestamp:     big.NewInt(time.Date(2025, time.January, 28, 13, 0, 0, 0, time.UTC).Unix()),
+		ApricotPhasePost6BlockTimestamp: big.NewInt(time.Date(2025, time.January, 28, 14, 0, 0, 0, time.UTC).Unix()),
+		BanffBlockTimestamp:             big.NewInt(time.Date(2025, time.January, 28, 15, 0, 0, 0, time.UTC).Unix()),
 	}
 
 	TestChainConfig              = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0)}

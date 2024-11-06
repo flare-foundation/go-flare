@@ -106,25 +106,26 @@ var (
 
 	ApricotPhase6Times = map[uint32]time.Time{
 		constants.MainnetID:    time.Date(2022, time.September, 6, 20, 0, 0, 0, time.UTC),
-		constants.FlareID:      time.Date(2024, time.June, 1, 0, 0, 0, 0, time.UTC),
-		constants.CostwoID:     time.Date(2024, time.June, 1, 0, 0, 0, 0, time.UTC),
-		constants.StagingID:    time.Date(2024, time.June, 1, 0, 0, 0, 0, time.UTC),
-		constants.LocalFlareID: time.Date(2024, time.June, 1, 0, 0, 0, 0, time.UTC),
-		constants.CostonID:     time.Date(2024, time.June, 1, 0, 0, 0, 0, time.UTC),
-		constants.SongbirdID:   time.Date(2024, time.June, 1, 0, 0, 0, 0, time.UTC),
+		constants.FlareID:      time.Date(2024, time.December, 17, 13, 0, 0, 0, time.UTC),
+		constants.CostwoID:     time.Date(2024, time.November, 26, 13, 0, 0, 0, time.UTC),
+		constants.StagingID:    time.Date(2024, time.November, 5, 13, 0, 0, 0, time.UTC),
+		constants.LocalFlareID: time.Date(2024, time.November, 5, 13, 0, 0, 0, time.UTC),
+		constants.CostonID:     time.Date(2025, time.January, 7, 13, 0, 0, 0, time.UTC),
+		constants.SongbirdID:   time.Date(2025, time.January, 28, 13, 0, 0, 0, time.UTC),
+		constants.LocalID:      time.Date(2024, time.November, 5, 13, 0, 0, 0, time.UTC),
 	}
 	ApricotPhase6DefaultTime = time.Date(2020, time.December, 5, 5, 0, 0, 0, time.UTC)
 
 	// FIXME: update this before release
 	BanffTimes = map[uint32]time.Time{
 		constants.MainnetID:    time.Date(2022, time.October, 18, 16, 0, 0, 0, time.UTC),
-		constants.FlareID:      time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
-		constants.CostwoID:     time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
-		constants.StagingID:    time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
+		constants.FlareID:      time.Date(2024, time.December, 17, 15, 0, 0, 0, time.UTC),
+		constants.CostwoID:     time.Date(2024, time.November, 26, 15, 0, 0, 0, time.UTC),
+		constants.StagingID:    time.Date(2024, time.November, 5, 15, 0, 0, 0, time.UTC),
 		constants.LocalFlareID: time.Date(2024, time.May, 29, 9, 15, 0, 0, time.UTC),
-		constants.CostonID:     time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
-		constants.SongbirdID:   time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
-		constants.LocalID:      time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
+		constants.CostonID:     time.Date(2025, time.January, 7, 15, 0, 0, 0, time.UTC),
+		constants.SongbirdID:   time.Date(2025, time.January, 28, 15, 0, 0, 0, time.UTC),
+		constants.LocalID:      time.Date(2024, time.November, 5, 15, 0, 0, 0, time.UTC),
 	}
 	BanffDefaultTime = time.Date(2020, time.December, 5, 5, 0, 0, 0, time.UTC)
 
@@ -137,6 +138,7 @@ var (
 		constants.LocalFlareID: time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
 		constants.CostonID:     time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
 		constants.SongbirdID:   time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
+		constants.LocalID:      time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
 	}
 	XChainMigrationDefaultTime = time.Date(2020, time.December, 5, 5, 0, 0, 0, time.UTC)
 )
