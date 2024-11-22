@@ -1762,7 +1762,7 @@ func validateTxData(tx *types.Transaction) error {
 		}
 	}
 	// Check if transaction is on allow list for FTSO v1 contract
-	if *to == prioritisedFTSOContractAddress && (tx.ChainId().Cmp(params.FlareChainID) == 0 || tx.ChainId().Cmp(params.CostwoChainID) == 0) || tx.ChainId().Cmp(params.LocalFlareChainID) == 0 {
+	if *to == prioritisedFTSOContractAddress && (tx.ChainId().Cmp(params.FlareChainID) == 0 || tx.ChainId().Cmp(params.CostwoChainID) == 0 || tx.ChainId().Cmp(params.LocalFlareChainID) == 0) {
 		isValidDaemon := checkDataPrefix(tx.Data(), prioritisedFTSOContractDataPrefixesFlareNetworks)
 		additionalAllowedMethodIdentifiers := [][4]byte{
 			{0x67, 0xfc, 0x40, 0x29}, // cancelGovernanceCall
