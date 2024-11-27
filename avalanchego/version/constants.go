@@ -14,7 +14,7 @@ var (
 	Current = &Semantic{
 		Major: 1,
 		Minor: 9,
-		Patch: 0,
+		Patch: 1,
 	}
 	CurrentApp = &Application{
 		Major: Current.Major,
@@ -35,7 +35,7 @@ var (
 	CurrentSgb = &Semantic{
 		Major: 0,
 		Minor: 7,
-		Patch: 0,
+		Patch: 1,
 	}
 	CurrentSgbApp = &Application{
 		Major: CurrentSgb.Major,
@@ -44,8 +44,8 @@ var (
 	}
 	MinimumCompatibleSgbVersion = &Application{
 		Major: 0,
-		Minor: 6,
-		Patch: 6,
+		Minor: 7,
+		Patch: 0,
 	}
 	PrevMinimumCompatibleSgbVersion = &Application{
 		Major: 0,
