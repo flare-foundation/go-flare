@@ -2,7 +2,7 @@
 
 go-flare is a modified version of [avalanchego@v1.9.0](https://github.com/ava-labs/avalanchego/releases/tag/v1.9.0) and [coreth@v0.11.0](https://github.com/ava-labs/coreth/releases/tag/v0.11.0), incorporating specific features for Flare and Songbird networks. These features include prioritized contract handling and the invocation of the daemon contract.
 
-All nodes should upgrade to the version 1.9.0 **before the following dates**:
+All nodes should upgrade to the version 1.9.1 **before the following dates**:
 - Coston2 network: November 26, 2024 at 12:00:00 UTC
 - Flare network: December 17, 2024 at 12:00:00 UTC
 - Coston network: January 7, 2025 at 12:00:00 UTC
