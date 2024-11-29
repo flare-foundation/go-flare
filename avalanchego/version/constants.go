@@ -197,7 +197,7 @@ func GetCompatibility(networkID uint32) Compatibility {
 		return NewCompatibility(
 			CurrentSgbApp,
 			MinimumCompatibleSgbVersion,
-			GetApricotPhase5Time(networkID),
+			GetBanffTime(networkID),
 			PrevMinimumCompatibleSgbVersion,
 		)
 	}
