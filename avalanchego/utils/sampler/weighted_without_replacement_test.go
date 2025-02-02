@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package sampler
@@ -6,10 +6,11 @@ package sampler
 import (
 	"fmt"
 	"math"
-	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"golang.org/x/exp/slices"
 )
 
 var (
@@ -161,7 +162,7 @@ func WeightedWithoutReplacementDistributionTest(
 	indices, err := s.Sample(4)
 	require.NoError(t, err)
 
-	sort.Ints(indices)
+	slices.Sort(indices)
 	require.Equal(
 		t,
 		[]int{0, 1, 2, 2},

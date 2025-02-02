@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package ids
@@ -15,7 +15,7 @@ var AliasTests = []func(require *require.Assertions, r AliaserReader, w AliaserW
 	AliaserRemoveAliasTest,
 }
 
-func AliaserLookupErrorTest(require *require.Assertions, r AliaserReader, w AliaserWriter) {
+func AliaserLookupErrorTest(require *require.Assertions, r AliaserReader, _ AliaserWriter) {
 	_, err := r.Lookup("Batman")
 	require.Error(err, "expected an error due to missing alias")
 }
@@ -30,7 +30,7 @@ func AliaserLookupTest(require *require.Assertions, r AliaserReader, w AliaserWr
 	require.Equal(id, res)
 }
 
-func AliaserAliasesEmptyTest(require *require.Assertions, r AliaserReader, w AliaserWriter) {
+func AliaserAliasesEmptyTest(require *require.Assertions, r AliaserReader, _ AliaserWriter) {
 	id := ID{'J', 'a', 'm', 'e', 's', ' ', 'G', 'o', 'r', 'd', 'o', 'n'}
 
 	aliases, err := r.Aliases(id)
@@ -71,7 +71,7 @@ func AliaserPrimaryAliasTest(require *require.Assertions, r AliaserReader, w Ali
 	require.Equal(expected, res)
 }
 
-func AliaserAliasClashTest(require *require.Assertions, r AliaserReader, w AliaserWriter) {
+func AliaserAliasClashTest(require *require.Assertions, _ AliaserReader, w AliaserWriter) {
 	id1 := ID{'B', 'r', 'u', 'c', 'e', ' ', 'W', 'a', 'y', 'n', 'e'}
 	id2 := ID{'D', 'i', 'c', 'k', ' ', 'G', 'r', 'a', 'y', 's', 'o', 'n'}
 	err := w.Alias(id1, "Batman")

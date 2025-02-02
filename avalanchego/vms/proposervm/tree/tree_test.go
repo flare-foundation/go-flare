@@ -1,9 +1,10 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package tree
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -42,7 +43,7 @@ func TestAcceptSingleBlock(t *testing.T) {
 	_, contains = tr.Get(block)
 	require.True(contains)
 
-	err := tr.Accept(block)
+	err := tr.Accept(context.Background(), block)
 	require.NoError(err)
 	require.Equal(choices.Accepted, block.Status())
 }
@@ -77,7 +78,7 @@ func TestAcceptBlockConflict(t *testing.T) {
 	_, contains = tr.Get(blockToReject)
 	require.True(contains)
 
-	err := tr.Accept(blockToAccept)
+	err := tr.Accept(context.Background(), blockToAccept)
 	require.NoError(err)
 	require.Equal(choices.Accepted, blockToAccept.Status())
 	require.Equal(choices.Rejected, blockToReject.Status())
@@ -125,7 +126,7 @@ func TestAcceptChainConflict(t *testing.T) {
 	_, contains = tr.Get(blockToRejectChild)
 	require.True(contains)
 
-	err := tr.Accept(blockToAccept)
+	err := tr.Accept(context.Background(), blockToAccept)
 	require.NoError(err)
 	require.Equal(choices.Accepted, blockToAccept.Status())
 	require.Equal(choices.Rejected, blockToReject.Status())

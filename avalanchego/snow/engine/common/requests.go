@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package common
@@ -86,7 +86,9 @@ func (r *Requests) RemoveAny(containerID ids.ID) bool {
 }
 
 // Len returns the total number of outstanding requests.
-func (r *Requests) Len() int { return len(r.idToReq) }
+func (r *Requests) Len() int {
+	return len(r.idToReq)
+}
 
 // Contains returns true if there is an outstanding request for the container
 // ID.

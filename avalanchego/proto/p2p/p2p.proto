@@ -17,8 +17,12 @@ message Message {
     // This field is only set if the message type supports compression.
     bytes compressed_gzip = 1;
 
+    // zstd-compressed bytes of a "p2p.Message" whose "oneof" "message" field is
+    // NOT compressed_* BUT one of the message types (e.g. ping, pong, etc.).
+    // This field is only set if the message type supports compression.
+    bytes compressed_zstd = 2;
+
     // Fields lower than 10 are reserved for other compression algorithms.
-    // TODO: support COMPRESS_ZSTD
     // TODO: support COMPRESS_SNAPPY
 
     // Network messages:
@@ -52,6 +56,8 @@ message Message {
     AppRequest app_request = 30;
     AppResponse app_response = 31;
     AppGossip app_gossip = 32;
+
+    PeerListAck peer_list_ack = 33;
   }
 }
 
@@ -62,10 +68,21 @@ message Message {
 // uptime value of the message sender in "pong" message.
 message Ping {}
 
-// Contains the uptime of the message receiver (remote peer)
+// Contains subnet id and the related observed subnet uptime of the message
+// receiver (remote peer).
+message SubnetUptime {
+  bytes subnet_id = 1;
+  uint32 uptime = 2;
+}
+
+// Contains the uptime percentage of the message receiver (remote peer)
 // from the sender's point of view, in response to "ping" message.
+// Uptimes are expected to be provided as integers ranging in [0, 100].
 message Pong {
-  uint32 uptime_pct = 1;
+  // uptime is the primary network uptime percentage.
+  uint32 uptime = 1;
+  // subnet_uptimes contains subnet uptime percentages.
+  repeated SubnetUptime subnet_uptimes = 2;
 }
 
 // The first outbound message that the local node sends to its remote peer
@@ -93,6 +110,7 @@ message ClaimedIpPort {
   uint32 ip_port = 3;
   uint64 timestamp = 4;
   bytes signature = 5;
+  bytes tx_id = 6;
 }
 
 // Message that contains a list of peer information (IP, certs, etc.)
@@ -104,6 +122,26 @@ message ClaimedIpPort {
 // of the remote peer.
 message PeerList {
   repeated ClaimedIpPort claimed_ip_ports = 1;
+}
+
+// "peer_ack" is sent in response to a "peer_list" message. The "tx_id" should
+// correspond to a "tx_id" in the "peer_list" message. The sender should set
+// "timestamp" to be the latest known timestamp of a signed IP corresponding to
+// the nodeID of "tx_id".
+//
+// Upon receipt, the "tx_id" and "timestamp" will determine if the receiptent
+// can forgo future gossip of the node's IP to the sender of this message.
+message PeerAck {
+  bytes tx_id = 1;
+  uint64 timestamp = 2;
+}
+
+// Message that responds to a peer_list message containing the AddValidatorTxIDs
+// from the peer_list message that we currently have in our validator set.
+message PeerListAck {
+  reserved 1; // deprecated; used to be tx_ids
+
+  repeated PeerAck peer_acks = 2;
 }
 
 message GetStateSummaryFrontier {
@@ -131,6 +169,12 @@ message AcceptedStateSummary {
   repeated bytes summary_ids = 3;
 }
 
+enum EngineType {
+  ENGINE_TYPE_UNSPECIFIED = 0;
+  ENGINE_TYPE_AVALANCHE = 1;
+  ENGINE_TYPE_SNOWMAN = 2;
+}
+
 // Message to request for the accepted frontier of the "remote" peer.
 // For instance, the accepted frontier of X-chain DAG is the set of
 // accepted vertices that do not have any accepted descendants (i.e., frontier).
@@ -144,6 +188,7 @@ message GetAcceptedFrontier {
   bytes chain_id = 1;
   uint32 request_id = 2;
   uint64 deadline = 3;
+  EngineType engine_type = 4;
 }
 
 // Message that contains the list of accepted frontier in response to
@@ -152,6 +197,8 @@ message GetAcceptedFrontier {
 //
 // See "snow/engine/common/bootstrapper.go#AcceptedFrontier".
 message AcceptedFrontier {
+  reserved 4; // Until Cortina upgrade is activated
+
   bytes chain_id = 1;
   uint32 request_id = 2;
   repeated bytes container_ids = 3;
@@ -169,6 +216,7 @@ message GetAccepted {
   uint32 request_id = 2;
   uint64 deadline = 3;
   repeated bytes container_ids = 4;
+  EngineType engine_type = 5;
 }
 
 // Message that contains the list of accepted block/vertex IDs in response to
@@ -179,6 +227,8 @@ message GetAccepted {
 // See "snow/engine/avalanche#GetAccepted" and "SendAccepted".
 // See "snow/engine/common/bootstrapper.go#Accepted".
 message Accepted {
+  reserved 4; // Until Cortina upgrade is activated
+
   bytes chain_id = 1;
   uint32 request_id = 2;
   repeated bytes container_ids = 3;
@@ -195,6 +245,7 @@ message GetAncestors {
   uint32 request_id = 2;
   uint64 deadline = 3;
   bytes container_id = 4;
+  EngineType engine_type = 5;
 }
 
 // Message that contains the container bytes of the ancestors
@@ -203,6 +254,8 @@ message GetAncestors {
 // On receiving "ancestors", the engine parses the containers and queues them
 // to be accepted once we've received the entire chain history.
 message Ancestors {
+  reserved 4; // Until Cortina upgrade is activated
+
   bytes chain_id = 1;
   uint32 request_id = 2;
   repeated bytes containers = 3;
@@ -217,6 +270,7 @@ message Get {
   uint32 request_id = 2;
   uint64 deadline = 3;
   bytes container_id = 4;
+  EngineType engine_type = 5;
 }
 
 // Message that contains the container ID and its bytes in response to "get".
@@ -226,8 +280,7 @@ message Put {
   bytes chain_id = 1;
   uint32 request_id = 2;
   bytes container = 3;
-
-// NOTE: "container_id" is deprecated in packer based serializer
+  EngineType engine_type = 4;
 }
 
 // Message that contains a preferred container ID and its container bytes
@@ -244,8 +297,7 @@ message PushQuery {
   uint32 request_id = 2;
   uint64 deadline = 3;
   bytes container = 4;
-
-// NOTE: "container_id" is deprecated in packer based serializer
+  EngineType engine_type = 5;
 }
 
 // Message that contains a preferred container ID to query other peers
@@ -258,6 +310,7 @@ message PullQuery {
   uint32 request_id = 2;
   uint64 deadline = 3;
   bytes container_id = 4;
+  EngineType engine_type = 5;
 }
 
 // Message that contains the votes/preferences of the local node,
@@ -267,9 +320,16 @@ message PullQuery {
 // to the consensus. If the received container is not found, it responds back with
 // "get" message to fetch the missing container from the remote peer.
 message Chits {
+  reserved 5; // Until Cortina upgrade is activated
+
   bytes chain_id = 1;
   uint32 request_id = 2;
-  repeated bytes container_ids = 3;
+  // Represents the current preferred frontier.
+  // TODO: Remove `repeated` once all chains are running Snowman.
+  repeated bytes preferred_container_ids = 3;
+  // Represents the current accepted frontier.
+  // TODO: Remove `repeated` once all chains are running Snowman.
+  repeated bytes accepted_container_ids = 4;
 }
 
 message AppRequest {

@@ -19,6 +19,7 @@ const (
 	AvalancheAtomicTxFee = units.MilliAvax
 
 	ApricotPhase1GasLimit uint64 = 8_000_000
+	CortinaGasLimit       uint64 = 15_000_000
 
 	// Revert to the default gas limit after the Songbird transition due to re-enabled transfer between chains
 	SgbTransitionGasLimit    uint64 = 8_000_000

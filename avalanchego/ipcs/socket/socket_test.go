@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package socket
@@ -47,11 +47,11 @@ func TestSocketSendAndReceive(t *testing.T) {
 
 	// Test max message size
 	client.SetMaxMessageSize(msgLen)
-	if _, err = client.Recv(); err != nil {
+	if _, err := client.Recv(); err != nil {
 		t.Fatal("Failed to receive from socket:", err.Error())
 	}
 	client.SetMaxMessageSize(msgLen - 1)
-	if _, err = client.Recv(); err != ErrMessageTooLarge {
+	if _, err := client.Recv(); err != ErrMessageTooLarge {
 		t.Fatal("Should have received message too large error, got:", err)
 	}
 }

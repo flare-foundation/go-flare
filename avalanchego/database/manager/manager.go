@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package manager
@@ -29,7 +29,7 @@ var (
 	errNoDBs                 = errors.New("no dbs given")
 )
 
-var _ Manager = &manager{}
+var _ Manager = (*manager)(nil)
 
 type Manager interface {
 	// Current returns the database with the current database version.
@@ -180,7 +180,7 @@ func new(
 
 		return filepath.SkipDir
 	})
-	SortDescending(manager.databases)
+	utils.Sort(manager.databases)
 
 	// If an error occurred walking [dbDirPath] close the
 	// database manager and return the original error here.
@@ -210,8 +210,8 @@ func NewManagerFromDBs(dbs []*VersionedDatabase) (Manager, error) {
 	if len(dbs) == 0 {
 		return nil, errNoDBs
 	}
-	SortDescending(dbs)
-	sortedAndUnique := utils.IsSortedAndUnique(innerSortDescendingVersionedDBs(dbs))
+	utils.Sort(dbs)
+	sortedAndUnique := utils.IsSortedAndUniqueSortable(dbs)
 	if !sortedAndUnique {
 		return nil, errNonSortedAndUniqueDBs
 	}
@@ -220,7 +220,9 @@ func NewManagerFromDBs(dbs []*VersionedDatabase) (Manager, error) {
 	}, nil
 }
 
-func (m *manager) Current() *VersionedDatabase { return m.databases[0] }
+func (m *manager) Current() *VersionedDatabase {
+	return m.databases[0]
+}
 
 func (m *manager) Previous() (*VersionedDatabase, bool) {
 	if len(m.databases) < 2 {
@@ -229,7 +231,9 @@ func (m *manager) Previous() (*VersionedDatabase, bool) {
 	return m.databases[1], true
 }
 
-func (m *manager) GetDatabases() []*VersionedDatabase { return m.databases }
+func (m *manager) GetDatabases() []*VersionedDatabase {
+	return m.databases
+}
 
 func (m *manager) Close() error {
 	errs := wrappers.Errs{}

@@ -1,9 +1,10 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package corruptabledb
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -13,11 +14,21 @@ import (
 	"github.com/ava-labs/avalanchego/database/memdb"
 )
 
+var errTest = errors.New("non-nil error")
+
 func TestInterface(t *testing.T) {
 	for _, test := range database.Tests {
 		baseDB := memdb.New()
 		db := New(baseDB)
 		test(t, db)
+	}
+}
+
+func FuzzInterface(f *testing.F) {
+	for _, test := range database.FuzzTests {
+		baseDB := memdb.New()
+		db := New(baseDB)
+		test(f, db)
 	}
 }
 
@@ -50,19 +61,18 @@ func TestCorruption(t *testing.T) {
 			return corruptableBatch.Write()
 		},
 		"corrupted healthcheck": func(db database.Database) error {
-			_, err := db.HealthCheck()
+			_, err := db.HealthCheck(context.Background())
 			return err
 		},
 	}
 	baseDB := memdb.New()
 	// wrap this db
 	corruptableDB := New(baseDB)
-	initError := errors.New("corruption error")
-	_ = corruptableDB.handleError(initError)
+	_ = corruptableDB.handleError(errTest)
 	for name, testFn := range tests {
 		t.Run(name, func(tt *testing.T) {
 			err := testFn(corruptableDB)
-			require.ErrorIsf(tt, err, initError, "not received the corruption error")
+			require.ErrorIsf(tt, err, errTest, "not received the corruption error")
 		})
 	}
 }

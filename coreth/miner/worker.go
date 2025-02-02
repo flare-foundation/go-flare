@@ -40,19 +40,19 @@ import (
 	"github.com/ava-labs/avalanchego/utils/units"
 	"github.com/ava-labs/coreth/consensus"
 	"github.com/ava-labs/coreth/consensus/dummy"
-	"github.com/ava-labs/coreth/consensus/misc"
 	"github.com/ava-labs/coreth/core"
 	"github.com/ava-labs/coreth/core/state"
 	"github.com/ava-labs/coreth/core/types"
 	"github.com/ava-labs/coreth/params"
-	"github.com/ava-labs/coreth/vmerrs"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
 )
 
 const (
-	targetTxsSize = 192 * units.KiB
+	// Leaves 256 KBs for other sections of the block (limit is 2MB).
+	// This should suffice for atomic txs, proposervm header, and serialization overhead.
+	targetTxsSize = 1792 * units.KiB
 )
 
 // environment is the worker's current environment and holds all of the current state information.
@@ -129,23 +129,27 @@ func (w *worker) commitNewWork() (*types.Block, error) {
 	}
 
 	var gasLimit uint64
-	if w.chainConfig.IsSongbirdCode() {
-		if w.chainConfig.IsSongbirdTransition(big.NewInt(timestamp)) {
-			gasLimit = params.SgbTransitionGasLimit
-		} else if w.chainConfig.IsApricotPhase5(big.NewInt(timestamp)) {
-			gasLimit = params.SgbApricotPhase5GasLimit
-		} else if w.chainConfig.IsApricotPhase1(big.NewInt(timestamp)) {
-			gasLimit = params.ApricotPhase1GasLimit
-		} else {
-			gasLimit = core.CalcGasLimit(parent.GasUsed(), parent.GasLimit(), params.ApricotPhase1GasLimit, params.ApricotPhase1GasLimit)
-		}
+	if w.chainConfig.IsCortina(big.NewInt(timestamp)) {
+		gasLimit = params.CortinaGasLimit
 	} else {
-		if w.chainConfig.IsApricotPhase1(big.NewInt(timestamp)) {
-			gasLimit = params.ApricotPhase1GasLimit
+		if w.chainConfig.IsSongbirdCode() {
+			if w.chainConfig.IsSongbirdTransition(big.NewInt(timestamp)) {
+				gasLimit = params.SgbTransitionGasLimit
+			} else if w.chainConfig.IsApricotPhase5(big.NewInt(timestamp)) {
+				gasLimit = params.SgbApricotPhase5GasLimit
+			} else if w.chainConfig.IsApricotPhase1(big.NewInt(timestamp)) {
+				gasLimit = params.ApricotPhase1GasLimit
+			} else {
+				gasLimit = core.CalcGasLimit(parent.GasUsed(), parent.GasLimit(), params.ApricotPhase1GasLimit, params.ApricotPhase1GasLimit)
+			}
 		} else {
-			// The gas limit is set in phase1 to ApricotPhase1GasLimit because the ceiling and floor were set to the same value
-			// such that the gas limit converged to it. Since this is hardbaked now, we remove the ability to configure it.
-			gasLimit = core.CalcGasLimit(parent.GasUsed(), parent.GasLimit(), params.ApricotPhase1GasLimit, params.ApricotPhase1GasLimit)
+			if w.chainConfig.IsApricotPhase1(big.NewInt(timestamp)) {
+				gasLimit = params.ApricotPhase1GasLimit
+			} else {
+				// The gas limit is set in phase1 to ApricotPhase1GasLimit because the ceiling and floor were set to the same value
+				// such that the gas limit converged to it. Since this is hardbaked now, we remove the ability to configure it.
+				gasLimit = core.CalcGasLimit(parent.GasUsed(), parent.GasLimit(), params.ApricotPhase1GasLimit, params.ApricotPhase1GasLimit)
+			}
 		}
 	}
 	num := parent.Number()
@@ -176,9 +180,6 @@ func (w *worker) commitNewWork() (*types.Block, error) {
 	env, err := w.createCurrentEnvironment(parent, header, tstart)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new current environment: %w", err)
-	}
-	if w.chainConfig.DAOForkSupport && w.chainConfig.DAOForkBlock != nil && w.chainConfig.DAOForkBlock.Cmp(header.Number) == 0 {
-		misc.ApplyDAOHardFork(env.state)
 	}
 	// Configure any stateful precompiles that should go into effect during this block.
 	w.chainConfig.CheckConfigurePrecompiles(new(big.Int).SetUint64(parent.Time()), types.NewBlockWithHeader(header), env.state)
@@ -300,10 +301,6 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 			log.Trace("Skipping unsupported transaction type", "sender", from, "type", tx.Type())
 			txs.Pop()
 
-		case errors.Is(err, vmerrs.ErrToAddrProhibitedSoft):
-			log.Warn("Tx dropped: failed verification", "tx", tx.Hash(), "sender", from, "data", tx.Data(), "err", err)
-			w.eth.TxPool().RemoveTx(tx.Hash())
-			txs.Pop()
 		default:
 			// Strange error, discard the transaction and get the next in line (note, the
 			// nonce-too-high clause will prevent us from executing in vain).

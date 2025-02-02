@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package state
@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	_ Diff = &diff{}
+	_ Diff = (*diff)(nil)
 
 	ErrMissingParentState = errors.New("missing parent state")
 )
@@ -24,7 +24,7 @@ var (
 type Diff interface {
 	Chain
 
-	Apply(State)
+	Apply(State) error
 }
 
 type diff struct {
@@ -39,7 +39,9 @@ type diff struct {
 	currentSupply map[ids.ID]uint64
 
 	currentStakerDiffs diffStakers
-	pendingStakerDiffs diffStakers
+	// map of subnetID -> nodeID -> total accrued delegatee rewards
+	modifiedDelegateeRewards map[ids.ID]map[ids.NodeID]uint64
+	pendingStakerDiffs       diffStakers
 
 	addedSubnets []*txs.Tx
 	// Subnet ID --> Tx that transforms the subnet
@@ -49,19 +51,12 @@ type diff struct {
 	addedChains  map[ids.ID][]*txs.Tx
 	cachedChains map[ids.ID][]*txs.Tx
 
-	// map of txID -> []*UTXO
 	addedRewardUTXOs map[ids.ID][]*avax.UTXO
 
-	// map of txID -> {*txs.Tx, Status}
 	addedTxs map[ids.ID]*txAndStatus
 
 	// map of modified UTXOID -> *UTXO if the UTXO is nil, it has been removed
-	modifiedUTXOs map[ids.ID]*utxoModification
-}
-
-type utxoModification struct {
-	utxoID ids.ID
-	utxo   *avax.UTXO
+	modifiedUTXOs map[ids.ID]*avax.UTXO
 }
 
 func NewDiff(
@@ -119,20 +114,45 @@ func (d *diff) SetCurrentSupply(subnetID ids.ID, currentSupply uint64) {
 func (d *diff) GetCurrentValidator(subnetID ids.ID, nodeID ids.NodeID) (*Staker, error) {
 	// If the validator was modified in this diff, return the modified
 	// validator.
-	newValidator, ok := d.currentStakerDiffs.GetValidator(subnetID, nodeID)
-	if ok {
-		if newValidator == nil {
-			return nil, database.ErrNotFound
-		}
+	newValidator, status := d.currentStakerDiffs.GetValidator(subnetID, nodeID)
+	switch status {
+	case added:
 		return newValidator, nil
+	case deleted:
+		return nil, database.ErrNotFound
+	default:
+		// If the validator wasn't modified in this diff, ask the parent state.
+		parentState, ok := d.stateVersions.GetState(d.parentID)
+		if !ok {
+			return nil, fmt.Errorf("%w: %s", ErrMissingParentState, d.parentID)
+		}
+		return parentState.GetCurrentValidator(subnetID, nodeID)
 	}
+}
 
-	// If the validator wasn't modified in this diff, ask the parent state.
+func (d *diff) SetDelegateeReward(subnetID ids.ID, nodeID ids.NodeID, amount uint64) error {
+	if d.modifiedDelegateeRewards == nil {
+		d.modifiedDelegateeRewards = make(map[ids.ID]map[ids.NodeID]uint64)
+	}
+	nodes, ok := d.modifiedDelegateeRewards[subnetID]
+	if !ok {
+		nodes = make(map[ids.NodeID]uint64)
+		d.modifiedDelegateeRewards[subnetID] = nodes
+	}
+	nodes[nodeID] = amount
+	return nil
+}
+
+func (d *diff) GetDelegateeReward(subnetID ids.ID, nodeID ids.NodeID) (uint64, error) {
+	amount, modified := d.modifiedDelegateeRewards[subnetID][nodeID]
+	if modified {
+		return amount, nil
+	}
 	parentState, ok := d.stateVersions.GetState(d.parentID)
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrMissingParentState, d.parentID)
+		return 0, fmt.Errorf("%w: %s", ErrMissingParentState, d.parentID)
 	}
-	return parentState.GetCurrentValidator(subnetID, nodeID)
+	return parentState.GetDelegateeReward(subnetID, nodeID)
 }
 
 func (d *diff) PutCurrentValidator(staker *Staker) {
@@ -182,20 +202,20 @@ func (d *diff) GetCurrentStakerIterator() (StakerIterator, error) {
 func (d *diff) GetPendingValidator(subnetID ids.ID, nodeID ids.NodeID) (*Staker, error) {
 	// If the validator was modified in this diff, return the modified
 	// validator.
-	newValidator, ok := d.pendingStakerDiffs.GetValidator(subnetID, nodeID)
-	if ok {
-		if newValidator == nil {
-			return nil, database.ErrNotFound
-		}
+	newValidator, status := d.pendingStakerDiffs.GetValidator(subnetID, nodeID)
+	switch status {
+	case added:
 		return newValidator, nil
+	case deleted:
+		return nil, database.ErrNotFound
+	default:
+		// If the validator wasn't modified in this diff, ask the parent state.
+		parentState, ok := d.stateVersions.GetState(d.parentID)
+		if !ok {
+			return nil, fmt.Errorf("%w: %s", ErrMissingParentState, d.parentID)
+		}
+		return parentState.GetPendingValidator(subnetID, nodeID)
 	}
-
-	// If the validator wasn't modified in this diff, ask the parent state.
-	parentState, ok := d.stateVersions.GetState(d.parentID)
-	if !ok {
-		return nil, fmt.Errorf("%w: %s", ErrMissingParentState, d.parentID)
-	}
-	return parentState.GetPendingValidator(subnetID, nodeID)
 }
 
 func (d *diff) PutPendingValidator(staker *Staker) {
@@ -418,52 +438,44 @@ func (d *diff) GetUTXO(utxoID ids.ID) (*avax.UTXO, error) {
 		}
 		return parentState.GetUTXO(utxoID)
 	}
-	if utxo.utxo == nil {
+	if utxo == nil {
 		return nil, database.ErrNotFound
 	}
-	return utxo.utxo, nil
+	return utxo, nil
 }
 
 func (d *diff) AddUTXO(utxo *avax.UTXO) {
-	newUTXO := &utxoModification{
-		utxoID: utxo.InputID(),
-		utxo:   utxo,
-	}
 	if d.modifiedUTXOs == nil {
-		d.modifiedUTXOs = map[ids.ID]*utxoModification{
-			utxo.InputID(): newUTXO,
+		d.modifiedUTXOs = map[ids.ID]*avax.UTXO{
+			utxo.InputID(): utxo,
 		}
 	} else {
-		d.modifiedUTXOs[utxo.InputID()] = newUTXO
+		d.modifiedUTXOs[utxo.InputID()] = utxo
 	}
 }
 
 func (d *diff) DeleteUTXO(utxoID ids.ID) {
-	newUTXO := &utxoModification{
-		utxoID: utxoID,
-	}
 	if d.modifiedUTXOs == nil {
-		d.modifiedUTXOs = map[ids.ID]*utxoModification{
-			utxoID: newUTXO,
+		d.modifiedUTXOs = map[ids.ID]*avax.UTXO{
+			utxoID: nil,
 		}
 	} else {
-		d.modifiedUTXOs[utxoID] = newUTXO
+		d.modifiedUTXOs[utxoID] = nil
 	}
 }
 
-func (d *diff) Apply(baseState State) {
+func (d *diff) Apply(baseState State) error {
 	baseState.SetTimestamp(d.timestamp)
 	for subnetID, supply := range d.currentSupply {
 		baseState.SetCurrentSupply(subnetID, supply)
 	}
 	for _, subnetValidatorDiffs := range d.currentStakerDiffs.validatorDiffs {
 		for _, validatorDiff := range subnetValidatorDiffs {
-			if validatorDiff.validatorModified {
-				if validatorDiff.validatorDeleted {
-					baseState.DeleteCurrentValidator(validatorDiff.validator)
-				} else {
-					baseState.PutCurrentValidator(validatorDiff.validator)
-				}
+			switch validatorDiff.validatorStatus {
+			case added:
+				baseState.PutCurrentValidator(validatorDiff.validator)
+			case deleted:
+				baseState.DeleteCurrentValidator(validatorDiff.validator)
 			}
 
 			addedDelegatorIterator := NewTreeIterator(validatorDiff.addedDelegators)
@@ -477,14 +489,20 @@ func (d *diff) Apply(baseState State) {
 			}
 		}
 	}
+	for subnetID, nodes := range d.modifiedDelegateeRewards {
+		for nodeID, amount := range nodes {
+			if err := baseState.SetDelegateeReward(subnetID, nodeID, amount); err != nil {
+				return err
+			}
+		}
+	}
 	for _, subnetValidatorDiffs := range d.pendingStakerDiffs.validatorDiffs {
 		for _, validatorDiff := range subnetValidatorDiffs {
-			if validatorDiff.validatorModified {
-				if validatorDiff.validatorDeleted {
-					baseState.DeletePendingValidator(validatorDiff.validator)
-				} else {
-					baseState.PutPendingValidator(validatorDiff.validator)
-				}
+			switch validatorDiff.validatorStatus {
+			case added:
+				baseState.PutPendingValidator(validatorDiff.validator)
+			case deleted:
+				baseState.DeletePendingValidator(validatorDiff.validator)
 			}
 
 			addedDelegatorIterator := NewTreeIterator(validatorDiff.addedDelegators)
@@ -517,11 +535,12 @@ func (d *diff) Apply(baseState State) {
 			baseState.AddRewardUTXO(txID, utxo)
 		}
 	}
-	for _, utxo := range d.modifiedUTXOs {
-		if utxo.utxo != nil {
-			baseState.AddUTXO(utxo.utxo)
+	for utxoID, utxo := range d.modifiedUTXOs {
+		if utxo != nil {
+			baseState.AddUTXO(utxo)
 		} else {
-			baseState.DeleteUTXO(utxo.utxoID)
+			baseState.DeleteUTXO(utxoID)
 		}
 	}
+	return nil
 }

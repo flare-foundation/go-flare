@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package formatting
@@ -120,4 +120,18 @@ func TestDecodeNil(t *testing.T) {
 	if result, err := Decode(Hex, ""); err != nil || len(result) != 0 {
 		t.Fatal("decoding the empty string should return an empty byte slice")
 	}
+}
+
+func FuzzEncodeDecode(f *testing.F) {
+	f.Fuzz(func(t *testing.T, bytes []byte) {
+		require := require.New(t)
+
+		str, err := Encode(Hex, bytes)
+		require.NoError(err)
+
+		decoded, err := Decode(Hex, str)
+		require.NoError(err)
+
+		require.Equal(bytes, decoded)
+	})
 }

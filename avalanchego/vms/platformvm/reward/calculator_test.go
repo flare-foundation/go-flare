@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package reward
@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ava-labs/avalanchego/utils/units"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -34,15 +35,13 @@ func TestLongerDurationBonus(t *testing.T) {
 		r := c.Calculate(shortDuration, shortBalance, 359*units.MegaAvax+shortBalance)
 		shortBalance += r
 	}
-	r := c.Calculate(totalDuration%shortDuration, shortBalance, 359*units.MegaAvax+shortBalance)
-	shortBalance += r
+	reward := c.Calculate(totalDuration%shortDuration, shortBalance, 359*units.MegaAvax+shortBalance)
+	shortBalance += reward
 
 	longBalance := units.KiloAvax
 	longBalance += c.Calculate(totalDuration, longBalance, 359*units.MegaAvax+longBalance)
 
-	if shortBalance != longBalance {
-		t.Fatalf("non-zero rewards")
-	}
+	require.Equal(t, shortBalance, longBalance)
 }
 
 func TestRewards(t *testing.T) {
@@ -123,56 +122,12 @@ func TestRewards(t *testing.T) {
 			test.expectedReward,
 		)
 		t.Run(name, func(t *testing.T) {
-			r := c.Calculate(
+			reward := c.Calculate(
 				test.duration,
 				test.stakeAmount,
 				test.existingAmount,
 			)
-			if r != test.expectedReward {
-				t.Fatalf("expected %d; got %d", test.expectedReward, r)
-			}
+			require.Equal(t, test.expectedReward, reward)
 		})
 	}
 }
-
-// func TestRewardsOverflow(t *testing.T) {
-// 	require := require.New(t)
-
-// 	var (
-// 		maxSupply     uint64 = math.MaxUint64
-// 		initialSupply uint64 = 1
-// 	)
-// 	c := NewCalculator(Config{
-// 		MaxConsumptionRate: PercentDenominator,
-// 		MinConsumptionRate: PercentDenominator,
-// 		MintingPeriod:      defaultMinStakingDuration,
-// 		SupplyCap:          maxSupply,
-// 	})
-// 	rewards := c.Calculate(
-// 		defaultMinStakingDuration,
-// 		maxSupply, // The staked amount is larger than the current supply
-// 		initialSupply,
-// 	)
-// 	require.Equal(maxSupply-initialSupply, rewards)
-// }
-
-// func TestRewardsMint(t *testing.T) {
-// 	require := require.New(t)
-
-// 	var (
-// 		maxSupply     uint64 = 1000
-// 		initialSupply uint64 = 1
-// 	)
-// 	c := NewCalculator(Config{
-// 		MaxConsumptionRate: PercentDenominator,
-// 		MinConsumptionRate: PercentDenominator,
-// 		MintingPeriod:      defaultMinStakingDuration,
-// 		SupplyCap:          maxSupply,
-// 	})
-// 	rewards := c.Calculate(
-// 		defaultMinStakingDuration,
-// 		maxSupply, // The staked amount is larger than the current supply
-// 		initialSupply,
-// 	)
-// 	require.Equal(maxSupply-initialSupply, rewards)
-// }

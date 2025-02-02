@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package executor
@@ -9,6 +9,7 @@ import (
 
 	"github.com/ava-labs/avalanchego/chains/atomic"
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/vms/platformvm/blocks"
 	"github.com/ava-labs/avalanchego/vms/platformvm/state"
 	"github.com/ava-labs/avalanchego/vms/platformvm/status"
@@ -17,9 +18,8 @@ import (
 )
 
 var (
-	_ blocks.Visitor = &verifier{}
+	_ blocks.Visitor = (*verifier)(nil)
 
-	errBanffBlockIssuedBeforeFork                 = errors.New("banff block issued before fork")
 	errApricotBlockIssuedAfterFork                = errors.New("apricot block issued after fork")
 	errBanffProposalBlockWithMultipleTransactions = errors.New("BanffProposalBlock contains multiple transactions")
 	errBanffStandardBlockWithoutChanges           = errors.New("BanffStandardBlock performs no state changes")
@@ -196,7 +196,7 @@ func (v *verifier) ApricotAtomicBlock(b *blocks.ApricotAtomicBlock) error {
 
 	if err := b.Tx.Unsigned.Visit(&atomicExecutor); err != nil {
 		txID := b.Tx.ID()
-		v.MarkDropped(txID, err.Error()) // cache tx as dropped
+		v.MarkDropped(txID, err) // cache tx as dropped
 		return fmt.Errorf("tx %s failed semantic verification: %w", txID, err)
 	}
 
@@ -222,7 +222,7 @@ func (v *verifier) ApricotAtomicBlock(b *blocks.ApricotAtomicBlock) error {
 }
 
 func (v *verifier) banffOptionBlock(b blocks.BanffBlock) error {
-	if err := v.banffCommonBlock(b); err != nil {
+	if err := v.commonBlock(b); err != nil {
 		return err
 	}
 
@@ -245,7 +245,7 @@ func (v *verifier) banffOptionBlock(b blocks.BanffBlock) error {
 }
 
 func (v *verifier) banffNonOptionBlock(b blocks.BanffBlock) error {
-	if err := v.banffCommonBlock(b); err != nil {
+	if err := v.commonBlock(b); err != nil {
 		return err
 	}
 
@@ -277,14 +277,6 @@ func (v *verifier) banffNonOptionBlock(b blocks.BanffBlock) error {
 		nextStakerChangeTime,
 		now,
 	)
-}
-
-func (v *verifier) banffCommonBlock(b blocks.BanffBlock) error {
-	timestamp := b.Timestamp()
-	if !v.txExecutorBackend.Config.IsBanffActivated(timestamp) {
-		return fmt.Errorf("%w: timestamp = %s", errBanffBlockIssuedBeforeFork, timestamp)
-	}
-	return v.commonBlock(b)
 }
 
 func (v *verifier) apricotCommonBlock(b blocks.Block) error {
@@ -372,7 +364,7 @@ func (v *verifier) proposalBlock(
 
 	if err := b.Tx.Unsigned.Visit(&txExecutor); err != nil {
 		txID := b.Tx.ID()
-		v.MarkDropped(txID, err.Error()) // cache tx as dropped
+		v.MarkDropped(txID, err) // cache tx as dropped
 		return err
 	}
 
@@ -419,7 +411,7 @@ func (v *verifier) standardBlock(
 		}
 		if err := tx.Unsigned.Visit(&txExecutor); err != nil {
 			txID := tx.ID()
-			v.MarkDropped(txID, err.Error()) // cache tx as dropped
+			v.MarkDropped(txID, err) // cache tx as dropped
 			return err
 		}
 		// ensure it doesn't overlap with current input batch
@@ -470,7 +462,7 @@ func (v *verifier) standardBlock(
 
 // verifyUniqueInputs verifies that the inputs of the given block are not
 // duplicated in any of the parent blocks pinned in memory.
-func (v *verifier) verifyUniqueInputs(block blocks.Block, inputs ids.Set) error {
+func (v *verifier) verifyUniqueInputs(block blocks.Block, inputs set.Set[ids.ID]) error {
 	if inputs.Len() == 0 {
 		return nil
 	}

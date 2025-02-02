@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package executor
@@ -10,7 +10,7 @@ import (
 	"github.com/ava-labs/avalanchego/vms/platformvm/blocks"
 )
 
-var _ blocks.Visitor = &verifier{}
+var _ blocks.Visitor = (*verifier)(nil)
 
 // options supports build new option blocks
 type options struct {

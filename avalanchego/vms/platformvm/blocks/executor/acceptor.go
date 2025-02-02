@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package executor
@@ -17,7 +17,7 @@ import (
 	"github.com/ava-labs/avalanchego/vms/platformvm/state"
 )
 
-var _ blocks.Visitor = &acceptor{}
+var _ blocks.Visitor = (*acceptor)(nil)
 
 // acceptor handles the logic for accepting a block.
 // All errors returned by this struct are fatal and should result in the chain
@@ -26,7 +26,7 @@ type acceptor struct {
 	*backend
 	metrics          metrics.Metrics
 	recentlyAccepted window.Window[ids.ID]
-	bootstrapped     *utils.AtomicBool
+	bootstrapped     *utils.Atomic[bool]
 }
 
 func (a *acceptor) BanffAbortBlock(b *blocks.BanffAbortBlock) error {
@@ -149,7 +149,9 @@ func (a *acceptor) ApricotAtomicBlock(b *blocks.ApricotAtomicBlock) error {
 	}
 
 	// Update the state to reflect the changes made in [onAcceptState].
-	blkState.onAcceptState.Apply(a.state)
+	if err := blkState.onAcceptState.Apply(a.state); err != nil {
+		return err
+	}
 
 	defer a.state.Abort()
 	batch, err := a.state.CommitBatch()
@@ -180,7 +182,7 @@ func (a *acceptor) abortBlock(b blocks.Block) error {
 		return fmt.Errorf("%w: %s", state.ErrMissingParentState, parentID)
 	}
 
-	if a.bootstrapped.GetValue() {
+	if a.bootstrapped.Get() {
 		if parentState.initiallyPreferCommit {
 			a.metrics.MarkOptionVoteLost()
 		} else {
@@ -198,7 +200,7 @@ func (a *acceptor) commitBlock(b blocks.Block) error {
 		return fmt.Errorf("%w: %s", state.ErrMissingParentState, parentID)
 	}
 
-	if a.bootstrapped.GetValue() {
+	if a.bootstrapped.Get() {
 		if parentState.initiallyPreferCommit {
 			a.metrics.MarkOptionVoteWon()
 		} else {
@@ -233,7 +235,9 @@ func (a *acceptor) optionBlock(b, parent blocks.Block) error {
 	if !ok {
 		return fmt.Errorf("couldn't find state of block %s", blkID)
 	}
-	blkState.onAcceptState.Apply(a.state)
+	if err := blkState.onAcceptState.Apply(a.state); err != nil {
+		return err
+	}
 	return a.state.Commit()
 }
 
@@ -271,7 +275,9 @@ func (a *acceptor) standardBlock(b blocks.Block) error {
 	}
 
 	// Update the state to reflect the changes made in [onAcceptState].
-	blkState.onAcceptState.Apply(a.state)
+	if err := blkState.onAcceptState.Apply(a.state); err != nil {
+		return err
+	}
 
 	defer a.state.Abort()
 	batch, err := a.state.CommitBatch()

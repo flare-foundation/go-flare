@@ -35,11 +35,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/VictoriaMetrics/fastcache"
 	"github.com/ava-labs/coreth/core/rawdb"
 	"github.com/ava-labs/coreth/ethdb"
 	"github.com/ava-labs/coreth/metrics"
 	"github.com/ava-labs/coreth/trie"
+	"github.com/ava-labs/coreth/utils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 )
@@ -379,11 +379,13 @@ func (t *Tree) verifyIntegrity(base *diskLayer, waitBuild bool) error {
 // Note: a blockHash is used instead of a state root so that the exact state
 // transition between the two states is well defined. This is intended to
 // prevent the following edge case
-//    A
-//   /  \
-//  B    C
-//       |
-//       D
+//
+//	  A
+//	 /  \
+//	B    C
+//	     |
+//	     D
+//
 // In this scenario, it's possible For (A, B) and (A, C, D) to be two
 // different paths to the resulting state. We use block hashes and parent
 // block hashes to ensure that the exact path through which we flatten
@@ -599,6 +601,7 @@ func diffToDisk(bottom *diffLayer) (*diskLayer, bool, error) {
 	// Mark the original base as stale as we're going to create a new wrapper
 	base.lock.Lock()
 	if base.stale {
+		base.lock.Unlock()
 		return nil, false, ErrStaleParentLayer // we've committed into the same base from two children, boo
 	}
 	base.stale = true
@@ -934,7 +937,7 @@ func NewDiskLayer(diskdb ethdb.KeyValueStore) Snapshot {
 
 		// state sync uses iterators to access data, so this cache is not used.
 		// initializing it out of caution.
-		cache: fastcache.New(32 * 1024),
+		cache: utils.NewMeteredCache(32*1024, "", "", 0),
 	}
 }
 
@@ -944,7 +947,7 @@ func NewTestTree(diskdb ethdb.KeyValueStore, blockHash, root common.Hash) *Tree 
 		diskdb:    diskdb,
 		root:      root,
 		blockHash: blockHash,
-		cache:     fastcache.New(128 * 256),
+		cache:     utils.NewMeteredCache(128*256, "", "", 0),
 		created:   time.Now(),
 	}
 	return &Tree{

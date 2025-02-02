@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package logging
@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-var _ Logger = &log{}
+var _ Logger = (*log)(nil)
 
 type log struct {
 	wrappedCores   []WrappedCore
@@ -53,6 +53,7 @@ func NewLogger(prefix string, wrappedCores ...WrappedCore) Logger {
 	}
 }
 
+// TODO: return errors here
 func (l *log) Write(p []byte) (int, error) {
 	for _, wc := range l.wrappedCores {
 		if wc.WriterDisabled {
@@ -63,9 +64,10 @@ func (l *log) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// TODO: return errors here
 func (l *log) Stop() {
 	for _, wc := range l.wrappedCores {
-		wc.Writer.Close()
+		_ = wc.Writer.Close()
 	}
 }
 
@@ -104,6 +106,12 @@ func (l *log) Verbo(msg string, fields ...zap.Field) {
 	l.log(Verbo, msg, fields...)
 }
 
+func (l *log) SetLevel(level Level) {
+	for _, core := range l.wrappedCores {
+		core.AtomicLevel.SetLevel(zapcore.Level(level))
+	}
+}
+
 func (l *log) StopOnPanic() {
 	if r := recover(); r != nil {
 		l.Fatal("panicking", zap.Any("reason", r), zap.Stack("from"))
@@ -112,7 +120,10 @@ func (l *log) StopOnPanic() {
 	}
 }
 
-func (l *log) RecoverAndPanic(f func()) { defer l.StopOnPanic(); f() }
+func (l *log) RecoverAndPanic(f func()) {
+	defer l.StopOnPanic()
+	f()
+}
 
 func (l *log) stopAndExit(exit func()) {
 	if r := recover(); r != nil {
@@ -122,4 +133,7 @@ func (l *log) stopAndExit(exit func()) {
 	}
 }
 
-func (l *log) RecoverAndExit(f, exit func()) { defer l.stopAndExit(exit); f() }
+func (l *log) RecoverAndExit(f, exit func()) {
+	defer l.stopAndExit(exit)
+	f()
+}

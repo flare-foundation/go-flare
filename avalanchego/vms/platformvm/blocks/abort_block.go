@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package blocks
@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	_ BanffBlock = &BanffAbortBlock{}
-	_ Block      = &ApricotAbortBlock{}
+	_ BanffBlock = (*BanffAbortBlock)(nil)
+	_ Block      = (*ApricotAbortBlock)(nil)
 )
 
 type BanffAbortBlock struct {
@@ -21,8 +21,13 @@ type BanffAbortBlock struct {
 	ApricotAbortBlock `serialize:"true"`
 }
 
-func (b *BanffAbortBlock) Timestamp() time.Time  { return time.Unix(int64(b.Time), 0) }
-func (b *BanffAbortBlock) Visit(v Visitor) error { return v.BanffAbortBlock(b) }
+func (b *BanffAbortBlock) Timestamp() time.Time {
+	return time.Unix(int64(b.Time), 0)
+}
+
+func (b *BanffAbortBlock) Visit(v Visitor) error {
+	return v.BanffAbortBlock(b)
+}
 
 func NewBanffAbortBlock(
 	timestamp time.Time,
@@ -50,11 +55,19 @@ func (b *ApricotAbortBlock) initialize(bytes []byte) error {
 	return nil
 }
 
-func (*ApricotAbortBlock) InitCtx(ctx *snow.Context) {}
+func (*ApricotAbortBlock) InitCtx(*snow.Context) {}
 
-func (*ApricotAbortBlock) Txs() []*txs.Tx          { return nil }
-func (b *ApricotAbortBlock) Visit(v Visitor) error { return v.ApricotAbortBlock(b) }
+func (*ApricotAbortBlock) Txs() []*txs.Tx {
+	return nil
+}
 
+func (b *ApricotAbortBlock) Visit(v Visitor) error {
+	return v.ApricotAbortBlock(b)
+}
+
+// NewApricotAbortBlock is kept for testing purposes only.
+// Following Banff activation and subsequent code cleanup, Apricot Abort blocks
+// should be only verified (upon bootstrap), never created anymore
 func NewApricotAbortBlock(
 	parentID ids.ID,
 	height uint64,

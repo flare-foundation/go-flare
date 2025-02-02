@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package platformvm
@@ -9,6 +9,7 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/formatting/address"
 	"github.com/ava-labs/avalanchego/vms/platformvm/api"
+	"github.com/ava-labs/avalanchego/vms/platformvm/signer"
 )
 
 // ClientStaker is the representation of a staker sent via client.
@@ -20,7 +21,7 @@ type ClientStaker struct {
 	// the Unix time when they are done staking
 	EndTime uint64
 	// the validator weight when sampling validators
-	Weight *uint64
+	Weight uint64
 	// the amount of tokens being staked.
 	StakeAmount *uint64
 	// the node ID of the staker
@@ -38,14 +39,18 @@ type ClientOwner struct {
 // over client
 type ClientPermissionlessValidator struct {
 	ClientStaker
-	ValidationRewardOwner *ClientOwner
-	DelegationRewardOwner *ClientOwner
-	PotentialReward       *uint64
-	DelegationFee         float32
-	Uptime                *float32
-	Connected             *bool
+	ValidationRewardOwner  *ClientOwner
+	DelegationRewardOwner  *ClientOwner
+	PotentialReward        *uint64
+	AccruedDelegateeReward *uint64
+	DelegationFee          float32
+	Uptime                 *float32
+	Connected              *bool
+	Signer                 *signer.ProofOfPossession
 	// The delegators delegating to this validator
-	Delegators []ClientDelegator
+	DelegatorCount  *uint64
+	DelegatorWeight *uint64
+	Delegators      []ClientDelegator
 }
 
 // ClientDelegator is the repr. of a delegator sent over client
@@ -60,7 +65,7 @@ func apiStakerToClientStaker(validator api.Staker) ClientStaker {
 		TxID:        validator.TxID,
 		StartTime:   uint64(validator.StartTime),
 		EndTime:     uint64(validator.EndTime),
-		Weight:      (*uint64)(validator.Weight),
+		Weight:      uint64(validator.Weight),
 		StakeAmount: (*uint64)(validator.StakeAmount),
 		NodeID:      validator.NodeID,
 	}
@@ -103,29 +108,36 @@ func getClientPermissionlessValidators(validatorsSliceIntf []interface{}) ([]Cli
 			return nil, err
 		}
 
-		clientDelegators := make([]ClientDelegator, len(apiValidator.Delegators))
-		for j, apiDelegator := range apiValidator.Delegators {
-			rewardOwner, err := apiOwnerToClientOwner(apiDelegator.RewardOwner)
-			if err != nil {
-				return nil, err
-			}
+		var clientDelegators []ClientDelegator
+		if apiValidator.Delegators != nil {
+			clientDelegators = make([]ClientDelegator, len(*apiValidator.Delegators))
+			for j, apiDelegator := range *apiValidator.Delegators {
+				rewardOwner, err := apiOwnerToClientOwner(apiDelegator.RewardOwner)
+				if err != nil {
+					return nil, err
+				}
 
-			clientDelegators[j] = ClientDelegator{
-				ClientStaker:    apiStakerToClientStaker(apiDelegator.Staker),
-				RewardOwner:     rewardOwner,
-				PotentialReward: (*uint64)(apiDelegator.PotentialReward),
+				clientDelegators[j] = ClientDelegator{
+					ClientStaker:    apiStakerToClientStaker(apiDelegator.Staker),
+					RewardOwner:     rewardOwner,
+					PotentialReward: (*uint64)(apiDelegator.PotentialReward),
+				}
 			}
 		}
 
 		clientValidators[i] = ClientPermissionlessValidator{
-			ClientStaker:          apiStakerToClientStaker(apiValidator.Staker),
-			ValidationRewardOwner: validationRewardOwner,
-			DelegationRewardOwner: delegationRewardOwner,
-			PotentialReward:       (*uint64)(apiValidator.PotentialReward),
-			DelegationFee:         float32(apiValidator.DelegationFee),
-			Uptime:                (*float32)(apiValidator.Uptime),
-			Connected:             &apiValidator.Connected,
-			Delegators:            clientDelegators,
+			ClientStaker:           apiStakerToClientStaker(apiValidator.Staker),
+			ValidationRewardOwner:  validationRewardOwner,
+			DelegationRewardOwner:  delegationRewardOwner,
+			PotentialReward:        (*uint64)(apiValidator.PotentialReward),
+			AccruedDelegateeReward: (*uint64)(apiValidator.AccruedDelegateeReward),
+			DelegationFee:          float32(apiValidator.DelegationFee),
+			Uptime:                 (*float32)(apiValidator.Uptime),
+			Connected:              &apiValidator.Connected,
+			Signer:                 apiValidator.Signer,
+			DelegatorCount:         (*uint64)(apiValidator.DelegatorCount),
+			DelegatorWeight:        (*uint64)(apiValidator.DelegatorWeight),
+			Delegators:             clientDelegators,
 		}
 	}
 	return clientValidators, nil

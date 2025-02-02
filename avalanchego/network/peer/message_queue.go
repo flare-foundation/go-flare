@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package peer
@@ -19,8 +19,8 @@ import (
 const initialQueueSize = 64
 
 var (
-	_ MessageQueue = &throttledMessageQueue{}
-	_ MessageQueue = &blockingMessageQueue{}
+	_ MessageQueue = (*throttledMessageQueue)(nil)
+	_ MessageQueue = (*blockingMessageQueue)(nil)
 )
 
 type SendFailedCallback interface {
@@ -29,7 +29,9 @@ type SendFailedCallback interface {
 
 type SendFailedFunc func(message.OutboundMessage)
 
-func (f SendFailedFunc) SendFailed(msg message.OutboundMessage) { f(msg) }
+func (f SendFailedFunc) SendFailed(msg message.OutboundMessage) {
+	f(msg)
+}
 
 type MessageQueue interface {
 	// Push attempts to add the message to the queue. If the context is
@@ -67,7 +69,7 @@ type throttledMessageQueue struct {
 
 	// queue of the messages
 	// [cond.L] must be held while accessing [queue].
-	queue buffer.UnboundedQueue[message.OutboundMessage]
+	queue buffer.Deque[message.OutboundMessage]
 }
 
 func NewThrottledMessageQueue(
@@ -82,7 +84,7 @@ func NewThrottledMessageQueue(
 		log:                  log,
 		outboundMsgThrottler: outboundMsgThrottler,
 		cond:                 sync.NewCond(&sync.Mutex{}),
-		queue:                buffer.NewUnboundedSliceQueue[message.OutboundMessage](initialQueueSize),
+		queue:                buffer.NewUnboundedDeque[message.OutboundMessage](initialQueueSize),
 	}
 }
 
@@ -129,7 +131,7 @@ func (q *throttledMessageQueue) Push(ctx context.Context, msg message.OutboundMe
 		return false
 	}
 
-	q.queue.Enqueue(msg)
+	q.queue.PushRight(msg)
 	q.cond.Signal()
 	return true
 }
@@ -166,7 +168,7 @@ func (q *throttledMessageQueue) PopNow() (message.OutboundMessage, bool) {
 }
 
 func (q *throttledMessageQueue) pop() message.OutboundMessage {
-	msg, _ := q.queue.Dequeue()
+	msg, _ := q.queue.PopLeft()
 
 	q.outboundMsgThrottler.Release(msg, q.id)
 	return msg
@@ -183,7 +185,7 @@ func (q *throttledMessageQueue) Close() {
 	q.closed = true
 
 	for q.queue.Len() > 0 {
-		msg, _ := q.queue.Dequeue()
+		msg, _ := q.queue.PopLeft()
 		q.outboundMsgThrottler.Release(msg, q.id)
 		q.onFailed.SendFailed(msg)
 	}

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package message
@@ -16,10 +16,14 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/utils/ips"
-	"github.com/ava-labs/avalanchego/utils/units"
+	"github.com/ava-labs/avalanchego/proto/pb/p2p"
+	"github.com/ava-labs/avalanchego/utils/compression"
+	"github.com/ava-labs/avalanchego/utils/logging"
+)
 
-	p2ppb "github.com/ava-labs/avalanchego/proto/pb/p2p"
+var (
+	dummyNodeID             = ids.EmptyNodeID
+	dummyOnFinishedHandling = func() {}
 )
 
 // Benchmarks marshal-ing "Version" message.
@@ -30,54 +34,21 @@ import (
 //	$ go install -v golang.org/x/perf/cmd/benchstat@latest
 //
 //	$ go test -run=NONE -bench=BenchmarkMarshalVersion > /tmp/cpu.before.txt
-//	$ USE_PROTO=true go test -run=NONE -bench=BenchmarkMarshalVersion > /tmp/cpu.after.txt
-//	$ USE_PROTO=true USE_PROTO_BUILDER=true go test -run=NONE -bench=BenchmarkMarshalVersion > /tmp/cpu.after.txt
+//	$ USE_BUILDER=true go test -run=NONE -bench=BenchmarkMarshalVersion > /tmp/cpu.after.txt
 //	$ benchcmp /tmp/cpu.before.txt /tmp/cpu.after.txt
 //	$ benchstat -alpha 0.03 -geomean /tmp/cpu.before.txt /tmp/cpu.after.txt
 //
 //	$ go test -run=NONE -bench=BenchmarkMarshalVersion -benchmem > /tmp/mem.before.txt
-//	$ USE_PROTO=true go test -run=NONE -bench=BenchmarkMarshalVersion -benchmem > /tmp/mem.after.txt
-//	$ USE_PROTO=true USE_PROTO_BUILDER=true go test -run=NONE -bench=BenchmarkMarshalVersion -benchmem > /tmp/mem.after.txt
+//	$ USE_BUILDER=true go test -run=NONE -bench=BenchmarkMarshalVersion -benchmem > /tmp/mem.after.txt
 //	$ benchcmp /tmp/mem.before.txt /tmp/mem.after.txt
 //	$ benchstat -alpha 0.03 -geomean /tmp/mem.before.txt /tmp/mem.after.txt
 func BenchmarkMarshalVersion(b *testing.B) {
 	require := require.New(b)
 
-	b.StopTimer()
-
 	id := ids.GenerateTestID()
-
-	// version message does not require compression
-	// thus no in-place update for proto test cases
-	// which makes the benchmarks fairer to proto
-	// as there's no need to copy the original test message
-	// for each run
-	inboundMsg := inboundMessageWithPacker{
-		inboundMessage: inboundMessage{
-			op: Version,
-		},
-		fields: map[Field]interface{}{
-			NetworkID:      uint32(1337),
-			NodeID:         uint32(0),
-			MyTime:         uint64(time.Now().Unix()),
-			IP:             ips.IPPort{IP: net.IPv4(1, 2, 3, 4)},
-			VersionStr:     "v1.2.3",
-			VersionTime:    uint64(time.Now().Unix()),
-			SigBytes:       []byte{'y', 'e', 'e', 't'},
-			TrackedSubnets: [][]byte{id[:]},
-		},
-	}
-	packerCodec, err := NewCodecWithMemoryPool("", prometheus.NewRegistry(), 2*units.MiB, 10*time.Second)
-	require.NoError(err)
-
-	packerMsg, err := packerCodec.Pack(inboundMsg.op, inboundMsg.fields, inboundMsg.op.Compressible(), false)
-	require.NoError(err)
-
-	packerMsgN := len(packerMsg.Bytes())
-
-	protoMsg := p2ppb.Message{
-		Message: &p2ppb.Message_Version{
-			Version: &p2ppb.Version{
+	msg := p2p.Message{
+		Message: &p2p.Message_Version{
+			Version: &p2p.Version{
 				NetworkId:      uint32(1337),
 				MyTime:         uint64(time.Now().Unix()),
 				IpAddr:         []byte(net.IPv4(1, 2, 3, 4).To16()),
@@ -89,29 +60,21 @@ func BenchmarkMarshalVersion(b *testing.B) {
 			},
 		},
 	}
-	protoMsgN := proto.Size(&protoMsg)
+	msgLen := proto.Size(&msg)
 
-	useProto := os.Getenv("USE_PROTO") != ""
-	useProtoBuilder := os.Getenv("USE_PROTO_BUILDER") != ""
+	useBuilder := os.Getenv("USE_BUILDER") != ""
 
-	protoCodec, err := newMsgBuilderProtobuf("", prometheus.NewRegistry(), 2*units.MiB, 10*time.Second)
+	codec, err := newMsgBuilder(logging.NoLog{}, "", prometheus.NewRegistry(), 10*time.Second)
 	require.NoError(err)
 
-	b.Logf("marshaling packer %d-byte, proto %d-byte (use proto %v, use proto builder %v)", packerMsgN, protoMsgN, useProto, useProtoBuilder)
+	b.Logf("proto length %d-byte (use builder %v)", msgLen, useBuilder)
 
-	b.StartTimer()
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if !useProto {
-			// version does not compress message
-			_, err := packerCodec.Pack(inboundMsg.op, inboundMsg.fields, false, false)
-			require.NoError(err)
-			continue
-		}
-
-		if useProtoBuilder {
-			_, err = protoCodec.createOutbound(inboundMsg.op, &protoMsg, false, false)
+		if useBuilder {
+			_, err = codec.createOutbound(&msg, compression.TypeNone, false)
 		} else {
-			_, err = proto.Marshal(&protoMsg)
+			_, err = proto.Marshal(&msg)
 		}
 		require.NoError(err)
 	}
@@ -125,14 +88,12 @@ func BenchmarkMarshalVersion(b *testing.B) {
 //	$ go install -v golang.org/x/perf/cmd/benchstat@latest
 //
 //	$ go test -run=NONE -bench=BenchmarkUnmarshalVersion > /tmp/cpu.before.txt
-//	$ USE_PROTO=true go test -run=NONE -bench=BenchmarkUnmarshalVersion > /tmp/cpu.after.txt
-//	$ USE_PROTO=true USE_PROTO_BUILDER=true go test -run=NONE -bench=BenchmarkUnmarshalVersion > /tmp/cpu.after.txt
+//	$ USE_BUILDER=true go test -run=NONE -bench=BenchmarkUnmarshalVersion > /tmp/cpu.after.txt
 //	$ benchcmp /tmp/cpu.before.txt /tmp/cpu.after.txt
 //	$ benchstat -alpha 0.03 -geomean /tmp/cpu.before.txt /tmp/cpu.after.txt
 //
 //	$ go test -run=NONE -bench=BenchmarkUnmarshalVersion -benchmem > /tmp/mem.before.txt
-//	$ USE_PROTO=true go test -run=NONE -bench=BenchmarkUnmarshalVersion -benchmem > /tmp/mem.after.txt
-//	$ USE_PROTO=true USE_PROTO_BUILDER=true go test -run=NONE -bench=BenchmarkUnmarshalVersion -benchmem > /tmp/mem.after.txt
+//	$ USE_BUILDER=true go test -run=NONE -bench=BenchmarkUnmarshalVersion -benchmem > /tmp/mem.after.txt
 //	$ benchcmp /tmp/mem.before.txt /tmp/mem.after.txt
 //	$ benchstat -alpha 0.03 -geomean /tmp/mem.before.txt /tmp/mem.after.txt
 func BenchmarkUnmarshalVersion(b *testing.B) {
@@ -141,27 +102,9 @@ func BenchmarkUnmarshalVersion(b *testing.B) {
 	b.StopTimer()
 
 	id := ids.GenerateTestID()
-	inboundMsg := inboundMessageWithPacker{
-		inboundMessage: inboundMessage{
-			op: Version,
-		},
-		fields: map[Field]interface{}{
-			NetworkID:      uint32(1337),
-			NodeID:         uint32(0),
-			MyTime:         uint64(time.Now().Unix()),
-			IP:             ips.IPPort{IP: net.IPv4(1, 2, 3, 4)},
-			VersionStr:     "v1.2.3",
-			VersionTime:    uint64(time.Now().Unix()),
-			SigBytes:       []byte{'y', 'e', 'e', 't'},
-			TrackedSubnets: [][]byte{id[:]},
-		},
-	}
-	packerCodec, err := NewCodecWithMemoryPool("", prometheus.NewRegistry(), 2*units.MiB, 10*time.Second)
-	require.NoError(err)
-
-	protoMsg := p2ppb.Message{
-		Message: &p2ppb.Message_Version{
-			Version: &p2ppb.Version{
+	msg := p2p.Message{
+		Message: &p2p.Message_Version{
+			Version: &p2p.Version{
 				NetworkId:      uint32(1337),
 				MyTime:         uint64(time.Now().Unix()),
 				IpAddr:         []byte(net.IPv4(1, 2, 3, 4).To16()),
@@ -174,33 +117,20 @@ func BenchmarkUnmarshalVersion(b *testing.B) {
 		},
 	}
 
-	rawMsg, err := proto.Marshal(&protoMsg)
+	rawMsg, err := proto.Marshal(&msg)
 	require.NoError(err)
 
-	useProto := os.Getenv("USE_PROTO") != ""
-	if !useProto {
-		msgInf, err := packerCodec.Pack(inboundMsg.op, inboundMsg.fields, inboundMsg.op.Compressible(), false)
-		require.NoError(err)
-		rawMsg = msgInf.Bytes()
-	}
-
-	useProtoBuilder := os.Getenv("USE_PROTO_BUILDER") != ""
-	protoCodec, err := newMsgBuilderProtobuf("", prometheus.NewRegistry(), 2*units.MiB, 10*time.Second)
+	useBuilder := os.Getenv("USE_BUILDER") != ""
+	codec, err := newMsgBuilder(logging.NoLog{}, "", prometheus.NewRegistry(), 10*time.Second)
 	require.NoError(err)
 
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		if !useProto {
-			_, err := packerCodec.Parse(rawMsg, dummyNodeID, dummyOnFinishedHandling)
-			require.NoError(err)
-			continue
-		}
-
-		if useProtoBuilder {
-			_, err = protoCodec.parseInbound(rawMsg, dummyNodeID, dummyOnFinishedHandling)
+		if useBuilder {
+			_, err = codec.parseInbound(rawMsg, dummyNodeID, dummyOnFinishedHandling)
 		} else {
-			var protoMsg p2ppb.Message
-			err = proto.Unmarshal(rawMsg, &protoMsg)
+			var msg p2p.Message
+			err = proto.Unmarshal(rawMsg, &msg)
 		}
 		require.NoError(err)
 	}

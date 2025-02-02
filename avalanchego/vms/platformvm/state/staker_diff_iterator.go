@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package state
@@ -10,9 +10,9 @@ import (
 )
 
 var (
-	_ StakerDiffIterator = &stakerDiffIterator{}
-	_ StakerIterator     = &mutableStakerIterator{}
-	_ heap.Interface     = &mutableStakerIterator{}
+	_ StakerDiffIterator = (*stakerDiffIterator)(nil)
+	_ StakerIterator     = (*mutableStakerIterator)(nil)
+	_ heap.Interface     = (*mutableStakerIterator)(nil)
 )
 
 // StakerDiffIterator is an iterator that iterates over the events that will be

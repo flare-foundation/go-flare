@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package primary
@@ -11,6 +11,7 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/rpc"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/vms/avm"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/platformvm"
@@ -26,9 +27,8 @@ const (
 	fetchLimit = 1024
 )
 
-// TODO: refactor UTXOClient definition to allow the client implementations to
-//
-//	perform their own assertions.
+// TODO: Refactor UTXOClient definition to allow the client implementations to
+// perform their own assertions.
 var (
 	_ UTXOClient = platformvm.Client(nil)
 	_ UTXOClient = avm.Client(nil)
@@ -46,7 +46,7 @@ type UTXOClient interface {
 	) ([][]byte, ids.ShortID, ids.ID, error)
 }
 
-func FetchState(ctx context.Context, uri string, addrs ids.ShortSet) (p.Context, x.Context, UTXOs, error) {
+func FetchState(ctx context.Context, uri string, addrs set.Set[ids.ShortID]) (p.Context, x.Context, UTXOs, error) {
 	infoClient := info.NewClient(uri)
 	xClient := avm.NewClient(uri, "X")
 

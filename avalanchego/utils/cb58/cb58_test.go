@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package cb58
@@ -59,4 +59,20 @@ func TestEncodeDecode(t *testing.T) {
 			t.Fatal("bytes not symmetric")
 		}
 	}
+}
+
+func FuzzEncodeDecode(f *testing.F) {
+	f.Fuzz(func(t *testing.T, data []byte) {
+		require := require.New(t)
+
+		// Encode bytes to string
+		dataStr, err := Encode(data)
+		require.NoError(err)
+
+		// Decode string to bytes
+		gotData, err := Decode(dataStr)
+		require.NoError(err)
+
+		require.Equal(data, gotData)
+	})
 }

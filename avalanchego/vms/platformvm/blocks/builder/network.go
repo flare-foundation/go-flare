@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 // TODO: consider moving the network implementation to a separate package
@@ -6,6 +6,7 @@
 package builder
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/snow/engine/common"
-	"github.com/ava-labs/avalanchego/vms/platformvm/message"
+	"github.com/ava-labs/avalanchego/vms/components/message"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
 )
 
@@ -25,7 +26,7 @@ const (
 	recentCacheSize = 512
 )
 
-var _ Network = &network{}
+var _ Network = (*network)(nil)
 
 type Network interface {
 	common.AppHandler
@@ -40,7 +41,7 @@ type network struct {
 
 	// gossip related attributes
 	appSender common.AppSender
-	recentTxs *cache.LRU
+	recentTxs *cache.LRU[ids.ID, struct{}]
 }
 
 func NewNetwork(
@@ -52,29 +53,47 @@ func NewNetwork(
 		ctx:        ctx,
 		blkBuilder: blkBuilder,
 		appSender:  appSender,
-		recentTxs:  &cache.LRU{Size: recentCacheSize},
+		recentTxs:  &cache.LRU[ids.ID, struct{}]{Size: recentCacheSize},
 	}
 }
 
-func (n *network) AppRequestFailed(nodeID ids.NodeID, requestID uint32) error {
+func (*network) CrossChainAppRequestFailed(context.Context, ids.ID, uint32) error {
 	// This VM currently only supports gossiping of txs, so there are no
 	// requests.
 	return nil
 }
 
-func (n *network) AppRequest(nodeID ids.NodeID, requestID uint32, deadline time.Time, msgBytes []byte) error {
+func (*network) CrossChainAppRequest(context.Context, ids.ID, uint32, time.Time, []byte) error {
 	// This VM currently only supports gossiping of txs, so there are no
 	// requests.
 	return nil
 }
 
-func (n *network) AppResponse(nodeID ids.NodeID, requestID uint32, msgBytes []byte) error {
+func (*network) CrossChainAppResponse(context.Context, ids.ID, uint32, []byte) error {
 	// This VM currently only supports gossiping of txs, so there are no
 	// requests.
 	return nil
 }
 
-func (n *network) AppGossip(nodeID ids.NodeID, msgBytes []byte) error {
+func (*network) AppRequestFailed(context.Context, ids.NodeID, uint32) error {
+	// This VM currently only supports gossiping of txs, so there are no
+	// requests.
+	return nil
+}
+
+func (*network) AppRequest(context.Context, ids.NodeID, uint32, time.Time, []byte) error {
+	// This VM currently only supports gossiping of txs, so there are no
+	// requests.
+	return nil
+}
+
+func (*network) AppResponse(context.Context, ids.NodeID, uint32, []byte) error {
+	// This VM currently only supports gossiping of txs, so there are no
+	// requests.
+	return nil
+}
+
+func (n *network) AppGossip(_ context.Context, nodeID ids.NodeID, msgBytes []byte) error {
 	n.ctx.Log.Debug("called AppGossip message handler",
 		zap.Stringer("nodeID", nodeID),
 		zap.Int("messageLen", len(msgBytes)),
@@ -113,13 +132,13 @@ func (n *network) AppGossip(nodeID ids.NodeID, msgBytes []byte) error {
 	n.ctx.Lock.Lock()
 	defer n.ctx.Lock.Unlock()
 
-	if _, dropped := n.blkBuilder.GetDropReason(txID); dropped {
+	if reason := n.blkBuilder.GetDropReason(txID); reason != nil {
 		// If the tx is being dropped - just ignore it
 		return nil
 	}
 
 	// add to mempool
-	if err = n.blkBuilder.AddUnverifiedTx(tx); err != nil {
+	if err := n.blkBuilder.AddUnverifiedTx(tx); err != nil {
 		n.ctx.Log.Debug("tx failed verification",
 			zap.Stringer("nodeID", nodeID),
 			zap.Error(err),
@@ -134,7 +153,7 @@ func (n *network) GossipTx(tx *txs.Tx) error {
 	if _, has := n.recentTxs.Get(txID); has {
 		return nil
 	}
-	n.recentTxs.Put(txID, nil)
+	n.recentTxs.Put(txID, struct{}{})
 
 	n.ctx.Log.Debug("gossiping tx",
 		zap.Stringer("txID", txID),
@@ -145,5 +164,5 @@ func (n *network) GossipTx(tx *txs.Tx) error {
 	if err != nil {
 		return fmt.Errorf("GossipTx: failed to build Tx message: %w", err)
 	}
-	return n.appSender.SendAppGossip(msgBytes)
+	return n.appSender.SendAppGossip(context.TODO(), msgBytes)
 }

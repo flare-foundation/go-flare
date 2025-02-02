@@ -1,12 +1,16 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package snowman
 
 import (
+	"context"
+
 	"go.uber.org/zap"
 
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils/bag"
+	"github.com/ava-labs/avalanchego/utils/set"
 )
 
 // Voter records chits received from [vdr] once its dependencies are met.
@@ -15,26 +19,30 @@ type voter struct {
 	vdr       ids.NodeID
 	requestID uint32
 	response  ids.ID
-	deps      ids.Set
+	deps      set.Set[ids.ID]
 }
 
-func (v *voter) Dependencies() ids.Set { return v.deps }
+func (v *voter) Dependencies() set.Set[ids.ID] {
+	return v.deps
+}
 
 // Mark that a dependency has been met.
-func (v *voter) Fulfill(id ids.ID) {
+func (v *voter) Fulfill(ctx context.Context, id ids.ID) {
 	v.deps.Remove(id)
-	v.Update()
+	v.Update(ctx)
 }
 
 // Abandon this attempt to record chits.
-func (v *voter) Abandon(id ids.ID) { v.Fulfill(id) }
+func (v *voter) Abandon(ctx context.Context, id ids.ID) {
+	v.Fulfill(ctx, id)
+}
 
-func (v *voter) Update() {
+func (v *voter) Update(ctx context.Context) {
 	if v.deps.Len() != 0 || v.t.errs.Errored() {
 		return
 	}
 
-	var results []ids.Bag
+	var results []bag.Bag[ids.ID]
 	if v.response == ids.Empty {
 		results = v.t.polls.Drop(v.requestID, v.vdr)
 	} else {
@@ -45,19 +53,19 @@ func (v *voter) Update() {
 		return
 	}
 
-	// To prevent any potential deadlocks with un-disclosed dependencies, votes
-	// must be bubbled to the nearest valid block
-	for i, result := range results {
-		results[i] = v.bubbleVotes(result)
-	}
-
 	for _, result := range results {
 		result := result
+		v.t.Ctx.Log.Debug("filtering poll results",
+			zap.Stringer("result", &result),
+		)
 
+		// To prevent any potential deadlocks with un-disclosed dependencies,
+		// votes must be bubbled to the nearest valid block
+		result = v.bubbleVotes(ctx, result)
 		v.t.Ctx.Log.Debug("finishing poll",
 			zap.Stringer("result", &result),
 		)
-		if err := v.t.Consensus.RecordPoll(result); err != nil {
+		if err := v.t.Consensus.RecordPoll(ctx, result); err != nil {
 			v.t.errs.Add(err)
 		}
 	}
@@ -66,7 +74,7 @@ func (v *voter) Update() {
 		return
 	}
 
-	if err := v.t.VM.SetPreference(v.t.Consensus.Preference()); err != nil {
+	if err := v.t.VM.SetPreference(ctx, v.t.Consensus.Preference()); err != nil {
 		v.t.errs.Add(err)
 		return
 	}
@@ -77,7 +85,7 @@ func (v *voter) Update() {
 	}
 
 	v.t.Ctx.Log.Debug("Snowman engine can't quiesce")
-	v.t.repoll()
+	v.t.repoll(ctx)
 }
 
 // bubbleVotes bubbles the [votes] a set of the number of votes for specific
@@ -87,8 +95,8 @@ func (v *voter) Update() {
 // Note: bubbleVotes does not bubbleVotes to all of the ancestors in consensus,
 // just the most recent one. bubbling to the rest of the ancestors, which may
 // also be in consensus is handled in RecordPoll.
-func (v *voter) bubbleVotes(votes ids.Bag) ids.Bag {
-	bubbledVotes := ids.Bag{}
+func (v *voter) bubbleVotes(ctx context.Context, votes bag.Bag[ids.ID]) bag.Bag[ids.ID] {
+	bubbledVotes := bag.Bag[ids.ID]{}
 
 votesLoop:
 	for _, vote := range votes.List() {
@@ -101,7 +109,7 @@ votesLoop:
 			zap.Stringer("parentID", rootID),
 		)
 
-		blk, err := v.t.GetBlock(rootID)
+		blk, err := v.t.GetBlock(ctx, rootID)
 		// If we cannot retrieve the block, drop [vote]
 		if err != nil {
 			v.t.Ctx.Log.Debug("dropping vote(s)",
@@ -136,7 +144,7 @@ votesLoop:
 			)
 
 			blkID = parentID
-			blk, err = v.t.GetBlock(blkID)
+			blk, err = v.t.GetBlock(ctx, blkID)
 			// If we cannot retrieve the block, drop [vote]
 			if err != nil {
 				v.t.Ctx.Log.Debug("dropping vote(s)",

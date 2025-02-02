@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package indexer
@@ -25,7 +25,7 @@ const (
 	sleepDurationMultiplier = 5
 )
 
-var _ HeightIndexer = &heightIndexer{}
+var _ HeightIndexer = (*heightIndexer)(nil)
 
 type HeightIndexer interface {
 	// Returns whether the height index is fully repaired.
@@ -63,18 +63,18 @@ type heightIndexer struct {
 	server BlockServer
 	log    logging.Logger
 
-	jobDone utils.AtomicBool
+	jobDone utils.Atomic[bool]
 	state   state.State
 
 	commitFrequency int
 }
 
 func (hi *heightIndexer) IsRepaired() bool {
-	return hi.jobDone.GetValue()
+	return hi.jobDone.Get()
 }
 
 func (hi *heightIndexer) MarkRepaired(repaired bool) {
-	hi.jobDone.SetValue(repaired)
+	hi.jobDone.Set(repaired)
 }
 
 // RepairHeightIndex ensures the height -> proBlkID height block index is well formed.
@@ -95,7 +95,7 @@ func (hi *heightIndexer) RepairHeightIndex(ctx context.Context) error {
 
 	// retrieve checkpoint height. We explicitly track block height
 	// in doRepair to avoid heavier DB reads.
-	startBlk, err := hi.server.GetFullPostForkBlock(startBlkID)
+	startBlk, err := hi.server.GetFullPostForkBlock(ctx, startBlkID)
 	if err != nil {
 		return err
 	}

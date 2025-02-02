@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package peer
@@ -11,8 +11,10 @@ import (
 	"github.com/ava-labs/avalanchego/network/throttling"
 	"github.com/ava-labs/avalanchego/snow/networking/router"
 	"github.com/ava-labs/avalanchego/snow/networking/tracker"
+	"github.com/ava-labs/avalanchego/snow/uptime"
 	"github.com/ava-labs/avalanchego/snow/validators"
 	"github.com/ava-labs/avalanchego/utils/logging"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 	"github.com/ava-labs/avalanchego/version"
 )
@@ -21,21 +23,17 @@ type Config struct {
 	// Size, in bytes, of the buffer this peer reads messages into
 	ReadBufferSize int
 	// Size, in bytes, of the buffer this peer writes messages into
-	WriteBufferSize         int
-	Clock                   mockable.Clock
-	Metrics                 *Metrics
-	MessageCreator          message.Creator
-	MessageCreatorWithProto message.Creator
-
-	// TODO: remove this once we complete banff migration
-	BanffTime time.Time
+	WriteBufferSize int
+	Clock           mockable.Clock
+	Metrics         *Metrics
+	MessageCreator  message.Creator
 
 	Log                  logging.Logger
 	InboundMsgThrottler  throttling.InboundMsgThrottler
 	Network              Network
 	Router               router.InboundHandler
 	VersionCompatibility version.Compatibility
-	MySubnets            ids.Set
+	MySubnets            set.Set[ids.ID]
 	Beacons              validators.Set
 	NetworkID            uint32
 	PingFrequency        time.Duration
@@ -48,16 +46,10 @@ type Config struct {
 
 	// Tracks CPU/disk usage caused by each peer.
 	ResourceTracker tracker.ResourceTracker
-}
 
-func (c *Config) GetMessageCreator() message.Creator {
-	now := c.Clock.Time()
-	if c.IsBanffActivated(now) {
-		return c.MessageCreatorWithProto
-	}
-	return c.MessageCreator
-}
+	// Calculates uptime of peers
+	UptimeCalculator uptime.Calculator
 
-func (c *Config) IsBanffActivated(time time.Time) bool {
-	return !time.Before(c.BanffTime)
+	// Signs my IP so I can send my signed IP address in the Version message
+	IPSigner *IPSigner
 }

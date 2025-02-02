@@ -30,7 +30,6 @@ package eth
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -126,18 +125,6 @@ func New(
 	if chainDb == nil {
 		return nil, errors.New("chainDb cannot be nil")
 	}
-	if !config.Pruning && config.TrieDirtyCache > 0 {
-		// If snapshots are enabled, allocate 2/5 of the TrieDirtyCache memory cap to the snapshot cache
-		if config.SnapshotCache > 0 {
-			config.TrieCleanCache += config.TrieDirtyCache * 3 / 5
-			config.SnapshotCache += config.TrieDirtyCache * 2 / 5
-		} else {
-			// If snapshots are disabled, the TrieDirtyCache will be written through to the clean cache
-			// so move the cache allocation from the dirty cache to the clean cache
-			config.TrieCleanCache += config.TrieDirtyCache
-			config.TrieDirtyCache = 0
-		}
-	}
 
 	// round TrieCleanCache and SnapshotCache up to nearest 64MB, since fastcache will mmap
 	// memory in 64MBs chunks.
@@ -145,22 +132,11 @@ func New(
 	config.SnapshotCache = roundUpCacheSize(config.SnapshotCache, 64)
 
 	log.Info(
-		"Allocated trie memory caches",
-		"clean", common.StorageSize(config.TrieCleanCache)*1024*1024,
-		"dirty", common.StorageSize(config.TrieDirtyCache)*1024*1024,
+		"Allocated memory caches",
+		"trie clean", common.StorageSize(config.TrieCleanCache)*1024*1024,
+		"trie dirty", common.StorageSize(config.TrieDirtyCache)*1024*1024,
+		"snapshot clean", common.StorageSize(config.SnapshotCache)*1024*1024,
 	)
-
-	chainConfig, genesisErr := core.SetupGenesisBlock(chainDb, config.Genesis, lastAcceptedHash)
-	if genesisErr != nil {
-		return nil, genesisErr
-	}
-	log.Info("")
-	log.Info(strings.Repeat("-", 153))
-	for _, line := range strings.Split(chainConfig.String(), "\n") {
-		log.Info(line)
-	}
-	log.Info(strings.Repeat("-", 153))
-	log.Info("")
 
 	// Note: RecoverPruning must be called to handle the case that we are midway through offline pruning.
 	// If the data directory is changed in between runs preventing RecoverPruning from performing its job correctly,
@@ -171,6 +147,7 @@ func New(
 	if err := pruner.RecoverPruning(config.OfflinePruningDataDirectory, chainDb); err != nil {
 		log.Error("Failed to recover state", "error", err)
 	}
+
 	eth := &Ethereum{
 		config:            config,
 		chainDb:           chainDb,
@@ -208,6 +185,8 @@ func New(
 		}
 		cacheConfig = &core.CacheConfig{
 			TrieCleanLimit:                  config.TrieCleanCache,
+			TrieCleanJournal:                config.TrieCleanJournal,
+			TrieCleanRejournal:              config.TrieCleanRejournal,
 			TrieDirtyLimit:                  config.TrieDirtyCache,
 			TrieDirtyCommitTarget:           config.TrieDirtyCommitTarget,
 			Pruning:                         config.Pruning,
@@ -222,6 +201,8 @@ func New(
 			SnapshotVerify:                  config.SnapshotVerify,
 			SkipSnapshotRebuild:             config.SkipSnapshotRebuild,
 			Preimages:                       config.Preimages,
+			AcceptedCacheSize:               config.AcceptedCacheSize,
+			TxLookupLimit:                   config.TxLookupLimit,
 		}
 	)
 
@@ -230,33 +211,38 @@ func New(
 	}
 
 	var err error
-	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, chainConfig, eth.engine, vmConfig, lastAcceptedHash)
+	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, eth.engine, vmConfig, lastAcceptedHash, config.SkipUpgradeCheck)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := eth.handleOfflinePruning(cacheConfig, chainConfig, vmConfig, lastAcceptedHash); err != nil {
+	if err := eth.handleOfflinePruning(cacheConfig, config.Genesis, vmConfig, lastAcceptedHash); err != nil {
 		return nil, err
 	}
 
 	eth.bloomIndexer.Start(eth.blockchain)
 
 	config.TxPool.Journal = ""
-	eth.txPool = core.NewTxPool(config.TxPool, chainConfig, eth.blockchain)
+	eth.txPool = core.NewTxPool(config.TxPool, eth.blockchain.Config(), eth.blockchain)
 
-	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, clock)
+	eth.miner = miner.New(eth, &config.Miner, eth.blockchain.Config(), eth.EventMux(), eth.engine, clock)
+
+	allowUnprotectedTxHashes := make(map[common.Hash]struct{})
+	for _, txHash := range config.AllowUnprotectedTxHashes {
+		allowUnprotectedTxHashes[txHash] = struct{}{}
+	}
 
 	eth.APIBackend = &EthAPIBackend{
-		extRPCEnabled:       stack.Config().ExtRPCEnabled(),
-		allowUnprotectedTxs: config.AllowUnprotectedTxs,
-		eth:                 eth,
+		extRPCEnabled:            stack.Config().ExtRPCEnabled(),
+		allowUnprotectedTxs:      config.AllowUnprotectedTxs,
+		allowUnprotectedTxHashes: allowUnprotectedTxHashes,
+		eth:                      eth,
 	}
 	if config.AllowUnprotectedTxs {
 		log.Info("Unprotected transactions allowed")
 	}
 	gpoParams := config.GPO
-	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams)
-
+	eth.APIBackend.gpo, err = gasprice.NewOracle(eth.APIBackend, gpoParams)
 	if err != nil {
 		return nil, err
 	}
@@ -284,10 +270,8 @@ func (s *Ethereum) APIs() []rpc.API {
 	apis = append(apis, s.stackRPCs...)
 
 	// Create [filterSystem] with the log cache size set in the config.
-	ethcfg := s.APIBackend.eth.config
 	filterSystem := filters.NewFilterSystem(s.APIBackend, filters.Config{
-		LogCacheSize: ethcfg.FilterLogCacheSize,
-		Timeout:      5 * time.Minute,
+		Timeout: 5 * time.Minute,
 	})
 
 	// Append all the local APIs and return
@@ -423,7 +407,7 @@ func (s *Ethereum) precheckPopulateMissingTries() error {
 	return nil
 }
 
-func (s *Ethereum) handleOfflinePruning(cacheConfig *core.CacheConfig, chainConfig *params.ChainConfig, vmConfig vm.Config, lastAcceptedHash common.Hash) error {
+func (s *Ethereum) handleOfflinePruning(cacheConfig *core.CacheConfig, gspec *core.Genesis, vmConfig vm.Config, lastAcceptedHash common.Hash) error {
 	if s.config.OfflinePruning && !s.config.Pruning {
 		return core.ErrRefuseToCorruptArchiver
 	}
@@ -464,7 +448,7 @@ func (s *Ethereum) handleOfflinePruning(cacheConfig *core.CacheConfig, chainConf
 	}
 	// Note: Time Marker is written inside of [Prune] before compaction begins
 	// (considered an optional optimization)
-	s.blockchain, err = core.NewBlockChain(s.chainDb, cacheConfig, chainConfig, s.engine, vmConfig, lastAcceptedHash)
+	s.blockchain, err = core.NewBlockChain(s.chainDb, cacheConfig, gspec, s.engine, vmConfig, lastAcceptedHash, s.config.SkipUpgradeCheck)
 	if err != nil {
 		return fmt.Errorf("failed to re-initialize blockchain after offline pruning: %w", err)
 	}

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package blocks
@@ -25,7 +25,18 @@ func (b *CommonBlock) initialize(bytes []byte) {
 	b.bytes = bytes
 }
 
-func (b *CommonBlock) ID() ids.ID     { return b.id }
-func (b *CommonBlock) Parent() ids.ID { return b.PrntID }
-func (b *CommonBlock) Bytes() []byte  { return b.bytes }
-func (b *CommonBlock) Height() uint64 { return b.Hght }
+func (b *CommonBlock) ID() ids.ID {
+	return b.id
+}
+
+func (b *CommonBlock) Parent() ids.ID {
+	return b.PrntID
+}
+
+func (b *CommonBlock) Bytes() []byte {
+	return b.bytes
+}
+
+func (b *CommonBlock) Height() uint64 {
+	return b.Hght
+}

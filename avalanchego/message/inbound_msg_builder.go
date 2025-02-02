@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package message
@@ -7,213 +7,92 @@ import (
 	"time"
 
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/proto/pb/p2p"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 )
 
-var _ InboundMsgBuilder = &inMsgBuilderWithPacker{}
+var _ InboundMsgBuilder = (*inMsgBuilder)(nil)
 
 type InboundMsgBuilder interface {
-	Parser
-
-	InboundGetStateSummaryFrontier(
-		chainID ids.ID,
-		requestID uint32,
-		deadline time.Duration,
+	// Parse reads given bytes as InboundMessage
+	Parse(
+		bytes []byte,
 		nodeID ids.NodeID,
-	) InboundMessage
-
-	InboundStateSummaryFrontier(
-		chainID ids.ID,
-		requestID uint32,
-		summary []byte,
-		nodeID ids.NodeID,
-	) InboundMessage
-
-	InboundGetAcceptedStateSummary(
-		chainID ids.ID,
-		requestID uint32,
-		heights []uint64,
-		deadline time.Duration,
-		nodeID ids.NodeID,
-	) InboundMessage
-
-	InboundAcceptedStateSummary(
-		chainID ids.ID,
-		requestID uint32,
-		summaryIDs []ids.ID,
-		nodeID ids.NodeID,
-	) InboundMessage
-
-	InboundGetAcceptedFrontier(
-		chainID ids.ID,
-		requestID uint32,
-		deadline time.Duration,
-		nodeID ids.NodeID,
-	) InboundMessage
-
-	InboundAcceptedFrontier(
-		chainID ids.ID,
-		requestID uint32,
-		containerIDs []ids.ID,
-		nodeID ids.NodeID,
-	) InboundMessage
-
-	InboundGetAccepted(
-		chainID ids.ID,
-		requestID uint32,
-		deadline time.Duration,
-		containerIDs []ids.ID,
-		nodeID ids.NodeID,
-	) InboundMessage
-
-	InboundAccepted(
-		chainID ids.ID,
-		requestID uint32,
-		containerIDs []ids.ID,
-		nodeID ids.NodeID,
-	) InboundMessage
-
-	InboundAncestors(
-		chainID ids.ID,
-		requestID uint32,
-		containers [][]byte,
-		nodeID ids.NodeID,
-	) InboundMessage // used in UTs only
-
-	InboundPushQuery(
-		chainID ids.ID,
-		requestID uint32,
-		deadline time.Duration,
-		container []byte,
-		nodeID ids.NodeID,
-	) InboundMessage
-
-	InboundPullQuery(
-		chainID ids.ID,
-		requestID uint32,
-		deadline time.Duration,
-		containerID ids.ID,
-		nodeID ids.NodeID,
-	) InboundMessage
-
-	InboundChits(
-		chainID ids.ID,
-		requestID uint32,
-		containerIDs []ids.ID,
-		nodeID ids.NodeID,
-	) InboundMessage
-
-	InboundAppRequest(
-		chainID ids.ID,
-		requestID uint32,
-		deadline time.Duration,
-		msg []byte,
-		nodeID ids.NodeID,
-	) InboundMessage
-
-	InboundAppResponse(
-		chainID ids.ID,
-		requestID uint32,
-		msg []byte,
-		nodeID ids.NodeID,
-	) InboundMessage
-
-	InboundGet(
-		chainID ids.ID,
-		requestID uint32,
-		deadline time.Duration,
-		containerID ids.ID,
-		nodeID ids.NodeID,
-	) InboundMessage
-
-	InboundPut(
-		chainID ids.ID,
-		requestID uint32,
-		container []byte,
-		nodeID ids.NodeID,
-	) InboundMessage // used in UTs only
+		onFinishedHandling func(),
+	) (InboundMessage, error)
 }
 
-type inMsgBuilderWithPacker struct {
-	Codec
-	clock mockable.Clock
+type inMsgBuilder struct {
+	builder *msgBuilder
 }
 
-func NewInboundBuilderWithPacker(c Codec) InboundMsgBuilder {
-	return &inMsgBuilderWithPacker{
-		Codec: c,
+func newInboundBuilder(builder *msgBuilder) InboundMsgBuilder {
+	return &inMsgBuilder{
+		builder: builder,
 	}
 }
 
-func (b *inMsgBuilderWithPacker) SetTime(t time.Time) {
-	b.clock.Set(t)
-	b.Codec.SetTime(t)
+func (b *inMsgBuilder) Parse(bytes []byte, nodeID ids.NodeID, onFinishedHandling func()) (InboundMessage, error) {
+	return b.builder.parseInbound(bytes, nodeID, onFinishedHandling)
 }
 
-func (b *inMsgBuilderWithPacker) InboundGetStateSummaryFrontier(
+func InboundGetStateSummaryFrontier(
 	chainID ids.ID,
 	requestID uint32,
 	deadline time.Duration,
 	nodeID ids.NodeID,
 ) InboundMessage {
-	received := b.clock.Time()
-	return &inboundMessageWithPacker{
-		inboundMessage: inboundMessage{
-			op:             GetStateSummaryFrontier,
-			nodeID:         nodeID,
-			expirationTime: received.Add(deadline),
-		},
-		fields: map[Field]interface{}{
-			ChainID:   chainID[:],
-			RequestID: requestID,
+	return &inboundMessage{
+		nodeID: nodeID,
+		op:     GetStateSummaryFrontierOp,
+		message: &p2p.GetStateSummaryFrontier{
+			ChainId:   chainID[:],
+			RequestId: requestID,
 			Deadline:  uint64(deadline),
 		},
+		expiration: time.Now().Add(deadline),
 	}
 }
 
-func (b *inMsgBuilderWithPacker) InboundStateSummaryFrontier(
+func InboundStateSummaryFrontier(
 	chainID ids.ID,
 	requestID uint32,
 	summary []byte,
 	nodeID ids.NodeID,
 ) InboundMessage {
-	return &inboundMessageWithPacker{
-		inboundMessage: inboundMessage{
-			op:     StateSummaryFrontier,
-			nodeID: nodeID,
+	return &inboundMessage{
+		nodeID: nodeID,
+		op:     StateSummaryFrontierOp,
+		message: &p2p.StateSummaryFrontier{
+			ChainId:   chainID[:],
+			RequestId: requestID,
+			Summary:   summary,
 		},
-		fields: map[Field]interface{}{
-			ChainID:      chainID[:],
-			RequestID:    requestID,
-			SummaryBytes: summary,
-		},
+		expiration: mockable.MaxTime,
 	}
 }
 
-func (b *inMsgBuilderWithPacker) InboundGetAcceptedStateSummary(
+func InboundGetAcceptedStateSummary(
 	chainID ids.ID,
 	requestID uint32,
 	heights []uint64,
 	deadline time.Duration,
 	nodeID ids.NodeID,
 ) InboundMessage {
-	received := b.clock.Time()
-	return &inboundMessageWithPacker{
-		inboundMessage: inboundMessage{
-			op:             GetAcceptedStateSummary,
-			nodeID:         nodeID,
-			expirationTime: received.Add(deadline),
+	return &inboundMessage{
+		nodeID: nodeID,
+		op:     GetAcceptedStateSummaryOp,
+		message: &p2p.GetAcceptedStateSummary{
+			ChainId:   chainID[:],
+			RequestId: requestID,
+			Deadline:  uint64(deadline),
+			Heights:   heights,
 		},
-		fields: map[Field]interface{}{
-			ChainID:        chainID[:],
-			RequestID:      requestID,
-			Deadline:       uint64(deadline),
-			SummaryHeights: heights,
-		},
+		expiration: time.Now().Add(deadline),
 	}
 }
 
-func (b *inMsgBuilderWithPacker) InboundAcceptedStateSummary(
+func InboundAcceptedStateSummary(
 	chainID ids.ID,
 	requestID uint32,
 	summaryIDs []ids.ID,
@@ -221,41 +100,39 @@ func (b *inMsgBuilderWithPacker) InboundAcceptedStateSummary(
 ) InboundMessage {
 	summaryIDBytes := make([][]byte, len(summaryIDs))
 	encodeIDs(summaryIDs, summaryIDBytes)
-	return &inboundMessageWithPacker{
-		inboundMessage: inboundMessage{
-			op:     AcceptedStateSummary,
-			nodeID: nodeID,
+	return &inboundMessage{
+		nodeID: nodeID,
+		op:     AcceptedStateSummaryOp,
+		message: &p2p.AcceptedStateSummary{
+			ChainId:    chainID[:],
+			RequestId:  requestID,
+			SummaryIds: summaryIDBytes,
 		},
-		fields: map[Field]interface{}{
-			ChainID:    chainID[:],
-			RequestID:  requestID,
-			SummaryIDs: summaryIDBytes,
-		},
+		expiration: mockable.MaxTime,
 	}
 }
 
-func (b *inMsgBuilderWithPacker) InboundGetAcceptedFrontier(
+func InboundGetAcceptedFrontier(
 	chainID ids.ID,
 	requestID uint32,
 	deadline time.Duration,
 	nodeID ids.NodeID,
+	engineType p2p.EngineType,
 ) InboundMessage {
-	received := b.clock.Time()
-	return &inboundMessageWithPacker{
-		inboundMessage: inboundMessage{
-			op:             GetAcceptedFrontier,
-			nodeID:         nodeID,
-			expirationTime: received.Add(deadline),
+	return &inboundMessage{
+		nodeID: nodeID,
+		op:     GetAcceptedFrontierOp,
+		message: &p2p.GetAcceptedFrontier{
+			ChainId:    chainID[:],
+			RequestId:  requestID,
+			Deadline:   uint64(deadline),
+			EngineType: engineType,
 		},
-		fields: map[Field]interface{}{
-			ChainID:   chainID[:],
-			RequestID: requestID,
-			Deadline:  uint64(deadline),
-		},
+		expiration: time.Now().Add(deadline),
 	}
 }
 
-func (b *inMsgBuilderWithPacker) InboundAcceptedFrontier(
+func InboundAcceptedFrontier(
 	chainID ids.ID,
 	requestID uint32,
 	containerIDs []ids.ID,
@@ -263,45 +140,43 @@ func (b *inMsgBuilderWithPacker) InboundAcceptedFrontier(
 ) InboundMessage {
 	containerIDBytes := make([][]byte, len(containerIDs))
 	encodeIDs(containerIDs, containerIDBytes)
-	return &inboundMessageWithPacker{
-		inboundMessage: inboundMessage{
-			op:     AcceptedFrontier,
-			nodeID: nodeID,
+	return &inboundMessage{
+		nodeID: nodeID,
+		op:     AcceptedFrontierOp,
+		message: &p2p.AcceptedFrontier{
+			ChainId:      chainID[:],
+			RequestId:    requestID,
+			ContainerIds: containerIDBytes,
 		},
-		fields: map[Field]interface{}{
-			ChainID:      chainID[:],
-			RequestID:    requestID,
-			ContainerIDs: containerIDBytes,
-		},
+		expiration: mockable.MaxTime,
 	}
 }
 
-func (b *inMsgBuilderWithPacker) InboundGetAccepted(
+func InboundGetAccepted(
 	chainID ids.ID,
 	requestID uint32,
 	deadline time.Duration,
 	containerIDs []ids.ID,
 	nodeID ids.NodeID,
+	engineType p2p.EngineType,
 ) InboundMessage {
-	received := b.clock.Time()
 	containerIDBytes := make([][]byte, len(containerIDs))
 	encodeIDs(containerIDs, containerIDBytes)
-	return &inboundMessageWithPacker{
-		inboundMessage: inboundMessage{
-			op:             GetAccepted,
-			nodeID:         nodeID,
-			expirationTime: received.Add(deadline),
-		},
-		fields: map[Field]interface{}{
-			ChainID:      chainID[:],
-			RequestID:    requestID,
+	return &inboundMessage{
+		nodeID: nodeID,
+		op:     GetAcceptedOp,
+		message: &p2p.GetAccepted{
+			ChainId:      chainID[:],
+			RequestId:    requestID,
 			Deadline:     uint64(deadline),
-			ContainerIDs: containerIDBytes,
+			ContainerIds: containerIDBytes,
+			EngineType:   engineType,
 		},
+		expiration: time.Now().Add(deadline),
 	}
 }
 
-func (b *inMsgBuilderWithPacker) InboundAccepted(
+func InboundAccepted(
 	chainID ids.ID,
 	requestID uint32,
 	containerIDs []ids.ID,
@@ -309,186 +184,121 @@ func (b *inMsgBuilderWithPacker) InboundAccepted(
 ) InboundMessage {
 	containerIDBytes := make([][]byte, len(containerIDs))
 	encodeIDs(containerIDs, containerIDBytes)
-	return &inboundMessageWithPacker{
-		inboundMessage: inboundMessage{
-			op:     Accepted,
-			nodeID: nodeID,
+	return &inboundMessage{
+		nodeID: nodeID,
+		op:     AcceptedOp,
+		message: &p2p.Accepted{
+			ChainId:      chainID[:],
+			RequestId:    requestID,
+			ContainerIds: containerIDBytes,
 		},
-		fields: map[Field]interface{}{
-			ChainID:      chainID[:],
-			RequestID:    requestID,
-			ContainerIDs: containerIDBytes,
-		},
+		expiration: mockable.MaxTime,
 	}
 }
 
-func (b *inMsgBuilderWithPacker) InboundPushQuery(
+func InboundPushQuery(
 	chainID ids.ID,
 	requestID uint32,
 	deadline time.Duration,
 	container []byte,
 	nodeID ids.NodeID,
+	engineType p2p.EngineType,
 ) InboundMessage {
-	received := b.clock.Time()
-	return &inboundMessageWithPacker{
-		inboundMessage: inboundMessage{
-			op:             PushQuery,
-			nodeID:         nodeID,
-			expirationTime: received.Add(deadline),
+	return &inboundMessage{
+		nodeID: nodeID,
+		op:     PushQueryOp,
+		message: &p2p.PushQuery{
+			ChainId:    chainID[:],
+			RequestId:  requestID,
+			Deadline:   uint64(deadline),
+			Container:  container,
+			EngineType: engineType,
 		},
-		fields: map[Field]interface{}{
-			ChainID:        chainID[:],
-			RequestID:      requestID,
-			Deadline:       uint64(deadline),
-			ContainerBytes: container,
-		},
+		expiration: time.Now().Add(deadline),
 	}
 }
 
-func (b *inMsgBuilderWithPacker) InboundPullQuery(
+func InboundPullQuery(
 	chainID ids.ID,
 	requestID uint32,
 	deadline time.Duration,
 	containerID ids.ID,
 	nodeID ids.NodeID,
+	engineType p2p.EngineType,
 ) InboundMessage {
-	received := b.clock.Time()
-	return &inboundMessageWithPacker{
-		inboundMessage: inboundMessage{
-			op:             PullQuery,
-			nodeID:         nodeID,
-			expirationTime: received.Add(deadline),
-		},
-		fields: map[Field]interface{}{
-			ChainID:     chainID[:],
-			RequestID:   requestID,
+	return &inboundMessage{
+		nodeID: nodeID,
+		op:     PullQueryOp,
+		message: &p2p.PullQuery{
+			ChainId:     chainID[:],
+			RequestId:   requestID,
 			Deadline:    uint64(deadline),
-			ContainerID: containerID[:],
+			ContainerId: containerID[:],
+			EngineType:  engineType,
 		},
+		expiration: time.Now().Add(deadline),
 	}
 }
 
-func (b *inMsgBuilderWithPacker) InboundChits(
+func InboundChits(
 	chainID ids.ID,
 	requestID uint32,
-	containerIDs []ids.ID,
+	preferredContainerIDs []ids.ID,
+	acceptedContainerIDs []ids.ID,
 	nodeID ids.NodeID,
 ) InboundMessage {
-	containerIDBytes := make([][]byte, len(containerIDs))
-	encodeIDs(containerIDs, containerIDBytes)
-	return &inboundMessageWithPacker{
-		inboundMessage: inboundMessage{
-			op:     Chits,
-			nodeID: nodeID,
+	preferredContainerIDBytes := make([][]byte, len(preferredContainerIDs))
+	encodeIDs(preferredContainerIDs, preferredContainerIDBytes)
+	acceptedContainerIDBytes := make([][]byte, len(acceptedContainerIDs))
+	encodeIDs(acceptedContainerIDs, acceptedContainerIDBytes)
+	return &inboundMessage{
+		nodeID: nodeID,
+		op:     ChitsOp,
+		message: &p2p.Chits{
+			ChainId:               chainID[:],
+			RequestId:             requestID,
+			PreferredContainerIds: preferredContainerIDBytes,
+			AcceptedContainerIds:  acceptedContainerIDBytes,
 		},
-		fields: map[Field]interface{}{
-			ChainID:      chainID[:],
-			RequestID:    requestID,
-			ContainerIDs: containerIDBytes,
-		},
+		expiration: mockable.MaxTime,
 	}
 }
 
-func (b *inMsgBuilderWithPacker) InboundAppRequest(
+func InboundAppRequest(
 	chainID ids.ID,
 	requestID uint32,
 	deadline time.Duration,
 	msg []byte,
 	nodeID ids.NodeID,
 ) InboundMessage {
-	received := b.clock.Time()
-	return &inboundMessageWithPacker{
-		inboundMessage: inboundMessage{
-			op:             AppRequest,
-			nodeID:         nodeID,
-			expirationTime: received.Add(deadline),
-		},
-		fields: map[Field]interface{}{
-			ChainID:   chainID[:],
-			RequestID: requestID,
+	return &inboundMessage{
+		nodeID: nodeID,
+		op:     AppRequestOp,
+		message: &p2p.AppRequest{
+			ChainId:   chainID[:],
+			RequestId: requestID,
 			Deadline:  uint64(deadline),
 			AppBytes:  msg,
 		},
+		expiration: time.Now().Add(deadline),
 	}
 }
 
-func (b *inMsgBuilderWithPacker) InboundAppResponse(
+func InboundAppResponse(
 	chainID ids.ID,
 	requestID uint32,
 	msg []byte,
 	nodeID ids.NodeID,
 ) InboundMessage {
-	return &inboundMessageWithPacker{
-		inboundMessage: inboundMessage{
-			op:     AppResponse,
-			nodeID: nodeID,
-		},
-		fields: map[Field]interface{}{
-			ChainID:   chainID[:],
-			RequestID: requestID,
+	return &inboundMessage{
+		nodeID: nodeID,
+		op:     AppResponseOp,
+		message: &p2p.AppResponse{
+			ChainId:   chainID[:],
+			RequestId: requestID,
 			AppBytes:  msg,
 		},
-	}
-}
-
-func (b *inMsgBuilderWithPacker) InboundGet(
-	chainID ids.ID,
-	requestID uint32,
-	deadline time.Duration,
-	containerID ids.ID,
-	nodeID ids.NodeID,
-) InboundMessage { // used in UTs only
-	received := b.clock.Time()
-	return &inboundMessageWithPacker{
-		inboundMessage: inboundMessage{
-			op:             Put,
-			nodeID:         nodeID,
-			expirationTime: received.Add(deadline),
-		},
-		fields: map[Field]interface{}{
-			ChainID:     chainID[:],
-			RequestID:   requestID,
-			Deadline:    uint64(deadline),
-			ContainerID: containerID[:],
-		},
-	}
-}
-
-func (b *inMsgBuilderWithPacker) InboundPut(
-	chainID ids.ID,
-	requestID uint32,
-	container []byte,
-	nodeID ids.NodeID,
-) InboundMessage { // used in UTs only
-	return &inboundMessageWithPacker{
-		inboundMessage: inboundMessage{
-			op:     Put,
-			nodeID: nodeID,
-		},
-		fields: map[Field]interface{}{
-			ChainID:        chainID[:],
-			RequestID:      requestID,
-			ContainerBytes: container,
-		},
-	}
-}
-
-func (b *inMsgBuilderWithPacker) InboundAncestors(
-	chainID ids.ID,
-	requestID uint32,
-	containers [][]byte,
-	nodeID ids.NodeID,
-) InboundMessage { // used in UTs only
-	return &inboundMessageWithPacker{
-		inboundMessage: inboundMessage{
-			op:     Ancestors,
-			nodeID: nodeID,
-		},
-		fields: map[Field]interface{}{
-			ChainID:             chainID[:],
-			RequestID:           requestID,
-			MultiContainerBytes: containers,
-		},
+		expiration: mockable.MaxTime,
 	}
 }
 

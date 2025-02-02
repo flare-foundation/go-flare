@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package throttling
@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var _ net.Listener = &MockListener{}
+var _ net.Listener = (*MockListener)(nil)
 
 type MockListener struct {
 	t         *testing.T
@@ -46,8 +46,11 @@ func (ml *MockListener) Addr() net.Addr {
 func TestInboundConnThrottlerClose(t *testing.T) {
 	closed := false
 	l := &MockListener{
-		t:        t,
-		OnCloseF: func() error { closed = true; return nil },
+		t: t,
+		OnCloseF: func() error {
+			closed = true
+			return nil
+		},
 	}
 	wrappedL := NewThrottledListener(l, 1)
 	err := wrappedL.Close()
@@ -67,8 +70,11 @@ func TestInboundConnThrottlerClose(t *testing.T) {
 func TestInboundConnThrottlerAddr(t *testing.T) {
 	addrCalled := false
 	l := &MockListener{
-		t:       t,
-		OnAddrF: func() net.Addr { addrCalled = true; return nil },
+		t: t,
+		OnAddrF: func() net.Addr {
+			addrCalled = true
+			return nil
+		},
 	}
 	wrappedL := NewThrottledListener(l, 1)
 	_ = wrappedL.Addr()

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package p
@@ -12,7 +12,7 @@ import (
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
 )
 
-var _ txs.Visitor = &backendVisitor{}
+var _ txs.Visitor = (*backendVisitor)(nil)
 
 // backendVisitor handles accepting of transactions for the backend
 type backendVisitor struct {
@@ -21,8 +21,13 @@ type backendVisitor struct {
 	txID ids.ID
 }
 
-func (*backendVisitor) AdvanceTimeTx(*txs.AdvanceTimeTx) error         { return errUnsupportedTxType }
-func (*backendVisitor) RewardValidatorTx(*txs.RewardValidatorTx) error { return errUnsupportedTxType }
+func (*backendVisitor) AdvanceTimeTx(*txs.AdvanceTimeTx) error {
+	return errUnsupportedTxType
+}
+
+func (*backendVisitor) RewardValidatorTx(*txs.RewardValidatorTx) error {
+	return errUnsupportedTxType
+}
 
 func (b *backendVisitor) AddValidatorTx(tx *txs.AddValidatorTx) error {
 	return b.baseTx(&tx.BaseTx)

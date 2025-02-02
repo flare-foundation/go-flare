@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package utxo
@@ -11,9 +11,10 @@ import (
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow"
-	"github.com/ava-labs/avalanchego/utils/crypto"
+	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
 	"github.com/ava-labs/avalanchego/utils/hashing"
 	"github.com/ava-labs/avalanchego/utils/math"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/components/verify"
@@ -25,40 +26,14 @@ import (
 )
 
 var (
-	_ Handler = &handler{}
+	_ Handler = (*handler)(nil)
 
 	errCantSign                     = errors.New("can't sign")
 	errLockedFundsNotMarkedAsLocked = errors.New("locked funds not marked as locked")
 )
 
-// Removes the UTXOs consumed by [ins] from the UTXO set
-func Consume(utxoDB state.UTXODeleter, ins []*avax.TransferableInput) {
-	for _, input := range ins {
-		utxoDB.DeleteUTXO(input.InputID())
-	}
-}
-
-// Adds the UTXOs created by [outs] to the UTXO set.
-// [txID] is the ID of the tx that created [outs].
-func Produce(
-	utxoDB state.UTXOAdder,
-	txID ids.ID,
-	outs []*avax.TransferableOutput,
-) {
-	for index, out := range outs {
-		utxoDB.AddUTXO(&avax.UTXO{
-			UTXOID: avax.UTXOID{
-				TxID:        txID,
-				OutputIndex: uint32(index),
-			},
-			Asset: out.Asset,
-			Out:   out.Output(),
-		})
-	}
-}
-
 // TODO: Stake and Authorize should be replaced by similar methods in the
-//       P-chain wallet
+// P-chain wallet
 type Spender interface {
 	// Spend the provided amount while deducting the provided fee.
 	// Arguments:
@@ -74,7 +49,8 @@ type Spender interface {
 	//                   the staking period
 	// - [signers] the proof of ownership of the funds being moved
 	Spend(
-		keys []*crypto.PrivateKeySECP256K1R,
+		utxoReader avax.UTXOReader,
+		keys []*secp256k1.PrivateKey,
 		amount uint64,
 		fee uint64,
 		changeAddr ids.ShortID,
@@ -82,7 +58,7 @@ type Spender interface {
 		[]*avax.TransferableInput, // inputs
 		[]*avax.TransferableOutput, // returnedOutputs
 		[]*avax.TransferableOutput, // stakedOutputs
-		[][]*crypto.PrivateKeySECP256K1R, // signers
+		[][]*secp256k1.PrivateKey, // signers
 		error,
 	)
 
@@ -91,10 +67,10 @@ type Spender interface {
 	Authorize(
 		state state.Chain,
 		subnetID ids.ID,
-		keys []*crypto.PrivateKeySECP256K1R,
+		keys []*secp256k1.PrivateKey,
 	) (
 		verify.Verifiable, // Input that names owners
-		[]*crypto.PrivateKeySECP256K1R, // Keys that prove ownership
+		[]*secp256k1.PrivateKey, // Keys that prove ownership
 		error,
 	)
 }
@@ -112,7 +88,7 @@ type Verifier interface {
 	// Note: [unlockedProduced] is modified by this method.
 	VerifySpend(
 		tx txs.UnsignedTx,
-		utxoDB state.UTXOGetter,
+		utxoDB avax.UTXOGetter,
 		ins []*avax.TransferableInput,
 		outs []*avax.TransferableOutput,
 		creds []verify.Verifiable,
@@ -148,26 +124,24 @@ type Handler interface {
 func NewHandler(
 	ctx *snow.Context,
 	clk *mockable.Clock,
-	utxoReader avax.UTXOReader,
 	fx fx.Fx,
 ) Handler {
 	return &handler{
-		ctx:         ctx,
-		clk:         clk,
-		utxosReader: utxoReader,
-		fx:          fx,
+		ctx: ctx,
+		clk: clk,
+		fx:  fx,
 	}
 }
 
 type handler struct {
-	ctx         *snow.Context
-	clk         *mockable.Clock
-	utxosReader avax.UTXOReader
-	fx          fx.Fx
+	ctx *snow.Context
+	clk *mockable.Clock
+	fx  fx.Fx
 }
 
 func (h *handler) Spend(
-	keys []*crypto.PrivateKeySECP256K1R,
+	utxoReader avax.UTXOReader,
+	keys []*secp256k1.PrivateKey,
 	amount uint64,
 	fee uint64,
 	changeAddr ids.ShortID,
@@ -175,14 +149,14 @@ func (h *handler) Spend(
 	[]*avax.TransferableInput, // inputs
 	[]*avax.TransferableOutput, // returnedOutputs
 	[]*avax.TransferableOutput, // stakedOutputs
-	[][]*crypto.PrivateKeySECP256K1R, // signers
+	[][]*secp256k1.PrivateKey, // signers
 	error,
 ) {
-	addrs := ids.NewShortSet(len(keys)) // The addresses controlled by [keys]
+	addrs := set.NewSet[ids.ShortID](len(keys)) // The addresses controlled by [keys]
 	for _, key := range keys {
 		addrs.Add(key.PublicKey().Address())
 	}
-	utxos, err := avax.GetAllUTXOs(h.utxosReader, addrs) // The UTXOs controlled by [keys]
+	utxos, err := avax.GetAllUTXOs(utxoReader, addrs) // The UTXOs controlled by [keys]
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("couldn't get UTXOs: %w", err)
 	}
@@ -195,7 +169,7 @@ func (h *handler) Spend(
 	ins := []*avax.TransferableInput{}
 	returnedOuts := []*avax.TransferableOutput{}
 	stakedOuts := []*avax.TransferableOutput{}
-	signers := [][]*crypto.PrivateKeySECP256K1R{}
+	signers := [][]*secp256k1.PrivateKey{}
 
 	// Amount of AVAX that has been staked
 	amountStaked := uint64(0)
@@ -248,7 +222,7 @@ func (h *handler) Spend(
 		remainingValue := in.Amount()
 
 		// Stake any value that should be staked
-		amountToStake := math.Min64(
+		amountToStake := math.Min(
 			amount-amountStaked, // Amount we still need to stake
 			remainingValue,      // Amount available to stake
 		)
@@ -300,9 +274,9 @@ func (h *handler) Spend(
 	amountBurned := uint64(0)
 
 	for _, utxo := range utxos {
-		// If we have consumed more AVAX than we are trying to stake, and we
-		// have burned more AVAX then we need to, then we have no need to
-		// consume more AVAX
+		// If we have consumed more AVAX than we are trying to stake,
+		// and we have burned more AVAX than we need to,
+		// then we have no need to consume more AVAX
 		if amountBurned >= fee && amountStaked >= amount {
 			break
 		}
@@ -339,7 +313,7 @@ func (h *handler) Spend(
 		remainingValue := in.Amount()
 
 		// Burn any value that should be burned
-		amountToBurn := math.Min64(
+		amountToBurn := math.Min(
 			fee-amountBurned, // Amount we still need to burn
 			remainingValue,   // Amount available to burn
 		)
@@ -347,7 +321,7 @@ func (h *handler) Spend(
 		remainingValue -= amountToBurn
 
 		// Stake any value that should be staked
-		amountToStake := math.Min64(
+		amountToStake := math.Min(
 			amount-amountStaked, // Amount we still need to stake
 			remainingValue,      // Amount available to stake
 		)
@@ -411,10 +385,10 @@ func (h *handler) Spend(
 func (h *handler) Authorize(
 	state state.Chain,
 	subnetID ids.ID,
-	keys []*crypto.PrivateKeySECP256K1R,
+	keys []*secp256k1.PrivateKey,
 ) (
 	verify.Verifiable, // Input that names owners
-	[]*crypto.PrivateKeySECP256K1R, // Keys that prove ownership
+	[]*secp256k1.PrivateKey, // Keys that prove ownership
 	error,
 ) {
 	subnetTx, _, err := state.GetTx(subnetID)
@@ -453,7 +427,7 @@ func (h *handler) Authorize(
 
 func (h *handler) VerifySpend(
 	tx txs.UnsignedTx,
-	utxoDB state.UTXOGetter,
+	utxoDB avax.UTXOGetter,
 	ins []*avax.TransferableInput,
 	outs []*avax.TransferableOutput,
 	creds []verify.Verifiable,

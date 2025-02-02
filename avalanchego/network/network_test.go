@@ -1,11 +1,11 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package network
 
 import (
+	"context"
 	"crypto"
-	"fmt"
 	"net"
 	"sync"
 	"testing"
@@ -18,16 +18,20 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/message"
 	"github.com/ava-labs/avalanchego/network/dialer"
+	"github.com/ava-labs/avalanchego/network/peer"
 	"github.com/ava-labs/avalanchego/network/throttling"
+	"github.com/ava-labs/avalanchego/proto/pb/p2p"
 	"github.com/ava-labs/avalanchego/snow/networking/router"
 	"github.com/ava-labs/avalanchego/snow/networking/tracker"
 	"github.com/ava-labs/avalanchego/snow/uptime"
 	"github.com/ava-labs/avalanchego/snow/validators"
+	"github.com/ava-labs/avalanchego/subnets"
 	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/ips"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/math/meter"
 	"github.com/ava-labs/avalanchego/utils/resource"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/utils/units"
 	"github.com/ava-labs/avalanchego/version"
 )
@@ -106,7 +110,7 @@ var (
 		PingFrequency:      constants.DefaultPingFrequency,
 		AllowPrivateIPs:    true,
 
-		CompressionEnabled: true,
+		CompressionType: constants.DefaultNetworkCompressionType,
 
 		UptimeCalculator:  uptime.NewManager(uptime.NewTestState()),
 		UptimeMetricFreq:  30 * time.Second,
@@ -139,7 +143,12 @@ func newDefaultTargeter(t tracker.Tracker) tracker.Targeter {
 }
 
 func newDefaultResourceTracker() tracker.ResourceTracker {
-	tracker, err := tracker.NewResourceTracker(prometheus.NewRegistry(), resource.NoUsage, meter.ContinuousFactory{}, 10*time.Second)
+	tracker, err := tracker.NewResourceTracker(
+		prometheus.NewRegistry(),
+		resource.NoUsage,
+		meter.ContinuousFactory{},
+		10*time.Second,
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -170,44 +179,25 @@ func newTestNetwork(t *testing.T, count int) (*testDialer, []*testListener, []id
 	return dialer, listeners, nodeIDs, configs
 }
 
-func newMessageCreator(t *testing.T) (message.Creator, message.Creator) {
+func newMessageCreator(t *testing.T) message.Creator {
 	t.Helper()
 
 	mc, err := message.NewCreator(
+		logging.NoLog{},
 		prometheus.NewRegistry(),
 		"",
-		true,
+		constants.DefaultNetworkCompressionType,
 		10*time.Second,
 	)
 	require.NoError(t, err)
 
-	mcProto, err := message.NewCreatorWithProto(
-		prometheus.NewRegistry(),
-		"",
-		true,
-		10*time.Second,
-	)
-	require.NoError(t, err)
-
-	return mc, mcProto
+	return mc
 }
 
 func newFullyConnectedTestNetwork(t *testing.T, handlers []router.InboundHandler) ([]ids.NodeID, []Network, *sync.WaitGroup) {
 	require := require.New(t)
 
 	dialer, listeners, nodeIDs, configs := newTestNetwork(t, len(handlers))
-
-	beacons := validators.NewSet()
-	err := beacons.AddWeight(nodeIDs[0], 1)
-	require.NoError(err)
-
-	vdrs := validators.NewManager()
-	for _, nodeID := range nodeIDs {
-		err := vdrs.AddWeight(constants.PrimaryNetworkID, nodeID, 1)
-		require.NoError(err)
-	}
-
-	msgCreator, msgCreatorWithProto := newMessageCreator(t)
 
 	var (
 		networks = make([]Network, len(configs))
@@ -218,19 +208,44 @@ func newFullyConnectedTestNetwork(t *testing.T, handlers []router.InboundHandler
 		onAllConnected = make(chan struct{})
 	)
 	for i, config := range configs {
+		msgCreator := newMessageCreator(t)
+		registry := prometheus.NewRegistry()
+
+		g, err := peer.NewGossipTracker(registry, "foobar")
+		require.NoError(err)
+
+		log := logging.NoLog{}
+		gossipTrackerCallback := peer.GossipTrackerCallback{
+			Log:           log,
+			GossipTracker: g,
+		}
+
+		beacons := validators.NewSet()
+		err = beacons.Add(nodeIDs[0], nil, ids.GenerateTestID(), 1)
+		require.NoError(err)
+
+		primaryVdrs := validators.NewSet()
+		primaryVdrs.RegisterCallbackListener(&gossipTrackerCallback)
+		for _, nodeID := range nodeIDs {
+			err := primaryVdrs.Add(nodeID, nil, ids.GenerateTestID(), 1)
+			require.NoError(err)
+		}
+
+		vdrs := validators.NewManager()
+		_ = vdrs.Add(constants.PrimaryNetworkID, primaryVdrs)
+
 		config := config
 
+		config.GossipTracker = g
 		config.Beacons = beacons
 		config.Validators = vdrs
 
-		var connected ids.NodeIDSet
+		var connected set.Set[ids.NodeID]
 		net, err := NewNetwork(
 			config,
 			msgCreator,
-			msgCreatorWithProto,
-			time.Now().Add(time.Hour), // TODO: test proto with banff activated
-			prometheus.NewRegistry(),
-			logging.NoLog{},
+			registry,
+			log,
 			listeners[i],
 			dialer,
 			&testHandler{
@@ -300,52 +315,89 @@ func TestNewNetwork(t *testing.T) {
 func TestSend(t *testing.T) {
 	require := require.New(t)
 
-	for _, useProto := range []bool{false, true} {
-		t.Run(fmt.Sprintf("use proto buf message creator %v", useProto), func(tt *testing.T) {
-			received := make(chan message.InboundMessage)
-			nodeIDs, networks, wg := newFullyConnectedTestNetwork(
-				tt,
-				[]router.InboundHandler{
-					router.InboundHandlerFunc(func(message.InboundMessage) {
-						tt.Fatal("unexpected message received")
-					}),
-					router.InboundHandlerFunc(func(msg message.InboundMessage) {
-						received <- msg
-					}),
-					router.InboundHandlerFunc(func(message.InboundMessage) {
-						tt.Fatal("unexpected message received")
-					}),
-				},
-			)
+	received := make(chan message.InboundMessage)
+	nodeIDs, networks, wg := newFullyConnectedTestNetwork(
+		t,
+		[]router.InboundHandler{
+			router.InboundHandlerFunc(func(context.Context, message.InboundMessage) {
+				t.Fatal("unexpected message received")
+			}),
+			router.InboundHandlerFunc(func(_ context.Context, msg message.InboundMessage) {
+				received <- msg
+			}),
+			router.InboundHandlerFunc(func(context.Context, message.InboundMessage) {
+				t.Fatal("unexpected message received")
+			}),
+		},
+	)
 
-			net0 := networks[0]
+	net0 := networks[0]
 
-			mc, mcProto := newMessageCreator(tt)
-			var (
-				outboundGetMsg message.OutboundMessage
-				err            error
-			)
-			if !useProto {
-				outboundGetMsg, err = mc.Get(ids.Empty, 1, time.Second, ids.Empty)
-			} else {
-				outboundGetMsg, err = mcProto.Get(ids.Empty, 1, time.Second, ids.Empty)
-			}
-			require.NoError(err)
+	mc := newMessageCreator(t)
+	outboundGetMsg, err := mc.Get(ids.Empty, 1, time.Second, ids.Empty, p2p.EngineType_ENGINE_TYPE_SNOWMAN)
+	require.NoError(err)
 
-			toSend := ids.NodeIDSet{}
-			toSend.Add(nodeIDs[1])
-			sentTo := net0.Send(outboundGetMsg, toSend, constants.PrimaryNetworkID, false)
-			require.EqualValues(toSend, sentTo)
+	toSend := set.Set[ids.NodeID]{}
+	toSend.Add(nodeIDs[1])
+	sentTo := net0.Send(outboundGetMsg, toSend, constants.PrimaryNetworkID, subnets.NoOpAllower)
+	require.EqualValues(toSend, sentTo)
 
-			inboundGetMsg := <-received
-			require.Equal(message.Get, inboundGetMsg.Op())
+	inboundGetMsg := <-received
+	require.Equal(message.GetOp, inboundGetMsg.Op())
 
-			for _, net := range networks {
-				net.StartClose()
-			}
-			wg.Wait()
-		})
+	for _, net := range networks {
+		net.StartClose()
 	}
+	wg.Wait()
+}
+
+func TestSendAndGossipWithFilter(t *testing.T) {
+	require := require.New(t)
+
+	received := make(chan message.InboundMessage)
+	nodeIDs, networks, wg := newFullyConnectedTestNetwork(
+		t,
+		[]router.InboundHandler{
+			router.InboundHandlerFunc(func(context.Context, message.InboundMessage) {
+				t.Fatal("unexpected message received")
+			}),
+			router.InboundHandlerFunc(func(_ context.Context, msg message.InboundMessage) {
+				received <- msg
+			}),
+			router.InboundHandlerFunc(func(context.Context, message.InboundMessage) {
+				t.Fatal("unexpected message received")
+			}),
+		},
+	)
+
+	net0 := networks[0]
+
+	mc := newMessageCreator(t)
+	outboundGetMsg, err := mc.Get(ids.Empty, 1, time.Second, ids.Empty, p2p.EngineType_ENGINE_TYPE_SNOWMAN)
+	require.NoError(err)
+
+	toSend := set.NewSet[ids.NodeID](3)
+	validNodeID := nodeIDs[1]
+	toSend.Add(nodeIDs...)
+	sentTo := net0.Send(outboundGetMsg, toSend, constants.PrimaryNetworkID, newNodeIDConnector(validNodeID))
+	require.Len(sentTo, 1)
+	require.Contains(sentTo, validNodeID)
+
+	inboundGetMsg := <-received
+	require.Equal(message.GetOp, inboundGetMsg.Op())
+
+	// Test Gossip now
+	sentTo = net0.Gossip(outboundGetMsg, constants.PrimaryNetworkID, 0, 0, len(nodeIDs), newNodeIDConnector(validNodeID))
+	require.Len(sentTo, 1)
+	require.Contains(sentTo, validNodeID)
+
+	inboundGetMsg = <-received
+	require.Equal(message.GetOp, inboundGetMsg.Op())
+
+	for _, net := range networks {
+		net.StartClose()
+	}
+	wg.Wait()
 }
 
 func TestTrackVerifiesSignatures(t *testing.T) {
@@ -355,10 +407,10 @@ func TestTrackVerifiesSignatures(t *testing.T) {
 
 	network := networks[0].(*network)
 	nodeID, tlsCert, _ := getTLS(t, 1)
-	err := network.config.Validators.AddWeight(constants.PrimaryNetworkID, nodeID, 1)
+	err := validators.Add(network.config.Validators, constants.PrimaryNetworkID, nodeID, nil, ids.Empty, 1)
 	require.NoError(err)
 
-	useful := network.Track(ips.ClaimedIPPort{
+	_, err = network.Track(ids.EmptyNodeID, []*ips.ClaimedIPPort{{
 		Cert: tlsCert.Leaf,
 		IPPort: ips.IPPort{
 			IP:   net.IPv4(123, 132, 123, 123),
@@ -366,9 +418,9 @@ func TestTrackVerifiesSignatures(t *testing.T) {
 		},
 		Timestamp: 1000,
 		Signature: nil,
-	})
+	}})
 	// The signature is wrong so this peer tracking info isn't useful.
-	require.False(useful)
+	require.Error(err)
 
 	network.peersLock.RLock()
 	require.Empty(network.trackedIPs)

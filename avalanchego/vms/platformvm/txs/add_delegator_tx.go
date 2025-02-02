@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package txs
@@ -6,21 +6,20 @@ package txs
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/utils/constants"
+	"github.com/ava-labs/avalanchego/utils/crypto/bls"
 	"github.com/ava-labs/avalanchego/utils/math"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/components/verify"
 	"github.com/ava-labs/avalanchego/vms/platformvm/fx"
-	"github.com/ava-labs/avalanchego/vms/platformvm/validator"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 )
 
 var (
-	_ DelegatorTx = &AddDelegatorTx{}
+	_ DelegatorTx = (*AddDelegatorTx)(nil)
 
 	errDelegatorWeightMismatch = errors.New("delegator weight is not equal to total stake weight")
 )
@@ -30,7 +29,7 @@ type AddDelegatorTx struct {
 	// Metadata, inputs and outputs
 	BaseTx `serialize:"true"`
 	// Describes the delegatee
-	Validator validator.Validator `serialize:"true" json:"validator"`
+	Validator `serialize:"true" json:"validator"`
 	// Where to send staked tokens when done validating
 	StakeOuts []*avax.TransferableOutput `serialize:"true" json:"stake"`
 	// Where to send staking rewards when done validating
@@ -49,17 +48,33 @@ func (tx *AddDelegatorTx) InitCtx(ctx *snow.Context) {
 	tx.DelegationRewardsOwner.InitCtx(ctx)
 }
 
-func (tx *AddDelegatorTx) SubnetID() ids.ID     { return constants.PrimaryNetworkID }
-func (tx *AddDelegatorTx) NodeID() ids.NodeID   { return tx.Validator.NodeID }
-func (tx *AddDelegatorTx) StartTime() time.Time { return tx.Validator.StartTime() }
-func (tx *AddDelegatorTx) EndTime() time.Time   { return tx.Validator.EndTime() }
-func (tx *AddDelegatorTx) Weight() uint64       { return tx.Validator.Wght }
-func (tx *AddDelegatorTx) PendingPriority() Priority {
+func (*AddDelegatorTx) SubnetID() ids.ID {
+	return constants.PrimaryNetworkID
+}
+
+func (tx *AddDelegatorTx) NodeID() ids.NodeID {
+	return tx.Validator.NodeID
+}
+
+func (*AddDelegatorTx) PublicKey() (*bls.PublicKey, bool, error) {
+	return nil, false, nil
+}
+
+func (*AddDelegatorTx) PendingPriority() Priority {
 	return PrimaryNetworkDelegatorApricotPendingPriority
 }
-func (tx *AddDelegatorTx) CurrentPriority() Priority         { return PrimaryNetworkDelegatorCurrentPriority }
-func (tx *AddDelegatorTx) Stake() []*avax.TransferableOutput { return tx.StakeOuts }
-func (tx *AddDelegatorTx) RewardsOwner() fx.Owner            { return tx.DelegationRewardsOwner }
+
+func (*AddDelegatorTx) CurrentPriority() Priority {
+	return PrimaryNetworkDelegatorCurrentPriority
+}
+
+func (tx *AddDelegatorTx) Stake() []*avax.TransferableOutput {
+	return tx.StakeOuts
+}
+
+func (tx *AddDelegatorTx) RewardsOwner() fx.Owner {
+	return tx.DelegationRewardsOwner
+}
 
 // SyntacticVerify returns nil iff [tx] is valid
 func (tx *AddDelegatorTx) SyntacticVerify(ctx *snow.Context) error {
@@ -97,10 +112,10 @@ func (tx *AddDelegatorTx) SyntacticVerify(ctx *snow.Context) error {
 	switch {
 	case !avax.IsSortedTransferableOutputs(tx.StakeOuts, Codec):
 		return errOutputsNotSorted
-	case totalStakeWeight != tx.Validator.Wght:
+	case totalStakeWeight != tx.Wght:
 		return fmt.Errorf("%w, delegator weight %d total stake weight %d",
 			errDelegatorWeightMismatch,
-			tx.Validator.Wght,
+			tx.Wght,
 			totalStakeWeight,
 		)
 	}

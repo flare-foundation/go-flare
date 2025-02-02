@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package snowball
@@ -9,9 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils/bag"
 )
-
-func TestFlatParams(t *testing.T) { ParamsTest(t, FlatFactory{}) }
 
 func TestFlat(t *testing.T) {
 	require := require.New(t)
@@ -27,13 +26,13 @@ func TestFlat(t *testing.T) {
 	require.Equal(Red, f.Preference())
 	require.False(f.Finalized())
 
-	twoBlue := ids.Bag{}
+	twoBlue := bag.Bag[ids.ID]{}
 	twoBlue.Add(Blue, Blue)
 	require.True(f.RecordPoll(twoBlue))
 	require.Equal(Blue, f.Preference())
 	require.False(f.Finalized())
 
-	oneRedOneBlue := ids.Bag{}
+	oneRedOneBlue := bag.Bag[ids.ID]{}
 	oneRedOneBlue.Add(Red, Blue)
 	require.False(f.RecordPoll(oneRedOneBlue))
 	require.Equal(Blue, f.Preference())

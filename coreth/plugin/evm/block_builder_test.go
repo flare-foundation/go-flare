@@ -4,7 +4,6 @@
 package evm
 
 import (
-	"math/big"
 	"sync"
 	"testing"
 	"time"
@@ -17,14 +16,9 @@ import (
 func TestBlockBuilderShutsDown(t *testing.T) {
 	shutdownChan := make(chan struct{})
 	wg := &sync.WaitGroup{}
-	config := *params.TestChainConfig
-	// Set ApricotPhase4BlockTime one hour in the future so that it will
-	// create a goroutine waiting for an hour before shutting down the
-	// buildBlocktimer.
-	config.ApricotPhase4BlockTimestamp = big.NewInt(time.Now().Add(time.Hour).Unix())
 	builder := &blockBuilder{
 		ctx:          snow.DefaultContextTest(),
-		chainConfig:  &config,
+		chainConfig:  params.TestChainConfig,
 		shutdownChan: shutdownChan,
 		shutdownWg:   wg,
 	}

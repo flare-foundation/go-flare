@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package reward
@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-var _ Calculator = &calculator{}
+var _ Calculator = (*calculator)(nil)
 
 type Calculator interface {
 	Calculate(stakedDuration time.Duration, stakedAmount, currentSupply uint64) uint64

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package txs
@@ -6,23 +6,22 @@ package txs
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/utils/constants"
+	"github.com/ava-labs/avalanchego/utils/crypto/bls"
 	"github.com/ava-labs/avalanchego/utils/math"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/components/verify"
 	"github.com/ava-labs/avalanchego/vms/platformvm/fx"
 	"github.com/ava-labs/avalanchego/vms/platformvm/reward"
 	"github.com/ava-labs/avalanchego/vms/platformvm/signer"
-	"github.com/ava-labs/avalanchego/vms/platformvm/validator"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 )
 
 var (
-	_ ValidatorTx = &AddPermissionlessValidatorTx{}
+	_ ValidatorTx = (*AddPermissionlessValidatorTx)(nil)
 
 	errEmptyNodeID             = errors.New("validator nodeID cannot be empty")
 	errNoStake                 = errors.New("no stake")
@@ -36,7 +35,7 @@ type AddPermissionlessValidatorTx struct {
 	// Metadata, inputs and outputs
 	BaseTx `serialize:"true"`
 	// Describes the validator
-	Validator validator.Validator `serialize:"true" json:"validator"`
+	Validator `serialize:"true" json:"validator"`
 	// ID of the subnet this validator is validating
 	Subnet ids.ID `serialize:"true" json:"subnetID"`
 	// If the [Subnet] is the primary network, [Signer] is the BLS key for this
@@ -71,11 +70,21 @@ func (tx *AddPermissionlessValidatorTx) InitCtx(ctx *snow.Context) {
 	tx.DelegatorRewardsOwner.InitCtx(ctx)
 }
 
-func (tx *AddPermissionlessValidatorTx) SubnetID() ids.ID     { return tx.Subnet }
-func (tx *AddPermissionlessValidatorTx) NodeID() ids.NodeID   { return tx.Validator.NodeID }
-func (tx *AddPermissionlessValidatorTx) StartTime() time.Time { return tx.Validator.StartTime() }
-func (tx *AddPermissionlessValidatorTx) EndTime() time.Time   { return tx.Validator.EndTime() }
-func (tx *AddPermissionlessValidatorTx) Weight() uint64       { return tx.Validator.Wght }
+func (tx *AddPermissionlessValidatorTx) SubnetID() ids.ID {
+	return tx.Subnet
+}
+
+func (tx *AddPermissionlessValidatorTx) NodeID() ids.NodeID {
+	return tx.Validator.NodeID
+}
+
+func (tx *AddPermissionlessValidatorTx) PublicKey() (*bls.PublicKey, bool, error) {
+	if err := tx.Signer.Verify(); err != nil {
+		return nil, false, err
+	}
+	key := tx.Signer.Key()
+	return key, key != nil, nil
+}
 
 func (tx *AddPermissionlessValidatorTx) PendingPriority() Priority {
 	if tx.Subnet == constants.PrimaryNetworkID {
@@ -165,8 +174,8 @@ func (tx *AddPermissionlessValidatorTx) SyntacticVerify(ctx *snow.Context) error
 	switch {
 	case !avax.IsSortedTransferableOutputs(tx.StakeOuts, Codec):
 		return errOutputsNotSorted
-	case totalStakeWeight != tx.Validator.Wght:
-		return fmt.Errorf("%w: weight %d != stake %d", errValidatorWeightMismatch, tx.Validator.Wght, totalStakeWeight)
+	case totalStakeWeight != tx.Wght:
+		return fmt.Errorf("%w: weight %d != stake %d", errValidatorWeightMismatch, tx.Wght, totalStakeWeight)
 	}
 
 	// cache that this is valid

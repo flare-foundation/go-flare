@@ -4,6 +4,7 @@
 package evm
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/big"
@@ -14,8 +15,10 @@ import (
 	"github.com/ava-labs/avalanchego/chains/atomic"
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow"
-	"github.com/ava-labs/avalanchego/utils/crypto"
+	"github.com/ava-labs/avalanchego/utils"
+	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
 	"github.com/ava-labs/avalanchego/utils/math"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/components/verify"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
@@ -46,8 +49,8 @@ type UnsignedImportTx struct {
 }
 
 // InputUTXOs returns the UTXOIDs of the imported funds
-func (utx *UnsignedImportTx) InputUTXOs() ids.Set {
-	set := ids.NewSet(len(utx.ImportedInputs))
+func (utx *UnsignedImportTx) InputUTXOs() set.Set[ids.ID] {
+	set := set.NewSet[ids.ID](len(utx.ImportedInputs))
 	for _, in := range utx.ImportedInputs {
 		set.Add(in.InputID())
 	}
@@ -80,7 +83,7 @@ func (utx *UnsignedImportTx) Verify(
 	if rules.IsApricotPhase5 {
 		// Note that SameSubnet verifies that [tx.SourceChain] isn't this
 		// chain's ID
-		if err := verify.SameSubnet(ctx, utx.SourceChain); err != nil {
+		if err := verify.SameSubnet(context.TODO(), ctx, utx.SourceChain); err != nil {
 			return errWrongChainID
 		}
 	} else {
@@ -106,7 +109,7 @@ func (utx *UnsignedImportTx) Verify(
 			return errImportNonAVAXInputBanff
 		}
 	}
-	if !avax.IsSortedAndUniqueTransferableInputs(utx.ImportedInputs) {
+	if !utils.IsSortedAndUniqueSortable(utx.ImportedInputs) {
 		return errInputsNotSortedUnique
 	}
 
@@ -171,7 +174,7 @@ func (utx *UnsignedImportTx) Burned(assetID ids.ID) (uint64, error) {
 		}
 	}
 
-	return math.Sub64(input, spent)
+	return math.Sub(input, spent)
 }
 
 // SemanticVerify this transaction is valid.
@@ -279,7 +282,7 @@ func (vm *VM) newImportTx(
 	chainID ids.ID, // chain to import from
 	to common.Address, // Address of recipient
 	baseFee *big.Int, // fee to use post-AP3
-	keys []*crypto.PrivateKeySECP256K1R, // Keys to import the funds
+	keys []*secp256k1.PrivateKey, // Keys to import the funds
 ) (*Tx, error) {
 	kc := secp256k1fx.NewKeychain()
 	for _, key := range keys {
@@ -303,7 +306,7 @@ func (vm *VM) newImportTxWithUTXOs(
 	atomicUTXOs []*avax.UTXO, // UTXOs to spend
 ) (*Tx, error) {
 	importedInputs := []*avax.TransferableInput{}
-	signers := [][]*crypto.PrivateKeySECP256K1R{}
+	signers := [][]*secp256k1.PrivateKey{}
 
 	importedAmount := make(map[ids.ID]uint64)
 	now := vm.clock.Unix()

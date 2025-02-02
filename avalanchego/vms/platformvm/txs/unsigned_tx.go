@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package txs
@@ -6,6 +6,7 @@ package txs
 import (
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 )
@@ -16,10 +17,10 @@ type UnsignedTx interface {
 	// avm.
 	snow.ContextInitializable
 	secp256k1fx.UnsignedTx
-	Initialize(unsignedBytes []byte)
+	SetBytes(unsignedBytes []byte)
 
 	// InputIDs returns the set of inputs this transaction consumes
-	InputIDs() ids.Set
+	InputIDs() set.Set[ids.ID]
 
 	Outputs() []*avax.TransferableOutput
 
