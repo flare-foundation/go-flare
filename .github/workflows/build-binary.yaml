@@ -38,7 +38,7 @@ jobs:
         ./scripts/build.sh
 
     - name: Archive production artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: dist-bin
         path: |
