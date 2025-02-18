@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	stdmath "math"
@@ -78,7 +80,15 @@ var (
 	errMissingPrivateKey        = errors.New("argument 'privateKey' not given")
 	errStartAfterEndTime        = errors.New("start time must be before end time")
 	errStartTimeInThePast       = errors.New("start time in the past")
+
+	completeGetValidators = false
 )
+
+func init() {
+	// if COMPLETE_GET_VALIDATORS is set to true, the getCurrentValidators API will return delegators
+	// for every node. Otherwise, it will only return delegators if a single nodeID is provided.
+	completeGetValidators = strings.ToUpper(os.Getenv("COMPLETE_GET_VALIDATORS")) == "TRUE"
+}
 
 // Service defines the API calls that can be made to the platform chain
 type Service struct {
@@ -881,8 +891,8 @@ func (s *Service) GetCurrentValidators(_ *http.Request, args *GetCurrentValidato
 		case txs.PrimaryNetworkDelegatorCurrentPriority, txs.SubnetPermissionlessDelegatorCurrentPriority:
 			var rewardOwner *platformapi.Owner
 			// If we are handling multiple nodeIDs, we don't return the
-			// delegator information.
-			if numNodeIDs == 1 {
+			// delegator information unless completeGetValidators is true.
+			if numNodeIDs == 1 || completeGetValidators {
 				attr, err := s.loadStakerTxAttributes(currentStaker.TxID)
 				if err != nil {
 					return err
@@ -941,8 +951,8 @@ func (s *Service) GetCurrentValidators(_ *http.Request, args *GetCurrentValidato
 		vdr.DelegatorCount = &delegatorCount
 		vdr.DelegatorWeight = &delegatorWeight
 
-		if numNodeIDs == 1 {
-			// queried a specific validator, load all of its delegators
+		if numNodeIDs == 1 || completeGetValidators {
+			// queried a specific validator or completeGetValidators is true, load all of its delegators
 			vdr.Delegators = &delegators
 		}
 		reply.Validators[i] = vdr
