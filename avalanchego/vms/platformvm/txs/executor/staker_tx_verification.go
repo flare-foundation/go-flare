@@ -462,6 +462,18 @@ func verifyAddPermissionlessValidatorTx(
 	}
 
 	currentTimestamp := chainState.GetTimestamp()
+	if constants.IsFlareNetworkID(backend.Ctx.NetworkID) || constants.IsSgbNetworkID(backend.Ctx.NetworkID) {
+		// Flare does not allow permissionless validator tx before Cortina
+		if currentTimestamp.Before(backend.Config.CortinaTime) {
+			return errWrongTxType
+		}
+
+		// Flare does not allow creation of subnets
+		if tx.Subnet != constants.PrimaryNetworkID {
+			return errWrongTxType
+		}
+	}
+
 	// Ensure the proposed validator starts after the current time
 	startTime := tx.StartTime()
 	if !currentTimestamp.Before(startTime) {
@@ -643,6 +655,11 @@ func verifyAddPermissionlessDelegatorTx(
 	}
 
 	currentTimestamp := chainState.GetTimestamp()
+	// Flare does not allow permissionless delegator tx before Cortina
+	if currentTimestamp.Before(backend.Config.CortinaTime) && (constants.IsFlareNetworkID(backend.Ctx.NetworkID) || constants.IsSgbNetworkID(backend.Ctx.NetworkID)) {
+		return errWrongTxType
+	}
+
 	// Ensure the proposed validator starts after the current timestamp
 	startTime := tx.StartTime()
 	if !currentTimestamp.Before(startTime) {
