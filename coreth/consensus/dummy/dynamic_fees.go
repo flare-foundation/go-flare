@@ -77,7 +77,7 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header, timestamp uin
 	)
 	if isApricotPhase5 {
 		baseFeeChangeDenominator = ApricotPhase5BaseFeeChangeDenominator
-		if config.IsSongbirdCode() {
+		if config.IsSongbirdCode() && !config.IsCortina(bigTimestamp) {
 			parentGasTarget = params.SgbApricotPhase5TargetGas
 		} else {
 			parentGasTarget = params.ApricotPhase5TargetGas
