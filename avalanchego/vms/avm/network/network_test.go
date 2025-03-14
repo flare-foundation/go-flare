@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 
@@ -41,9 +42,13 @@ func TestNetworkAppGossip(t *testing.T) {
 		},
 	}
 
-	parser, err := txs.NewParser([]fxs.Fx{
-		&secp256k1fx.Fx{},
-	})
+	parser, err := txs.NewParser(
+		time.Time{},
+		[]fxs.Fx{
+			&secp256k1fx.Fx{},
+		},
+	)
+
 	require.NoError(t, err)
 	require.NoError(t, parser.InitializeTx(testTx))
 
@@ -142,11 +147,14 @@ func TestNetworkAppGossip(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			parser, err := txs.NewParser([]fxs.Fx{
-				&secp256k1fx.Fx{},
-				&nftfx.Fx{},
-				&propertyfx.Fx{},
-			})
+			parser, err := txs.NewParser(
+				time.Time{},
+				[]fxs.Fx{
+					&secp256k1fx.Fx{},
+					&nftfx.Fx{},
+					&propertyfx.Fx{},
+				},
+			)
 			require.NoError(err)
 
 			n := New(
@@ -283,11 +291,14 @@ func TestNetworkIssueTx(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			parser, err := txs.NewParser([]fxs.Fx{
-				&secp256k1fx.Fx{},
-				&nftfx.Fx{},
-				&propertyfx.Fx{},
-			})
+			parser, err := txs.NewParser(
+				time.Time{},
+				[]fxs.Fx{
+					&secp256k1fx.Fx{},
+					&nftfx.Fx{},
+					&propertyfx.Fx{},
+				},
+			)
 			require.NoError(err)
 
 			n := New(
@@ -310,9 +321,12 @@ func TestNetworkGossipTx(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	parser, err := txs.NewParser([]fxs.Fx{
-		&secp256k1fx.Fx{},
-	})
+	parser, err := txs.NewParser(
+		time.Time{},
+		[]fxs.Fx{
+			&secp256k1fx.Fx{},
+		},
+	)
 	require.NoError(err)
 
 	appSender := common.NewMockSender(ctrl)

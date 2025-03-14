@@ -29,9 +29,12 @@ func TestStandardBlocks(t *testing.T) {
 	// check standard block can be built and parsed
 	require := require.New(t)
 
-	parser, err := NewParser([]fxs.Fx{
-		&secp256k1fx.Fx{},
-	})
+	parser, err := NewParser(
+		time.Time{},
+		[]fxs.Fx{
+			&secp256k1fx.Fx{},
+		},
+	)
 	require.NoError(err)
 
 	blkTimestamp := time.Now()

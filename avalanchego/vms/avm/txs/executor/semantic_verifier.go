@@ -9,6 +9,7 @@ import (
 	"reflect"
 
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/version"
 	"github.com/ava-labs/avalanchego/vms/avm/states"
 	"github.com/ava-labs/avalanchego/vms/avm/txs"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
@@ -235,6 +236,13 @@ func (v *SemanticVerifier) verifyFxUsage(
 
 	for _, state := range createAssetTx.States {
 		if state.FxIndex == uint32(fxID) {
+			return nil
+		}
+	}
+
+	if !v.State.GetTimestamp().Before(version.GetCortinaTime(v.Ctx.NetworkID)) {
+		// Allow fx to be used for AVAX asset with fxID 0 when createAssetTx.States is empty
+		if len(createAssetTx.States) == 0 && assetID == v.Ctx.AVAXAssetID && fxID == 0 {
 			return nil
 		}
 	}

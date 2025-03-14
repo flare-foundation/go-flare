@@ -6,6 +6,7 @@ package executor
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 
@@ -31,6 +32,7 @@ func TestSemanticVerifierBaseTx(t *testing.T) {
 	typeToFxIndex := make(map[reflect.Type]int)
 	secpFx := &secp256k1fx.Fx{}
 	parser, err := txs.NewCustomParser(
+		time.Time{},
 		typeToFxIndex,
 		new(mockable.Clock),
 		logging.NoWarn{},
@@ -183,6 +185,7 @@ func TestSemanticVerifierBaseTx(t *testing.T) {
 
 				state.EXPECT().GetUTXOFromID(&utxoID).Return(&utxo, nil)
 				state.EXPECT().GetTx(asset.ID).Return(&createAssetTx, nil)
+				state.EXPECT().GetTimestamp().Return(time.Time{})
 
 				return state
 			},
@@ -294,6 +297,7 @@ func TestSemanticVerifierBaseTx(t *testing.T) {
 				}
 
 				state.EXPECT().GetTx(asset.ID).Return(&createAssetTx, nil)
+				state.EXPECT().GetTimestamp().Return(time.Time{})
 
 				return state
 			},
@@ -405,6 +409,7 @@ func TestSemanticVerifierExportTx(t *testing.T) {
 	typeToFxIndex := make(map[reflect.Type]int)
 	secpFx := &secp256k1fx.Fx{}
 	parser, err := txs.NewCustomParser(
+		time.Time{},
 		typeToFxIndex,
 		new(mockable.Clock),
 		logging.NoWarn{},
@@ -561,6 +566,7 @@ func TestSemanticVerifierExportTx(t *testing.T) {
 
 				state.EXPECT().GetUTXOFromID(&utxoID).Return(&utxo, nil)
 				state.EXPECT().GetTx(asset.ID).Return(&createAssetTx, nil)
+				state.EXPECT().GetTimestamp().Return(time.Time{})
 
 				return state
 			},
@@ -672,6 +678,7 @@ func TestSemanticVerifierExportTx(t *testing.T) {
 				}
 
 				state.EXPECT().GetTx(asset.ID).Return(&createAssetTx, nil)
+				state.EXPECT().GetTimestamp().Return(time.Time{})
 
 				return state
 			},
@@ -785,6 +792,7 @@ func TestSemanticVerifierExportTxDifferentSubnet(t *testing.T) {
 	typeToFxIndex := make(map[reflect.Type]int)
 	secpFx := &secp256k1fx.Fx{}
 	parser, err := txs.NewCustomParser(
+		time.Time{},
 		typeToFxIndex,
 		new(mockable.Clock),
 		logging.NoWarn{},
