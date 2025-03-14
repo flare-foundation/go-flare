@@ -5,6 +5,7 @@ package txs
 
 import (
 	"reflect"
+	"time"
 
 	"github.com/ava-labs/avalanchego/codec"
 	"github.com/ava-labs/avalanchego/utils/logging"
@@ -41,6 +42,8 @@ type fxVM struct {
 	clock         *mockable.Clock
 	log           logging.Logger
 	codecRegistry codec.Registry
+
+	cortinaTime time.Time
 }
 
 func (vm *fxVM) Clock() *mockable.Clock {
@@ -56,5 +59,5 @@ func (vm *fxVM) Logger() logging.Logger {
 }
 
 func (vm *fxVM) EthVerificationEnabled() bool {
-	return false
+	return !vm.clock.Time().Before(vm.cortinaTime)
 }

@@ -6,6 +6,7 @@ package blocks
 import (
 	"fmt"
 	"reflect"
+	"time"
 
 	"github.com/ava-labs/avalanchego/codec"
 	"github.com/ava-labs/avalanchego/utils/logging"
@@ -34,8 +35,8 @@ type parser struct {
 	txs.Parser
 }
 
-func NewParser(fxs []fxs.Fx) (Parser, error) {
-	p, err := txs.NewParser(fxs)
+func NewParser(cortinaTime time.Time, fxs []fxs.Fx) (Parser, error) {
+	p, err := txs.NewParser(cortinaTime, fxs)
 	if err != nil {
 		return nil, err
 	}
@@ -53,12 +54,13 @@ func NewParser(fxs []fxs.Fx) (Parser, error) {
 }
 
 func NewCustomParser(
+	cortinaTime time.Time,
 	typeToFxIndex map[reflect.Type]int,
 	clock *mockable.Clock,
 	log logging.Logger,
 	fxs []fxs.Fx,
 ) (Parser, error) {
-	p, err := txs.NewCustomParser(typeToFxIndex, clock, log, fxs)
+	p, err := txs.NewCustomParser(cortinaTime, typeToFxIndex, clock, log, fxs)
 	if err != nil {
 		return nil, err
 	}

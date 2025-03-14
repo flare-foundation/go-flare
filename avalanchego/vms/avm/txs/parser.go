@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"time"
 
 	"github.com/ava-labs/avalanchego/codec"
 	"github.com/ava-labs/avalanchego/codec/linearcodec"
@@ -43,8 +44,9 @@ type parser struct {
 	gc  linearcodec.Codec
 }
 
-func NewParser(fxs []fxs.Fx) (Parser, error) {
+func NewParser(cortinaTime time.Time, fxs []fxs.Fx) (Parser, error) {
 	return NewCustomParser(
+		cortinaTime,
 		make(map[reflect.Type]int),
 		&mockable.Clock{},
 		logging.NoLog{},
@@ -53,6 +55,7 @@ func NewParser(fxs []fxs.Fx) (Parser, error) {
 }
 
 func NewCustomParser(
+	cortinaTime time.Time,
 	typeToFxIndex map[reflect.Type]int,
 	clock *mockable.Clock,
 	log logging.Logger,
@@ -88,6 +91,7 @@ func NewCustomParser(
 		typeToFxIndex: typeToFxIndex,
 		clock:         clock,
 		log:           log,
+		cortinaTime:   cortinaTime,
 	}
 	for i, fx := range fxs {
 		vm.codecRegistry = &codecRegistry{

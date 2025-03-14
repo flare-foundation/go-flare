@@ -519,9 +519,12 @@ func TestBlockBuilderAddLocalTx(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	parser, err := blocks.NewParser([]fxs.Fx{
-		&secp256k1fx.Fx{},
-	})
+	parser, err := blocks.NewParser(
+		time.Time{},
+		[]fxs.Fx{
+			&secp256k1fx.Fx{},
+		},
+	)
 	require.NoError(err)
 
 	backend := &txexecutor.Backend{

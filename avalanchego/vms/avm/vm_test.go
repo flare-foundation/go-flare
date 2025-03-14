@@ -9,6 +9,7 @@ import (
 	"errors"
 	"math"
 	"testing"
+	"time"
 
 	stdjson "encoding/json"
 
@@ -123,9 +124,12 @@ func NewContext(tb testing.TB) *snow.Context {
 //  1. tx in genesis that creates asset
 //  2. the index of the output
 func GetCreateTxFromGenesisTest(tb testing.TB, genesisBytes []byte, assetName string) *txs.Tx {
-	parser, err := txs.NewParser([]fxs.Fx{
-		&secp256k1fx.Fx{},
-	})
+	parser, err := txs.NewParser(
+		time.Time{},
+		[]fxs.Fx{
+			&secp256k1fx.Fx{},
+		},
+	)
 	if err != nil {
 		tb.Fatal(err)
 	}
