@@ -191,7 +191,7 @@ var (
 		ApricotPhase6BlockTimestamp:     big.NewInt(time.Date(2024, time.November, 26, 13, 0, 0, 0, time.UTC).Unix()),
 		ApricotPhasePost6BlockTimestamp: big.NewInt(time.Date(2024, time.November, 26, 14, 0, 0, 0, time.UTC).Unix()),
 		BanffBlockTimestamp:             big.NewInt(time.Date(2024, time.November, 26, 15, 0, 0, 0, time.UTC).Unix()),
-		CortinaBlockTimestamp:           big.NewInt(time.Date(2025, time.March, 25, 13, 0, 0, 0, time.UTC).Unix()),
+		CortinaBlockTimestamp:           big.NewInt(time.Date(2025, time.April, 8, 12, 0, 0, 0, time.UTC).Unix()),
 	}
 
 	StagingChainConfig = &ChainConfig{
@@ -271,7 +271,7 @@ var (
 		ApricotPhase6BlockTimestamp:     big.NewInt(time.Date(2025, time.January, 7, 13, 0, 0, 0, time.UTC).Unix()),
 		ApricotPhasePost6BlockTimestamp: big.NewInt(time.Date(2025, time.January, 7, 14, 0, 0, 0, time.UTC).Unix()),
 		BanffBlockTimestamp:             big.NewInt(time.Date(2025, time.January, 7, 15, 0, 0, 0, time.UTC).Unix()),
-		CortinaBlockTimestamp:           big.NewInt(time.Date(2025, time.March, 18, 13, 0, 0, 0, time.UTC).Unix()),
+		CortinaBlockTimestamp:           big.NewInt(time.Date(2025, time.March, 27, 13, 0, 0, 0, time.UTC).Unix()),
 	}
 
 	// LocalChainConfig is the configuration for the Songbird Local network.
