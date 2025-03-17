@@ -1,8 +1,16 @@
 # go-flare
 
+**Please note that this release is unable to run Flare or Songbird mainnets - and will display "mainnet is not supported" if attempted to run with flare or songbird network id configuration.**
+
+**Testnets should be updated to this version before**
+
+- **Coston (Songbird testnet): March 27, 2025 at 13 UTC**
+- **Coston 2 (Flare testnet) : April 8, 2025 at 12 UTC**
+
 go-flare is a modified version of [avalanchego@v1.10.0](https://github.com/ava-labs/avalanchego/releases/tag/v1.10.0) and [coreth@v0.12.0](https://github.com/ava-labs/coreth/releases/tag/v0.12.0), incorporating specific features for Flare and Songbird networks. These features include prioritized contract handling and the invocation of the daemon contract.
 
 ## System Requirements
+
 - go version 1.21.8
 - gcc, g++ and jq
 - CPU: Equivalent of 8 AWS vCPU
