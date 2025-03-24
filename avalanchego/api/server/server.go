@@ -99,7 +99,7 @@ type server struct {
 	log logging.Logger
 	// generates new logs for chains to write to
 	factory logging.Factory
-	// points the the router handlers
+	// points the router handlers
 	handler http.Handler
 	// Listens for HTTP traffic on this address
 	listenHost string
