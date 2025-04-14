@@ -165,7 +165,7 @@ var (
 		ApricotPhase6BlockTimestamp:     big.NewInt(time.Date(2024, time.December, 17, 13, 0, 0, 0, time.UTC).Unix()),
 		ApricotPhasePost6BlockTimestamp: big.NewInt(time.Date(2024, time.December, 17, 14, 0, 0, 0, time.UTC).Unix()),
 		BanffBlockTimestamp:             big.NewInt(time.Date(2024, time.December, 17, 15, 0, 0, 0, time.UTC).Unix()),
-		CortinaBlockTimestamp:           big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
+		CortinaBlockTimestamp:           big.NewInt(time.Date(2025, time.May, 13, 12, 0, 0, 0, time.UTC).Unix()),
 	}
 
 	CostwoChainConfig = &ChainConfig{
@@ -327,7 +327,7 @@ var (
 		ApricotPhase6BlockTimestamp:     big.NewInt(time.Date(2025, time.January, 28, 13, 0, 0, 0, time.UTC).Unix()),
 		ApricotPhasePost6BlockTimestamp: big.NewInt(time.Date(2025, time.January, 28, 14, 0, 0, 0, time.UTC).Unix()),
 		BanffBlockTimestamp:             big.NewInt(time.Date(2025, time.January, 28, 15, 0, 0, 0, time.UTC).Unix()),
-		CortinaBlockTimestamp:           big.NewInt(time.Date(10000, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()),
+		CortinaBlockTimestamp:           big.NewInt(time.Date(2025, time.May, 6, 12, 0, 0, 0, time.UTC).Unix()),
 	}
 
 	TestChainConfig              = &ChainConfig{AvalancheContext{common.Hash{1}}, big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0)}
