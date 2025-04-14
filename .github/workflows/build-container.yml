@@ -40,7 +40,7 @@ jobs:
     - name: Build image
       run: |        
         docker buildx build \
-          --platform linux/amd64,linux/arm64,linux/arm/v7 \
+          --platform linux/amd64,linux/arm64 \
           --tag ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }} \
           --tag ${{ secrets.DOCKER_HUB_REPO }}:${{ env.IMAGE_TAG }} \
           --file ./Dockerfile \
