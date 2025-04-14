@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package p
@@ -7,12 +7,12 @@ import (
 	stdcontext "context"
 
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils/crypto/keychain"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
-	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 )
 
-var _ Signer = &txSigner{}
+var _ Signer = (*txSigner)(nil)
 
 type Signer interface {
 	SignUnsigned(ctx stdcontext.Context, tx txs.UnsignedTx) (*txs.Tx, error)
@@ -25,11 +25,11 @@ type SignerBackend interface {
 }
 
 type txSigner struct {
-	kc      *secp256k1fx.Keychain
+	kc      keychain.Keychain
 	backend SignerBackend
 }
 
-func NewSigner(kc *secp256k1fx.Keychain, backend SignerBackend) Signer {
+func NewSigner(kc keychain.Keychain, backend SignerBackend) Signer {
 	return &txSigner{
 		kc:      kc,
 		backend: backend,

@@ -1,5 +1,76 @@
 # Release Notes
 
+## [v0.11.9](https://github.com/ava-labs/coreth/releases/tag/v0.11.9)
+
+- Downgrade SetPreference log from warn to debug
+
+## [v0.11.8](https://github.com/ava-labs/coreth/releases/tag/v0.11.8)
+
+- Fix shutdown hanging during state sync
+- Add pre-check for imported UTXOs
+- Fix bug in `BadBlockReason` output to display error string correctly
+- Update golangci-lint version to v1.51.2
+
+## [v0.11.7](https://github.com/ava-labs/coreth/releases/tag/v0.11.7)
+
+- Enable state sync by default when syncing from an empty database
+- Increase block gas limit to 15M for Cortina Network Upgrade
+- Add back file tracer endpoint
+- Add back JS tracer
+
+## [v0.11.6](https://github.com/ava-labs/coreth/releases/tag/v0.11.6)
+
+- Bump AvalancheGo to v1.9.6
+
+## [v0.11.5](https://github.com/ava-labs/coreth/releases/tag/v0.11.5)
+
+- Add support for eth_call over VM2VM messaging
+- Add config flags for tx pool behavior
+
+## [v0.11.4](https://github.com/ava-labs/coreth/releases/tag/v0.11.4)
+
+- Add config option to perform database inspection on startup
+- Add configurable transaction indexing to reduce disk usage
+- Add special case to allow transactions using Nick's Method to bypass API level replay protection
+- Add counter metrics for number of accepted/processed logs
+- Improve header and logs caching using maximum accepted depth cache
+
+## [v0.11.3](https://github.com/ava-labs/coreth/releases/tag/v0.11.3)
+
+- Add counter for number of processed and accepted transactions
+- Wait for state sync goroutines to complete on shutdown
+- Bump go-ethereum dependency to v1.10.26
+- Increase soft cap on transaction size limits
+- Add back isForkIncompatible checks for all existing forks
+- Clean up Apricot Phase 6 code
+
+## [v0.11.2](https://github.com/ava-labs/coreth/releases/tag/v0.11.2)
+
+- Add trie clean cache journaling to disk to improve processing time on restart
+- Fix regression where snapshot could be marked as stale by async acceptor during block processing
+- Add fine-grained block processing metrics
+
+## [v0.11.1](https://github.com/ava-labs/coreth/releases/tag/v0.11.1)
+
+- Add cache size config parameters for `trie-clean-cache`, `trie-dirty-cache`, `trie-dirty-commit-target`, and `snapshot-cache`
+- Increase default `trie-clean-cache` size from 256 MB to 512 MB
+- Increase default `snapshot-cache` size from 128 MB to 256 MB
+- Add optional flag to skip chain config upgrade check on startup (allows VM to start after missing a network upgrade)
+- Make Avalanche blockchainID (separate from EVM ChainID) available within the EVM
+- Record block height when performing state sync
+- Add support for VM-to-VM messaging
+- Move `eth_getChainConfig` under the `BlockChainAPI`
+- Simplify block builder timer logic to a simple retry delay
+- Add Opentelemetry support
+- Simplify caching logic for gas price estimation
+
+## [v0.11.0](https://github.com/ava-labs/coreth/releases/tag/v0.11.0)
+
+- Update Chain Config compatibility check to compare against last accepted block timestamp
+- Bump go-ethereum dependency to v1.10.25
+- Add Banff activation times for Mainnet and Fuji for October 18 4pm UTC and October 3 2pm UTC respectively
+- Banff cleanup
+
 ## [v0.10.0](https://github.com/ava-labs/coreth/releases/tag/v0.10.0)
 
 - Deprecate Native Asset Call and Native Asset Balance

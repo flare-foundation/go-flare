@@ -1,26 +1,25 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package txs
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/utils/constants"
+	"github.com/ava-labs/avalanchego/utils/crypto/bls"
 	"github.com/ava-labs/avalanchego/utils/math"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/components/verify"
 	"github.com/ava-labs/avalanchego/vms/platformvm/fx"
 	"github.com/ava-labs/avalanchego/vms/platformvm/reward"
-	"github.com/ava-labs/avalanchego/vms/platformvm/validator"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 )
 
 var (
-	_ ValidatorTx = &AddValidatorTx{}
+	_ ValidatorTx = (*AddValidatorTx)(nil)
 
 	errTooManyShares = fmt.Errorf("a staker can only require at most %d shares from delegators", reward.PercentDenominator)
 )
@@ -30,7 +29,7 @@ type AddValidatorTx struct {
 	// Metadata, inputs and outputs
 	BaseTx `serialize:"true"`
 	// Describes the delegatee
-	Validator validator.Validator `serialize:"true" json:"validator"`
+	Validator `serialize:"true" json:"validator"`
 	// Where to send staked tokens when done validating
 	StakeOuts []*avax.TransferableOutput `serialize:"true" json:"stake"`
 	// Where to send staking rewards when done validating
@@ -53,17 +52,41 @@ func (tx *AddValidatorTx) InitCtx(ctx *snow.Context) {
 	tx.RewardsOwner.InitCtx(ctx)
 }
 
-func (tx *AddValidatorTx) SubnetID() ids.ID                  { return constants.PrimaryNetworkID }
-func (tx *AddValidatorTx) NodeID() ids.NodeID                { return tx.Validator.NodeID }
-func (tx *AddValidatorTx) StartTime() time.Time              { return tx.Validator.StartTime() }
-func (tx *AddValidatorTx) EndTime() time.Time                { return tx.Validator.EndTime() }
-func (tx *AddValidatorTx) Weight() uint64                    { return tx.Validator.Wght }
-func (tx *AddValidatorTx) PendingPriority() Priority         { return PrimaryNetworkValidatorPendingPriority }
-func (tx *AddValidatorTx) CurrentPriority() Priority         { return PrimaryNetworkValidatorCurrentPriority }
-func (tx *AddValidatorTx) Stake() []*avax.TransferableOutput { return tx.StakeOuts }
-func (tx *AddValidatorTx) ValidationRewardsOwner() fx.Owner  { return tx.RewardsOwner }
-func (tx *AddValidatorTx) DelegationRewardsOwner() fx.Owner  { return tx.RewardsOwner }
-func (tx *AddValidatorTx) Shares() uint32                    { return tx.DelegationShares }
+func (*AddValidatorTx) SubnetID() ids.ID {
+	return constants.PrimaryNetworkID
+}
+
+func (tx *AddValidatorTx) NodeID() ids.NodeID {
+	return tx.Validator.NodeID
+}
+
+func (*AddValidatorTx) PublicKey() (*bls.PublicKey, bool, error) {
+	return nil, false, nil
+}
+
+func (*AddValidatorTx) PendingPriority() Priority {
+	return PrimaryNetworkValidatorPendingPriority
+}
+
+func (*AddValidatorTx) CurrentPriority() Priority {
+	return PrimaryNetworkValidatorCurrentPriority
+}
+
+func (tx *AddValidatorTx) Stake() []*avax.TransferableOutput {
+	return tx.StakeOuts
+}
+
+func (tx *AddValidatorTx) ValidationRewardsOwner() fx.Owner {
+	return tx.RewardsOwner
+}
+
+func (tx *AddValidatorTx) DelegationRewardsOwner() fx.Owner {
+	return tx.RewardsOwner
+}
+
+func (tx *AddValidatorTx) Shares() uint32 {
+	return tx.DelegationShares
+}
 
 // SyntacticVerify returns nil iff [tx] is valid
 func (tx *AddValidatorTx) SyntacticVerify(ctx *snow.Context) error {
@@ -103,8 +126,8 @@ func (tx *AddValidatorTx) SyntacticVerify(ctx *snow.Context) error {
 	switch {
 	case !avax.IsSortedTransferableOutputs(tx.StakeOuts, Codec):
 		return errOutputsNotSorted
-	case totalStakeWeight != tx.Validator.Wght:
-		return fmt.Errorf("%w: weight %d != stake %d", errValidatorWeightMismatch, tx.Validator.Wght, totalStakeWeight)
+	case totalStakeWeight != tx.Wght:
+		return fmt.Errorf("%w: weight %d != stake %d", errValidatorWeightMismatch, tx.Wght, totalStakeWeight)
 	}
 
 	// cache that this is valid

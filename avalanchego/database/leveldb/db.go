@@ -1,10 +1,11 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package leveldb
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -21,6 +22,8 @@ import (
 	"github.com/syndtr/goleveldb/leveldb/util"
 
 	"go.uber.org/zap"
+
+	"golang.org/x/exp/slices"
 
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/utils"
@@ -63,9 +66,9 @@ const (
 )
 
 var (
-	_ database.Database = &Database{}
-	_ database.Batch    = &batch{}
-	_ database.Iterator = &iter{}
+	_ database.Database = (*Database)(nil)
+	_ database.Batch    = (*batch)(nil)
+	_ database.Iterator = (*iter)(nil)
 )
 
 // Database is a persistent key-value store. Apart from basic data storage
@@ -76,7 +79,7 @@ type Database struct {
 	// metrics is only initialized and used when [MetricUpdateFrequency] is >= 0
 	// in the config
 	metrics   metrics
-	closed    utils.AtomicBool
+	closed    utils.Atomic[bool]
 	closeOnce sync.Once
 	// closeCh is closed when Close() is called.
 	closeCh chan struct{}
@@ -199,7 +202,7 @@ func New(file string, configBytes []byte, log logging.Logger, namespace string, 
 		}
 	}
 
-	log.Info("creating new leveldb",
+	log.Info("creating leveldb",
 		zap.Reflect("config", parsedConfig),
 	)
 
@@ -290,7 +293,9 @@ func (db *Database) Delete(key []byte) error {
 
 // NewBatch creates a write/delete-only buffer that is atomically committed to
 // the database when write is called
-func (db *Database) NewBatch() database.Batch { return &batch{db: db} }
+func (db *Database) NewBatch() database.Batch {
+	return &batch{db: db}
+}
 
 // NewIterator creates a lexicographically ordered iterator over the database
 func (db *Database) NewIterator() database.Iterator {
@@ -348,7 +353,7 @@ func (db *Database) Compact(start []byte, limit []byte) error {
 }
 
 func (db *Database) Close() error {
-	db.closed.SetValue(true)
+	db.closed.Set(true)
 	db.closeOnce.Do(func() {
 		close(db.closeCh)
 	})
@@ -356,8 +361,8 @@ func (db *Database) Close() error {
 	return updateError(db.DB.Close())
 }
 
-func (db *Database) HealthCheck() (interface{}, error) {
-	if db.closed.GetValue() {
+func (db *Database) HealthCheck(context.Context) (interface{}, error) {
+	if db.closed.Get() {
 		return nil, database.ErrClosed
 	}
 	return nil, nil
@@ -385,7 +390,9 @@ func (b *batch) Delete(key []byte) error {
 }
 
 // Size retrieves the amount of data queued up for writing.
-func (b *batch) Size() int { return b.size }
+func (b *batch) Size() int {
+	return b.size
+}
 
 // Write flushes any accumulated data to disk.
 func (b *batch) Write() error {
@@ -409,7 +416,9 @@ func (b *batch) Replay(w database.KeyValueWriterDeleter) error {
 }
 
 // Inner returns itself
-func (b *batch) Inner() database.Batch { return b }
+func (b *batch) Inner() database.Batch {
+	return b
+}
 
 type replayer struct {
 	writerDeleter database.KeyValueWriterDeleter
@@ -440,7 +449,7 @@ type iter struct {
 
 func (it *iter) Next() bool {
 	// Short-circuit and set an error if the underlying database has been closed.
-	if it.db.closed.GetValue() {
+	if it.db.closed.Get() {
 		it.key = nil
 		it.val = nil
 		it.err = database.ErrClosed
@@ -449,8 +458,8 @@ func (it *iter) Next() bool {
 
 	hasNext := it.Iterator.Next()
 	if hasNext {
-		it.key = utils.CopyBytes(it.Iterator.Key())
-		it.val = utils.CopyBytes(it.Iterator.Value())
+		it.key = slices.Clone(it.Iterator.Key())
+		it.val = slices.Clone(it.Iterator.Value())
 	} else {
 		it.key = nil
 		it.val = nil
@@ -465,9 +474,13 @@ func (it *iter) Error() error {
 	return updateError(it.Iterator.Error())
 }
 
-func (it *iter) Key() []byte { return it.key }
+func (it *iter) Key() []byte {
+	return it.key
+}
 
-func (it *iter) Value() []byte { return it.val }
+func (it *iter) Value() []byte {
+	return it.val
+}
 
 func updateError(err error) error {
 	switch err {

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package p
@@ -11,13 +11,14 @@ import (
 	stdcontext "context"
 
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/math"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/platformvm/signer"
 	"github.com/ava-labs/avalanchego/vms/platformvm/stakeable"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
-	"github.com/ava-labs/avalanchego/vms/platformvm/validator"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 	"github.com/ava-labs/avalanchego/wallet/subnet/primary/common"
 )
@@ -29,7 +30,7 @@ var (
 	errInsufficientAuthorization = errors.New("insufficient authorization")
 	errInsufficientFunds         = errors.New("insufficient funds")
 
-	_ Builder = &builder{}
+	_ Builder = (*builder)(nil)
 )
 
 // Builder provides a convenient interface for building unsigned P-chain
@@ -71,7 +72,7 @@ type Builder interface {
 	//   will take from delegation rewards. If 1,000,000 is provided, 100% of
 	//   the delegation reward will be sent to the validator's [rewardsOwner].
 	NewAddValidatorTx(
-		vdr *validator.Validator,
+		vdr *txs.Validator,
 		rewardsOwner *secp256k1fx.OutputOwners,
 		shares uint32,
 		options ...common.Option,
@@ -82,7 +83,7 @@ type Builder interface {
 	// - [vdr] specifies all the details of the validation period such as the
 	//   startTime, endTime, sampling weight, nodeID, and subnetID.
 	NewAddSubnetValidatorTx(
-		vdr *validator.SubnetValidator,
+		vdr *txs.SubnetValidator,
 		options ...common.Option,
 	) (*txs.AddSubnetValidatorTx, error)
 
@@ -102,7 +103,7 @@ type Builder interface {
 	// - [rewardsOwner] specifies the owner of all the rewards this delegator
 	//   may accrue at the end of its delegation period.
 	NewAddDelegatorTx(
-		vdr *validator.Validator,
+		vdr *txs.Validator,
 		rewardsOwner *secp256k1fx.OutputOwners,
 		options ...common.Option,
 	) (*txs.AddDelegatorTx, error)
@@ -219,7 +220,7 @@ type Builder interface {
 	//   will take from delegation rewards. If 1,000,000 is provided, 100% of
 	//   the delegation reward will be sent to the validator's [rewardsOwner].
 	NewAddPermissionlessValidatorTx(
-		vdr *validator.SubnetValidator,
+		vdr *txs.SubnetValidator,
 		signer signer.Signer,
 		assetID ids.ID,
 		validationRewardsOwner *secp256k1fx.OutputOwners,
@@ -237,7 +238,7 @@ type Builder interface {
 	// - [rewardsOwner] specifies the owner of all the rewards this delegator
 	//   earns during its delegation period.
 	NewAddPermissionlessDelegatorTx(
-		vdr *validator.SubnetValidator,
+		vdr *txs.SubnetValidator,
 		assetID ids.ID,
 		rewardsOwner *secp256k1fx.OutputOwners,
 		options ...common.Option,
@@ -253,7 +254,7 @@ type BuilderBackend interface {
 }
 
 type builder struct {
-	addrs   ids.ShortSet
+	addrs   set.Set[ids.ShortID]
 	backend BuilderBackend
 }
 
@@ -263,7 +264,7 @@ type builder struct {
 //     signing the transactions in the future.
 //   - [backend] provides the required access to the chain's context and state
 //     to build out the transactions.
-func NewBuilder(addrs ids.ShortSet, backend BuilderBackend) Builder {
+func NewBuilder(addrs set.Set[ids.ShortID], backend BuilderBackend) Builder {
 	return &builder{
 		addrs:   addrs,
 		backend: backend,
@@ -323,7 +324,7 @@ func (b *builder) NewBaseTx(
 }
 
 func (b *builder) NewAddValidatorTx(
-	vdr *validator.Validator,
+	vdr *txs.Validator,
 	rewardsOwner *secp256k1fx.OutputOwners,
 	shares uint32,
 	options ...common.Option,
@@ -341,7 +342,7 @@ func (b *builder) NewAddValidatorTx(
 		return nil, err
 	}
 
-	ids.SortShortIDs(rewardsOwner.Addrs)
+	utils.Sort(rewardsOwner.Addrs)
 	return &txs.AddValidatorTx{
 		BaseTx: txs.BaseTx{BaseTx: avax.BaseTx{
 			NetworkID:    b.backend.NetworkID(),
@@ -358,7 +359,7 @@ func (b *builder) NewAddValidatorTx(
 }
 
 func (b *builder) NewAddSubnetValidatorTx(
-	vdr *validator.SubnetValidator,
+	vdr *txs.SubnetValidator,
 	options ...common.Option,
 ) (*txs.AddSubnetValidatorTx, error) {
 	toBurn := map[ids.ID]uint64{
@@ -384,8 +385,8 @@ func (b *builder) NewAddSubnetValidatorTx(
 			Outs:         outputs,
 			Memo:         ops.Memo(),
 		}},
-		Validator:  *vdr,
-		SubnetAuth: subnetAuth,
+		SubnetValidator: *vdr,
+		SubnetAuth:      subnetAuth,
 	}, nil
 }
 
@@ -424,7 +425,7 @@ func (b *builder) NewRemoveSubnetValidatorTx(
 }
 
 func (b *builder) NewAddDelegatorTx(
-	vdr *validator.Validator,
+	vdr *txs.Validator,
 	rewardsOwner *secp256k1fx.OutputOwners,
 	options ...common.Option,
 ) (*txs.AddDelegatorTx, error) {
@@ -441,7 +442,7 @@ func (b *builder) NewAddDelegatorTx(
 		return nil, err
 	}
 
-	ids.SortShortIDs(rewardsOwner.Addrs)
+	utils.Sort(rewardsOwner.Addrs)
 	return &txs.AddDelegatorTx{
 		BaseTx: txs.BaseTx{BaseTx: avax.BaseTx{
 			NetworkID:    b.backend.NetworkID(),
@@ -479,7 +480,7 @@ func (b *builder) NewCreateChainTx(
 		return nil, err
 	}
 
-	ids.SortIDs(fxIDs)
+	utils.Sort(fxIDs)
 	return &txs.CreateChainTx{
 		BaseTx: txs.BaseTx{BaseTx: avax.BaseTx{
 			NetworkID:    b.backend.NetworkID(),
@@ -511,7 +512,7 @@ func (b *builder) NewCreateSubnetTx(
 		return nil, err
 	}
 
-	ids.SortShortIDs(owner.Addrs)
+	utils.Sort(owner.Addrs)
 	return &txs.CreateSubnetTx{
 		BaseTx: txs.BaseTx{BaseTx: avax.BaseTx{
 			NetworkID:    b.backend.NetworkID(),
@@ -575,7 +576,7 @@ func (b *builder) NewImportTx(
 		}
 		importedAmounts[assetID] = newImportedAmount
 	}
-	avax.SortTransferableInputs(importedInputs) // sort imported inputs
+	utils.Sort(importedInputs) // sort imported inputs
 
 	if len(importedInputs) == 0 {
 		return nil, fmt.Errorf(
@@ -728,7 +729,7 @@ func (b *builder) NewTransformSubnetTx(
 }
 
 func (b *builder) NewAddPermissionlessValidatorTx(
-	vdr *validator.SubnetValidator,
+	vdr *txs.SubnetValidator,
 	signer signer.Signer,
 	assetID ids.ID,
 	validationRewardsOwner *secp256k1fx.OutputOwners,
@@ -752,8 +753,8 @@ func (b *builder) NewAddPermissionlessValidatorTx(
 		return nil, err
 	}
 
-	ids.SortShortIDs(validationRewardsOwner.Addrs)
-	ids.SortShortIDs(delegationRewardsOwner.Addrs)
+	utils.Sort(validationRewardsOwner.Addrs)
+	utils.Sort(delegationRewardsOwner.Addrs)
 	return &txs.AddPermissionlessValidatorTx{
 		BaseTx: txs.BaseTx{BaseTx: avax.BaseTx{
 			NetworkID:    b.backend.NetworkID(),
@@ -773,7 +774,7 @@ func (b *builder) NewAddPermissionlessValidatorTx(
 }
 
 func (b *builder) NewAddPermissionlessDelegatorTx(
-	vdr *validator.SubnetValidator,
+	vdr *txs.SubnetValidator,
 	assetID ids.ID,
 	rewardsOwner *secp256k1fx.OutputOwners,
 	options ...common.Option,
@@ -794,7 +795,7 @@ func (b *builder) NewAddPermissionlessDelegatorTx(
 		return nil, err
 	}
 
-	ids.SortShortIDs(rewardsOwner.Addrs)
+	utils.Sort(rewardsOwner.Addrs)
 	return &txs.AddPermissionlessDelegatorTx{
 		BaseTx: txs.BaseTx{BaseTx: avax.BaseTx{
 			NetworkID:    b.backend.NetworkID(),
@@ -946,7 +947,7 @@ func (b *builder) spend(
 		})
 
 		// Stake any value that should be staked
-		amountToStake := math.Min64(
+		amountToStake := math.Min(
 			remainingAmountToStake, // Amount we still need to stake
 			out.Amt,                // Amount available to stake
 		)
@@ -1024,7 +1025,7 @@ func (b *builder) spend(
 		})
 
 		// Burn any value that should be burned
-		amountToBurn := math.Min64(
+		amountToBurn := math.Min(
 			remainingAmountToBurn, // Amount we still need to burn
 			out.Amt,               // Amount available to burn
 		)
@@ -1032,7 +1033,7 @@ func (b *builder) spend(
 
 		amountAvalibleToStake := out.Amt - amountToBurn
 		// Burn any value that should be burned
-		amountToStake := math.Min64(
+		amountToStake := math.Min(
 			remainingAmountToStake, // Amount we still need to stake
 			amountAvalibleToStake,  // Amount available to stake
 		)
@@ -1080,7 +1081,7 @@ func (b *builder) spend(
 		}
 	}
 
-	avax.SortTransferableInputs(inputs)                    // sort inputs
+	utils.Sort(inputs)                                     // sort inputs
 	avax.SortTransferableOutputs(changeOutputs, txs.Codec) // sort the change outputs
 	avax.SortTransferableOutputs(stakeOutputs, txs.Codec)  // sort stake outputs
 	return inputs, changeOutputs, stakeOutputs, nil

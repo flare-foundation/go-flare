@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package tracker
@@ -19,7 +19,7 @@ import (
 
 const epsilon = 1e-9
 
-var _ ResourceTracker = &resourceTracker{}
+var _ ResourceTracker = (*resourceTracker)(nil)
 
 type Tracker interface {
 	// Returns the current usage for the given node.

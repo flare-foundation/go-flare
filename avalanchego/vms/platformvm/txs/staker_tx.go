@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package txs
@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils/crypto/bls"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/platformvm/fx"
 )
@@ -15,20 +16,6 @@ import (
 // delegation.
 type ValidatorTx interface {
 	UnsignedTx
-	Validator
-}
-
-type DelegatorTx interface {
-	UnsignedTx
-	Delegator
-}
-
-type StakerTx interface {
-	UnsignedTx
-	Staker
-}
-
-type Validator interface {
 	PermissionlessStaker
 
 	ValidationRewardsOwner() fx.Owner
@@ -36,10 +23,16 @@ type Validator interface {
 	Shares() uint32
 }
 
-type Delegator interface {
+type DelegatorTx interface {
+	UnsignedTx
 	PermissionlessStaker
 
 	RewardsOwner() fx.Owner
+}
+
+type StakerTx interface {
+	UnsignedTx
+	Staker
 }
 
 type PermissionlessStaker interface {
@@ -52,6 +45,9 @@ type PermissionlessStaker interface {
 type Staker interface {
 	SubnetID() ids.ID
 	NodeID() ids.NodeID
+	// PublicKey returns the BLS public key registered by this transaction. If
+	// there was no key registered by this transaction, it will return false.
+	PublicKey() (*bls.PublicKey, bool, error)
 	StartTime() time.Time
 	EndTime() time.Time
 	Weight() uint64

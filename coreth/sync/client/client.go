@@ -337,14 +337,14 @@ func (c *client) get(ctx context.Context, request message.Request, parseFn parse
 			if c.isSongbirdCode {
 				minVersion = StateSyncVersionSgb
 			}
-			response, nodeID, err = c.networkClient.RequestAny(minVersion, requestBytes)
+			response, nodeID, err = c.networkClient.SendAppRequestAny(minVersion, requestBytes)
 		} else {
 			// get the next nodeID using the nodeIdx offset. If we're out of nodes, loop back to 0
 			// we do this every attempt to ensure we get a different node each time if possible.
 			nodeIdx := atomic.AddUint32(&c.stateSyncNodeIdx, 1)
 			nodeID = c.stateSyncNodes[nodeIdx%uint32(len(c.stateSyncNodes))]
 
-			response, err = c.networkClient.Request(nodeID, requestBytes)
+			response, err = c.networkClient.SendAppRequest(nodeID, requestBytes)
 		}
 		metric.UpdateRequestLatency(time.Since(start))
 

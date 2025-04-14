@@ -96,32 +96,38 @@ func (self *DummyEngine) verifyHeaderGasFields(config *params.ChainConfig, heade
 	if header.GasUsed > header.GasLimit {
 		return fmt.Errorf("invalid gasUsed: have %d, gasLimit %d", header.GasUsed, header.GasLimit)
 	}
-	if config.IsSongbirdCode() {
-		// Verify that the gas limit is correct for the current phase
-		if config.IsSongbirdTransition(timestamp) {
-			if header.GasLimit != params.SgbTransitionGasLimit {
-				return fmt.Errorf("expected gas limit to be %d in sgb transition but got %d", params.SgbTransitionGasLimit, header.GasLimit)
-			}
-		} else if config.IsApricotPhase5(timestamp) {
-			if header.GasLimit != params.SgbApricotPhase5GasLimit {
-				return fmt.Errorf("expected gas limit to be %d in apricot phase 5 but got %d", params.SgbApricotPhase5GasLimit, header.GasLimit)
-			}
+	if config.IsCortina(timestamp) {
+		if header.GasLimit != params.CortinaGasLimit {
+			return fmt.Errorf("expected gas limit to be %d in Cortina, but found %d", params.CortinaGasLimit, header.GasLimit)
 		}
 	} else {
-		if config.IsApricotPhase1(timestamp) {
-			if header.GasLimit != params.ApricotPhase1GasLimit {
-				return fmt.Errorf("expected gas limit to be %d, but found %d", params.ApricotPhase1GasLimit, header.GasLimit)
+		if config.IsSongbirdCode() {
+			// Verify that the gas limit is correct for the current phase
+			if config.IsSongbirdTransition(timestamp) {
+				if header.GasLimit != params.SgbTransitionGasLimit {
+					return fmt.Errorf("expected gas limit to be %d in SgbTransition but found %d", params.SgbTransitionGasLimit, header.GasLimit)
+				}
+			} else if config.IsApricotPhase5(timestamp) {
+				if header.GasLimit != params.SgbApricotPhase5GasLimit {
+					return fmt.Errorf("expected gas limit to be %d in ApricotPhase5 but found %d", params.SgbApricotPhase5GasLimit, header.GasLimit)
+				}
 			}
 		} else {
-			// Verify that the gas limit remains within allowed bounds
-			diff := int64(parent.GasLimit) - int64(header.GasLimit)
-			if diff < 0 {
-				diff *= -1
-			}
-			limit := parent.GasLimit / params.GasLimitBoundDivisor
+			if config.IsApricotPhase1(timestamp) {
+				if header.GasLimit != params.ApricotPhase1GasLimit {
+					return fmt.Errorf("expected gas limit to be %d in ApricotPhase1, but found %d", params.ApricotPhase1GasLimit, header.GasLimit)
+				}
+			} else {
+				// Verify that the gas limit remains within allowed bounds
+				diff := int64(parent.GasLimit) - int64(header.GasLimit)
+				if diff < 0 {
+					diff *= -1
+				}
+				limit := parent.GasLimit / params.GasLimitBoundDivisor
 
-			if uint64(diff) >= limit || header.GasLimit < params.MinGasLimit {
-				return fmt.Errorf("invalid gas limit: have %d, want %d += %d", header.GasLimit, parent.GasLimit, limit)
+				if uint64(diff) >= limit || header.GasLimit < params.MinGasLimit {
+					return fmt.Errorf("invalid gas limit: have %d, want %d += %d", header.GasLimit, parent.GasLimit, limit)
+				}
 			}
 		}
 	}

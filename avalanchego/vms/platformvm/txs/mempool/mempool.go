@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package mempool
@@ -11,6 +11,7 @@ import (
 
 	"github.com/ava-labs/avalanchego/cache"
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/utils/units"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs/txheap"
@@ -31,7 +32,7 @@ const (
 )
 
 var (
-	_ Mempool = &mempool{}
+	_ Mempool = (*mempool)(nil)
 
 	errMempoolFull = errors.New("mempool is full")
 )
@@ -60,7 +61,6 @@ type Mempool interface {
 	HasTxs() bool
 	// PeekTxs returns the next txs for Banff blocks
 	// up to maxTxsBytes without removing them from the mempool.
-	// It returns nil if !HasTxs()
 	PeekTxs(maxTxsBytes int) []*txs.Tx
 
 	HasStakerTx() bool
@@ -73,18 +73,8 @@ type Mempool interface {
 	// not evicted from unissued decision/staker txs.
 	// This allows previously dropped txs to be possibly
 	// reissued.
-	MarkDropped(txID ids.ID, reason string)
-	GetDropReason(txID ids.ID) (string, bool)
-
-	// TODO: following Banff, these methods can be removed
-
-	// Pre Banff activation, decision transactions are included into
-	// standard blocks.
-	HasApricotDecisionTxs() bool
-	// PeekApricotDecisionTxs returns the next decisionTxs, up to maxTxsBytes,
-	// without removing them from the mempool.
-	// It returns nil if !HasApricotDecisionTxs()
-	PeekApricotDecisionTxs(maxTxsBytes int) []*txs.Tx
+	MarkDropped(txID ids.ID, reason error)
+	GetDropReason(txID ids.ID) error
 }
 
 // Transactions from clients that have not yet been put into blocks and added to
@@ -100,10 +90,10 @@ type mempool struct {
 	unissuedStakerTxs   txheap.Heap
 
 	// Key: Tx ID
-	// Value: String repr. of the verification error
-	droppedTxIDs *cache.LRU
+	// Value: Verification error
+	droppedTxIDs *cache.LRU[ids.ID, error]
 
-	consumedUTXOs ids.Set
+	consumedUTXOs set.Set[ids.ID]
 
 	blkTimer BlockTimer
 }
@@ -146,15 +136,20 @@ func NewMempool(
 		bytesAvailable:       maxMempoolSize,
 		unissuedDecisionTxs:  unissuedDecisionTxs,
 		unissuedStakerTxs:    unissuedStakerTxs,
-		droppedTxIDs:         &cache.LRU{Size: droppedTxIDsCacheSize},
-		consumedUTXOs:        ids.NewSet(initialConsumedUTXOsSize),
+		droppedTxIDs:         &cache.LRU[ids.ID, error]{Size: droppedTxIDsCacheSize},
+		consumedUTXOs:        set.NewSet[ids.ID](initialConsumedUTXOsSize),
 		dropIncoming:         false, // enable tx adding by default
 		blkTimer:             blkTimer,
 	}, nil
 }
 
-func (m *mempool) EnableAdding()  { m.dropIncoming = false }
-func (m *mempool) DisableAdding() { m.dropIncoming = true }
+func (m *mempool) EnableAdding() {
+	m.dropIncoming = false
+}
+
+func (m *mempool) DisableAdding() {
+	m.dropIncoming = true
+}
 
 func (m *mempool) Add(tx *txs.Tx) error {
 	if m.dropIncoming {
@@ -229,16 +224,16 @@ func (m *mempool) HasTxs() bool {
 }
 
 func (m *mempool) PeekTxs(maxTxsBytes int) []*txs.Tx {
-	txs, size := m.peekApricotDecisionTxs(maxTxsBytes)
+	txs := m.unissuedDecisionTxs.List()
+	txs = append(txs, m.unissuedStakerTxs.List()...)
 
-	for _, tx := range m.unissuedStakerTxs.List() {
+	size := 0
+	for i, tx := range txs {
 		size += len(tx.Bytes())
 		if size > maxTxsBytes {
-			break
+			return txs[:i]
 		}
-		txs = append(txs, tx)
 	}
-
 	return txs
 }
 
@@ -252,9 +247,9 @@ func (m *mempool) addStakerTx(tx *txs.Tx) {
 	m.register(tx)
 }
 
-func (m *mempool) HasApricotDecisionTxs() bool { return m.unissuedDecisionTxs.Len() > 0 }
-
-func (m *mempool) HasStakerTx() bool { return m.unissuedStakerTxs.Len() > 0 }
+func (m *mempool) HasStakerTx() bool {
+	return m.unissuedStakerTxs.Len() > 0
+}
 
 func (m *mempool) removeDecisionTxs(txs []*txs.Tx) {
 	for _, tx := range txs {
@@ -272,27 +267,6 @@ func (m *mempool) removeStakerTx(tx *txs.Tx) {
 	}
 }
 
-func (m *mempool) PeekApricotDecisionTxs(maxTxsBytes int) []*txs.Tx {
-	txs, _ := m.peekApricotDecisionTxs(maxTxsBytes)
-	return txs
-}
-
-func (m *mempool) peekApricotDecisionTxs(maxTxsBytes int) ([]*txs.Tx, int) {
-	list := m.unissuedDecisionTxs.List()
-
-	totalBytes, txsToKeep := 0, 0
-	for _, tx := range list {
-		totalBytes += len(tx.Bytes())
-		if totalBytes > maxTxsBytes {
-			break
-		}
-		txsToKeep++
-	}
-
-	list = list[:txsToKeep]
-	return list, totalBytes
-}
-
 func (m *mempool) PeekStakerTx() *txs.Tx {
 	if m.unissuedStakerTxs.Len() == 0 {
 		return nil
@@ -301,16 +275,13 @@ func (m *mempool) PeekStakerTx() *txs.Tx {
 	return m.unissuedStakerTxs.Peek()
 }
 
-func (m *mempool) MarkDropped(txID ids.ID, reason string) {
+func (m *mempool) MarkDropped(txID ids.ID, reason error) {
 	m.droppedTxIDs.Put(txID, reason)
 }
 
-func (m *mempool) GetDropReason(txID ids.ID) (string, bool) {
-	reason, exist := m.droppedTxIDs.Get(txID)
-	if !exist {
-		return "", false
-	}
-	return reason.(string), true
+func (m *mempool) GetDropReason(txID ids.ID) error {
+	err, _ := m.droppedTxIDs.Get(txID)
+	return err
 }
 
 func (m *mempool) register(tx *txs.Tx) {

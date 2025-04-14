@@ -42,6 +42,7 @@ import (
 	"github.com/ava-labs/coreth/core/types"
 	"github.com/ava-labs/coreth/core/vm"
 	"github.com/ava-labs/coreth/eth/gasprice"
+	"github.com/ava-labs/coreth/eth/tracers"
 	"github.com/ava-labs/coreth/ethdb"
 	"github.com/ava-labs/coreth/params"
 	"github.com/ava-labs/coreth/rpc"
@@ -53,10 +54,11 @@ var ErrUnfinalizedData = errors.New("cannot query unfinalized data")
 
 // EthAPIBackend implements ethapi.Backend for full nodes
 type EthAPIBackend struct {
-	extRPCEnabled       bool
-	allowUnprotectedTxs bool
-	eth                 *Ethereum
-	gpo                 *gasprice.Oracle
+	extRPCEnabled            bool
+	allowUnprotectedTxs      bool
+	allowUnprotectedTxHashes map[common.Hash]struct{} // Invariant: read-only after creation.
+	eth                      *Ethereum
+	gpo                      *gasprice.Oracle
 }
 
 // ChainConfig returns the active chain configuration.
@@ -246,7 +248,10 @@ func (b *EthAPIBackend) GetReceipts(ctx context.Context, hash common.Hash) (type
 }
 
 func (b *EthAPIBackend) GetLogs(ctx context.Context, hash common.Hash, number uint64) ([][]*types.Log, error) {
-	return rawdb.ReadLogs(b.eth.chainDb, hash, number), nil
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return b.eth.blockchain.GetLogs(hash, number), nil
 }
 
 func (b *EthAPIBackend) GetEVM(ctx context.Context, msg core.Message, state *state.StateDB, header *types.Header, vmConfig *vm.Config) (*vm.EVM, func() error, error) {
@@ -386,8 +391,24 @@ func (b *EthAPIBackend) ExtRPCEnabled() bool {
 	return b.extRPCEnabled
 }
 
-func (b *EthAPIBackend) UnprotectedAllowed() bool {
-	return b.allowUnprotectedTxs
+func (b *EthAPIBackend) UnprotectedAllowed(tx *types.Transaction) bool {
+	if b.allowUnprotectedTxs {
+		return true
+	}
+
+	// Check for special cased transaction hashes:
+	// Note: this map is read-only after creation, so it is safe to read from it on multiple threads.
+	if _, ok := b.allowUnprotectedTxHashes[tx.Hash()]; ok {
+		return true
+	}
+
+	// Check for "predictable pattern" (Nick's Signature: https://weka.medium.com/how-to-send-ether-to-11-440-people-187e332566b7)
+	v, r, s := tx.RawSignatureValues()
+	if v == nil || r == nil || s == nil {
+		return false
+	}
+
+	return tx.Nonce() == 0 && r.Cmp(s) == 0
 }
 
 func (b *EthAPIBackend) RPCGasCap() uint64 {
@@ -425,11 +446,11 @@ func (b *EthAPIBackend) GetMaxBlocksPerRequest() int64 {
 	return b.eth.settings.MaxBlocksPerRequest
 }
 
-func (b *EthAPIBackend) StateAtBlock(ctx context.Context, block *types.Block, reexec uint64, base *state.StateDB, checkLive bool, preferDisk bool) (*state.StateDB, error) {
-	return b.eth.StateAtBlock(block, reexec, base, checkLive, preferDisk)
+func (b *EthAPIBackend) StateAtBlock(ctx context.Context, block *types.Block, reexec uint64, base *state.StateDB, readOnly bool, preferDisk bool) (*state.StateDB, tracers.StateReleaseFunc, error) {
+	return b.eth.StateAtBlock(block, reexec, base, readOnly, preferDisk)
 }
 
-func (b *EthAPIBackend) StateAtTransaction(ctx context.Context, block *types.Block, txIndex int, reexec uint64) (core.Message, vm.BlockContext, *state.StateDB, error) {
+func (b *EthAPIBackend) StateAtTransaction(ctx context.Context, block *types.Block, txIndex int, reexec uint64) (core.Message, vm.BlockContext, *state.StateDB, tracers.StateReleaseFunc, error) {
 	return b.eth.stateAtTransaction(block, txIndex, reexec)
 }
 

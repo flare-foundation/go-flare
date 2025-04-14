@@ -1,64 +1,88 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package peer
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/message"
+	"github.com/ava-labs/avalanchego/proto/pb/p2p"
 	"github.com/ava-labs/avalanchego/utils/logging"
 )
 
-func TestBlockingMessageQueue(t *testing.T) {
+func TestMessageQueue(t *testing.T) {
 	require := require.New(t)
 
-	for _, useProto := range []bool{false, true} {
-		t.Run(fmt.Sprintf("use proto buf message creator %v", useProto), func(tt *testing.T) {
-			q := NewBlockingMessageQueue(
-				SendFailedFunc(func(msg message.OutboundMessage) {
-					t.Fail()
-				}),
-				logging.NoLog{},
-				0,
-			)
+	expectFail := false
+	q := NewBlockingMessageQueue(
+		SendFailedFunc(func(msg message.OutboundMessage) {
+			require.True(expectFail)
+		}),
+		logging.NoLog{},
+		0,
+	)
 
-			mc, mcProto := newMessageCreator(tt)
+	mc := newMessageCreator(t)
+	msgs := []message.OutboundMessage{}
+	numToSend := 10
 
-			var (
-				msg message.OutboundMessage
-				err error
-			)
-			if useProto {
-				msg, err = mcProto.Ping()
-			} else {
-				msg, err = mc.Ping()
-			}
-			require.NoError(err)
-
-			numToSend := 10
-			go func() {
-				for i := 0; i < numToSend; i++ {
-					q.Push(context.Background(), msg)
-				}
-			}()
-
-			for i := 0; i < numToSend; i++ {
-				_, ok := q.Pop()
-				require.True(ok)
-			}
-
-			_, ok := q.PopNow()
-			require.False(ok)
-
-			q.Close()
-
-			_, ok = q.Pop()
-			require.False(ok)
-		})
+	// Assert that the messages are popped in the same order they were pushed
+	for i := 0; i < numToSend; i++ {
+		testID := ids.GenerateTestID()
+		testID2 := ids.GenerateTestID()
+		m, err := mc.Pong(uint32(i),
+			[]*p2p.SubnetUptime{
+				{SubnetId: testID[:], Uptime: uint32(i)},
+				{SubnetId: testID2[:], Uptime: uint32(i)},
+			})
+		require.NoError(err)
+		msgs = append(msgs, m)
 	}
+
+	go func() {
+		for i := 0; i < numToSend; i++ {
+			q.Push(context.Background(), msgs[i])
+		}
+	}()
+
+	for i := 0; i < numToSend; i++ {
+		msg, ok := q.Pop()
+		require.True(ok)
+		require.Equal(msgs[i], msg)
+	}
+
+	// Assert that PopNow returns false when the queue is empty
+	_, ok := q.PopNow()
+	require.False(ok)
+
+	// Assert that Push returns false when the context is canceled
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	expectFail = true
+	done := make(chan struct{})
+	go func() {
+		ok := q.Push(ctx, msgs[0])
+		require.False(ok)
+		close(done)
+	}()
+	<-done
+
+	// Assert that Push returns false when the queue is closed
+	done = make(chan struct{})
+	go func() {
+		ok := q.Push(context.Background(), msgs[0])
+		require.False(ok)
+		close(done)
+	}()
+	q.Close()
+	<-done
+
+	// Assert Pop returns false when the queue is closed
+	_, ok = q.Pop()
+	require.False(ok)
 }

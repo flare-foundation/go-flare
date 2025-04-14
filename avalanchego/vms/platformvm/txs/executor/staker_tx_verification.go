@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package executor
@@ -86,7 +86,7 @@ func verifyAddValidatorTx(
 	copy(outs, tx.Outs)
 	copy(outs[len(tx.Outs):], tx.StakeOuts)
 
-	if !backend.Bootstrapped.GetValue() {
+	if !backend.Bootstrapped.Get() {
 		return outs, nil
 	}
 
@@ -135,7 +135,7 @@ func verifyAddValidatorTx(
 			backend.Ctx.AVAXAssetID: backend.Config.AddPrimaryNetworkValidatorFee,
 		},
 	); err != nil {
-		return nil, fmt.Errorf("%w: %s", errFlowCheckFailed, err)
+		return nil, fmt.Errorf("%w: %v", errFlowCheckFailed, err)
 	}
 
 	// Make sure the tx doesn't start too far in the future. This is done last
@@ -184,7 +184,7 @@ func verifyAddSubnetValidatorTx(
 		return errStakeTooLong
 	}
 
-	if !backend.Bootstrapped.GetValue() {
+	if !backend.Bootstrapped.Get() {
 		return nil
 	}
 
@@ -200,7 +200,7 @@ func verifyAddSubnetValidatorTx(
 		)
 	}
 
-	_, err := GetValidator(chainState, tx.Validator.Subnet, tx.Validator.NodeID)
+	_, err := GetValidator(chainState, tx.SubnetValidator.Subnet, tx.Validator.NodeID)
 	if err == nil {
 		return fmt.Errorf(
 			"attempted to issue duplicate subnet validation for %s",
@@ -230,7 +230,7 @@ func verifyAddSubnetValidatorTx(
 		return errValidatorSubset
 	}
 
-	baseTxCreds, err := verifyPoASubnetAuthorization(backend, chainState, sTx, tx.Validator.Subnet, tx.SubnetAuth)
+	baseTxCreds, err := verifyPoASubnetAuthorization(backend, chainState, sTx, tx.SubnetValidator.Subnet, tx.SubnetAuth)
 	if err != nil {
 		return err
 	}
@@ -246,7 +246,7 @@ func verifyAddSubnetValidatorTx(
 			backend.Ctx.AVAXAssetID: backend.Config.AddSubnetValidatorFee,
 		},
 	); err != nil {
-		return fmt.Errorf("%w: %s", errFlowCheckFailed, err)
+		return fmt.Errorf("%w: %v", errFlowCheckFailed, err)
 	}
 
 	// Make sure the tx doesn't start too far in the future. This is done last
@@ -287,7 +287,7 @@ func removeSubnetValidatorValidation(
 	if err != nil {
 		// It isn't a current or pending validator.
 		return nil, false, fmt.Errorf(
-			"%s %w of %s: %s",
+			"%s %w of %s: %v",
 			tx.NodeID,
 			errNotValidator,
 			tx.Subnet,
@@ -300,7 +300,7 @@ func removeSubnetValidatorValidation(
 		return nil, false, errRemovePermissionlessValidator
 	}
 
-	if !backend.Bootstrapped.GetValue() {
+	if !backend.Bootstrapped.Get() {
 		// Not bootstrapped yet -- don't need to do full verification.
 		return vdr, isCurrentValidator, nil
 	}
@@ -321,7 +321,7 @@ func removeSubnetValidatorValidation(
 			backend.Ctx.AVAXAssetID: backend.Config.TxFee,
 		},
 	); err != nil {
-		return nil, false, fmt.Errorf("%w: %s", errFlowCheckFailed, err)
+		return nil, false, fmt.Errorf("%w: %v", errFlowCheckFailed, err)
 	}
 
 	return vdr, isCurrentValidator, nil
@@ -366,7 +366,7 @@ func verifyAddDelegatorTx(
 	copy(outs, tx.Outs)
 	copy(outs[len(tx.Outs):], tx.StakeOuts)
 
-	if !backend.Bootstrapped.GetValue() {
+	if !backend.Bootstrapped.Get() {
 		return outs, nil
 	}
 
@@ -396,12 +396,15 @@ func verifyAddDelegatorTx(
 	}
 
 	if backend.Config.IsApricotPhase3Activated(currentTimestamp) {
-		maximumWeight = math.Min64(maximumWeight, maxValidatorStake)
+		maximumWeight = math.Min(maximumWeight, maxValidatorStake)
 	}
 
 	txID := sTx.ID()
+	newStaker, err := state.NewPendingStaker(txID, tx)
+	if err != nil {
+		return nil, err
+	}
 
-	newStaker := state.NewPendingStaker(txID, tx)
 	canDelegate, err := canDelegate(chainState, primaryNetworkValidator, maximumWeight, newStaker)
 	if err != nil {
 		return nil, err
@@ -421,7 +424,7 @@ func verifyAddDelegatorTx(
 			backend.Ctx.AVAXAssetID: backend.Config.AddPrimaryNetworkDelegatorFee,
 		},
 	); err != nil {
-		return nil, fmt.Errorf("%w: %s", errFlowCheckFailed, err)
+		return nil, fmt.Errorf("%w: %v", errFlowCheckFailed, err)
 	}
 
 	// Make sure the tx doesn't start too far in the future. This is done last
@@ -454,16 +457,23 @@ func verifyAddPermissionlessValidatorTx(
 		return err
 	}
 
-	// Flare does not (yet) allow adding permissionless validator tx
-	if constants.IsFlareNetworkID(backend.Ctx.NetworkID) || constants.IsSgbNetworkID(backend.Ctx.NetworkID) {
-		return errWrongTxType
-	}
-
-	if !backend.Bootstrapped.GetValue() {
+	if !backend.Bootstrapped.Get() {
 		return nil
 	}
 
 	currentTimestamp := chainState.GetTimestamp()
+	if constants.IsFlareNetworkID(backend.Ctx.NetworkID) || constants.IsSgbNetworkID(backend.Ctx.NetworkID) {
+		// Flare does not allow permissionless validator tx before Cortina
+		if currentTimestamp.Before(backend.Config.CortinaTime) {
+			return errWrongTxType
+		}
+
+		// Flare does not allow creation of subnets
+		if tx.Subnet != constants.PrimaryNetworkID {
+			return errWrongTxType
+		}
+	}
+
 	// Ensure the proposed validator starts after the current time
 	startTime := tx.StartTime()
 	if !currentTimestamp.Before(startTime) {
@@ -576,7 +586,7 @@ func verifyAddPermissionlessValidatorTx(
 			backend.Ctx.AVAXAssetID: txFee,
 		},
 	); err != nil {
-		return fmt.Errorf("%w: %s", errFlowCheckFailed, err)
+		return fmt.Errorf("%w: %v", errFlowCheckFailed, err)
 	}
 
 	// Make sure the tx doesn't start too far in the future. This is done last
@@ -640,16 +650,16 @@ func verifyAddPermissionlessDelegatorTx(
 		return err
 	}
 
-	// Flare does not (yet) allow adding permissionless delegator tx
-	if constants.IsFlareNetworkID(backend.Ctx.NetworkID) || constants.IsSgbNetworkID(backend.Ctx.NetworkID) {
-		return errWrongTxType
-	}
-
-	if !backend.Bootstrapped.GetValue() {
+	if !backend.Bootstrapped.Get() {
 		return nil
 	}
 
 	currentTimestamp := chainState.GetTimestamp()
+	// Flare does not allow permissionless delegator tx before Cortina
+	if currentTimestamp.Before(backend.Config.CortinaTime) && (constants.IsFlareNetworkID(backend.Ctx.NetworkID) || constants.IsSgbNetworkID(backend.Ctx.NetworkID)) {
+		return errWrongTxType
+	}
+
 	// Ensure the proposed validator starts after the current timestamp
 	startTime := tx.StartTime()
 	if !currentTimestamp.Before(startTime) {
@@ -707,10 +717,14 @@ func verifyAddPermissionlessDelegatorTx(
 	if err != nil {
 		maximumWeight = stdmath.MaxUint64
 	}
-	maximumWeight = math.Min64(maximumWeight, delegatorRules.maxValidatorStake)
+	maximumWeight = math.Min(maximumWeight, delegatorRules.maxValidatorStake)
 
 	txID := sTx.ID()
-	newStaker := state.NewPendingStaker(txID, tx)
+	newStaker, err := state.NewPendingStaker(txID, tx)
+	if err != nil {
+		return err
+	}
+
 	canDelegate, err := canDelegate(chainState, validator, maximumWeight, newStaker)
 	if err != nil {
 		return err
@@ -752,7 +766,7 @@ func verifyAddPermissionlessDelegatorTx(
 			backend.Ctx.AVAXAssetID: txFee,
 		},
 	); err != nil {
-		return fmt.Errorf("%w: %s", errFlowCheckFailed, err)
+		return fmt.Errorf("%w: %v", errFlowCheckFailed, err)
 	}
 
 	// Make sure the tx doesn't start too far in the future. This is done last

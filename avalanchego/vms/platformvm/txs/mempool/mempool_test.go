@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package mempool
@@ -14,21 +14,20 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/utils/crypto"
+	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
-	"github.com/ava-labs/avalanchego/vms/platformvm/validator"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 )
 
-var _ BlockTimer = &noopBlkTimer{}
+var _ BlockTimer = (*noopBlkTimer)(nil)
 
 type noopBlkTimer struct{}
 
-func (bt *noopBlkTimer) ResetBlockTimer() {}
+func (*noopBlkTimer) ResetBlockTimer() {}
 
-var preFundedKeys = crypto.BuildTestKeys()
+var preFundedKeys = secp256k1.TestKeys()
 
 // shows that valid tx is not added to mempool if this would exceed its maximum
 // size
@@ -67,7 +66,7 @@ func TestDecisionTxsInMempool(t *testing.T) {
 	require.NoError(err)
 
 	// txs must not already there before we start
-	require.False(mpool.HasApricotDecisionTxs())
+	require.False(mpool.HasTxs())
 
 	for _, tx := range decisionTxs {
 		// tx not already there
@@ -84,7 +83,7 @@ func TestDecisionTxsInMempool(t *testing.T) {
 		require.Equal(tx, retrieved)
 
 		// we can peek it
-		peeked := mpool.PeekApricotDecisionTxs(math.MaxInt)
+		peeked := mpool.PeekTxs(math.MaxInt)
 
 		// tx will be among those peeked,
 		// in NO PARTICULAR ORDER
@@ -226,7 +225,7 @@ func createTestProposalTxs(count int) ([]*txs.Tx, error) {
 	for i := 0; i < count; i++ {
 		utx := &txs.AddValidatorTx{
 			BaseTx: txs.BaseTx{},
-			Validator: validator.Validator{
+			Validator: txs.Validator{
 				Start: uint64(clk.Time().Add(time.Duration(count-i) * time.Second).Unix()),
 			},
 			StakeOuts:        nil,

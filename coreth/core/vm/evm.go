@@ -59,27 +59,6 @@ func IsProhibited(addr common.Address) bool {
 	return false
 }
 
-// TODO: deprecate after Banff activation.
-func (evm *EVM) isProhibitedWithTimestamp(addr common.Address) error {
-	if addr != NativeAssetCallAddr {
-		return nil
-	}
-
-	// Return error depending on the phase
-	switch {
-	case evm.chainRules.IsBanff: // Disable the soft fork as of Banff
-		return nil
-	case evm.chainRules.IsApricotPhasePost6: // If we are in the soft fork, return the soft error
-		return vmerrs.ErrToAddrProhibitedSoft
-	case evm.chainRules.IsApricotPhase6: // If we are in Phase6, return nil
-		return nil
-	case evm.chainRules.IsApricotPhasePre6: // If we are in PrePhase6, return Prohibited6
-		return vmerrs.ErrToAddrProhibited6
-	default: // Prior to Pre6, don't alter behavior at all
-		return nil
-	}
-}
-
 // emptyCodeHash is used by create to ensure deployment is disallowed to already
 // deployed contract addresses (relevant after the account abstraction).
 var emptyCodeHash = crypto.Keccak256Hash(nil)
@@ -101,6 +80,10 @@ func (evm *EVM) precompile(addr common.Address) (precompile.StatefulPrecompiledC
 	switch {
 	case evm.chainRules.IsBanff:
 		precompiles = PrecompiledContractsBanff
+	case evm.chainRules.IsApricotPhase6:
+		precompiles = PrecompiledContractsApricotPhase6
+	case evm.chainRules.IsApricotPhasePre6:
+		precompiles = PrecompiledContractsApricotPhasePre6
 	case evm.chainRules.IsApricotPhase2:
 		precompiles = PrecompiledContractsApricotPhase2
 	case evm.chainRules.IsIstanbul:
@@ -357,9 +340,6 @@ func (evm *EVM) CallWithoutSnapshot(caller ContractRef, addr common.Address, inp
 // the necessary steps to create accounts and reverses the state in case of an
 // execution error or failed value transfer.
 func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas uint64, value *big.Int) (ret []byte, leftOverGas uint64, err error) {
-	if prohibitErr := evm.isProhibitedWithTimestamp(addr); prohibitErr != nil {
-		return nil, gas, prohibitErr
-	}
 	// Fail if we're trying to execute above the call depth limit
 	if evm.depth > int(params.CallCreateDepth) {
 		return nil, gas, vmerrs.ErrDepth
@@ -443,9 +423,6 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 // This allows the user transfer balance of a specified coinId in addition to a normal Call().
 func (evm *EVM) CallExpert(caller ContractRef, addr common.Address, input []byte, gas uint64, value *big.Int, coinID common.Hash, value2 *big.Int) (ret []byte, leftOverGas uint64, err error) {
-	if prohibitErr := evm.isProhibitedWithTimestamp(addr); prohibitErr != nil {
-		return nil, gas, prohibitErr
-	}
 	// Fail if we're trying to execute above the call depth limit
 	if evm.depth > int(params.CallCreateDepth) {
 		return nil, gas, vmerrs.ErrDepth
@@ -529,9 +506,6 @@ func (evm *EVM) CallExpert(caller ContractRef, addr common.Address, input []byte
 // CallCode differs from Call in the sense that it executes the given address'
 // code with the caller as context.
 func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, gas uint64, value *big.Int) (ret []byte, leftOverGas uint64, err error) {
-	if prohibitErr := evm.isProhibitedWithTimestamp(addr); prohibitErr != nil {
-		return nil, gas, prohibitErr
-	}
 	// Fail if we're trying to execute above the call depth limit
 	if evm.depth > int(params.CallCreateDepth) {
 		return nil, gas, vmerrs.ErrDepth
@@ -583,9 +557,6 @@ func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, 
 // DelegateCall differs from CallCode in the sense that it executes the given address'
 // code with the caller as context and the caller is set to the caller of the caller.
 func (evm *EVM) DelegateCall(caller ContractRef, addr common.Address, input []byte, gas uint64) (ret []byte, leftOverGas uint64, err error) {
-	if prohibitErr := evm.isProhibitedWithTimestamp(addr); prohibitErr != nil {
-		return nil, gas, prohibitErr
-	}
 	// Fail if we're trying to execute above the call depth limit
 	if evm.depth > int(params.CallCreateDepth) {
 		return nil, gas, vmerrs.ErrDepth
@@ -625,9 +596,6 @@ func (evm *EVM) DelegateCall(caller ContractRef, addr common.Address, input []by
 // Opcodes that attempt to perform such modifications will result in exceptions
 // instead of performing the modifications.
 func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte, gas uint64) (ret []byte, leftOverGas uint64, err error) {
-	if prohibitErr := evm.isProhibitedWithTimestamp(addr); prohibitErr != nil {
-		return nil, gas, prohibitErr
-	}
 	// Fail if we're trying to execute above the call depth limit
 	if evm.depth > int(params.CallCreateDepth) {
 		return nil, gas, vmerrs.ErrDepth
@@ -812,17 +780,6 @@ func (evm *EVM) Create2(caller ContractRef, code []byte, gas uint64, endowment *
 func (evm *EVM) ChainConfig() *params.ChainConfig { return evm.chainConfig }
 
 func (evm *EVM) NativeAssetCall(caller common.Address, input []byte, suppliedGas uint64, gasCost uint64, readOnly bool) (ret []byte, remainingGas uint64, err error) {
-	if suppliedGas < gasCost {
-		return nil, 0, vmerrs.ErrOutOfGas
-	}
-	remainingGas = suppliedGas - gasCost
-	if evm.Context.Time.Cmp(constants.NativeAssetCallDeprecationTime) >= 0 {
-		return nil, remainingGas, vmerrs.ErrNativeAssetCallDeprecated
-	}
-	return evm.NativeAssetCallDeprecated(caller, input, suppliedGas, gasCost, readOnly)
-}
-
-func (evm *EVM) NativeAssetCallDeprecated(caller common.Address, input []byte, suppliedGas uint64, gasCost uint64, readOnly bool) (ret []byte, remainingGas uint64, err error) {
 	if suppliedGas < gasCost {
 		return nil, 0, vmerrs.ErrOutOfGas
 	}

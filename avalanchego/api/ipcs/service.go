@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package ipcs
@@ -58,8 +58,10 @@ type PublishBlockchainReply struct {
 }
 
 // PublishBlockchain publishes the finalized accepted transactions from the blockchainID over the IPC
-func (ipc *IPCServer) PublishBlockchain(r *http.Request, args *PublishBlockchainArgs, reply *PublishBlockchainReply) error {
-	ipc.log.Debug("IPCs: PublishBlockchain called",
+func (ipc *IPCServer) PublishBlockchain(_ *http.Request, args *PublishBlockchainArgs, reply *PublishBlockchainReply) error {
+	ipc.log.Warn("deprecated API called",
+		zap.String("service", "ipcs"),
+		zap.String("method", "publishBlockchain"),
 		logging.UserString("blockchainID", args.BlockchainID),
 	)
 
@@ -93,8 +95,10 @@ type UnpublishBlockchainArgs struct {
 }
 
 // UnpublishBlockchain closes publishing of a blockchainID
-func (ipc *IPCServer) UnpublishBlockchain(r *http.Request, args *UnpublishBlockchainArgs, _ *api.EmptyReply) error {
-	ipc.log.Debug("IPCs: UnpublishBlockchain called",
+func (ipc *IPCServer) UnpublishBlockchain(_ *http.Request, args *UnpublishBlockchainArgs, _ *api.EmptyReply) error {
+	ipc.log.Warn("deprecated API called",
+		zap.String("service", "ipcs"),
+		zap.String("method", "unpublishBlockchain"),
 		logging.UserString("blockchainID", args.BlockchainID),
 	)
 
@@ -124,7 +128,11 @@ type GetPublishedBlockchainsReply struct {
 }
 
 // GetPublishedBlockchains returns blockchains being published
-func (ipc *IPCServer) GetPublishedBlockchains(r *http.Request, args *struct{}, reply *GetPublishedBlockchainsReply) error {
+func (ipc *IPCServer) GetPublishedBlockchains(_ *http.Request, _ *struct{}, reply *GetPublishedBlockchainsReply) error {
+	ipc.log.Warn("deprecated API called",
+		zap.String("service", "ipcs"),
+		zap.String("method", "getPublishedBlockchains"),
+	)
 	reply.Chains = ipc.ipcs.GetPublishedBlockchains()
 	return nil
 }

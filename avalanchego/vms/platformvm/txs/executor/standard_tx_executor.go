@@ -1,31 +1,28 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package executor
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/ava-labs/avalanchego/chains/atomic"
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/components/verify"
 	"github.com/ava-labs/avalanchego/vms/platformvm/state"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
-	"github.com/ava-labs/avalanchego/vms/platformvm/utxo"
 )
 
 var (
-	_ txs.Visitor = &StandardTxExecutor{}
+	_ txs.Visitor = (*StandardTxExecutor)(nil)
 
-	errEmptyNodeID                        = errors.New("validator nodeID cannot be empty")
-	errIssuedAddStakerTxBeforeBanff       = errors.New("staker transaction issued before Banff")
-	errCustomAssetBeforeBanff             = errors.New("custom assets can only be imported after Banff")
-	errRemoveSubnetValidatorTxBeforeBanff = errors.New("RemoveSubnetValidatorTx issued before Banff")
-	errTransformSubnetTxBeforeBanff       = errors.New("TransformSubnetTx issued before Banff")
-	errMaxStakeDurationTooLarge           = errors.New("max stake duration must be less than or equal to the global max stake duration")
+	errEmptyNodeID              = errors.New("validator nodeID cannot be empty")
+	errMaxStakeDurationTooLarge = errors.New("max stake duration must be less than or equal to the global max stake duration")
 )
 
 type StandardTxExecutor struct {
@@ -36,12 +33,17 @@ type StandardTxExecutor struct {
 
 	// outputs of visitor execution
 	OnAccept       func() // may be nil
-	Inputs         ids.Set
+	Inputs         set.Set[ids.ID]
 	AtomicRequests map[ids.ID]*atomic.Requests // may be nil
 }
 
-func (*StandardTxExecutor) AdvanceTimeTx(*txs.AdvanceTimeTx) error         { return errWrongTxType }
-func (*StandardTxExecutor) RewardValidatorTx(*txs.RewardValidatorTx) error { return errWrongTxType }
+func (*StandardTxExecutor) AdvanceTimeTx(*txs.AdvanceTimeTx) error {
+	return errWrongTxType
+}
+
+func (*StandardTxExecutor) RewardValidatorTx(*txs.RewardValidatorTx) error {
+	return errWrongTxType
+}
 
 func (e *StandardTxExecutor) CreateChainTx(tx *txs.CreateChainTx) error {
 	if err := e.Tx.SyntacticVerify(e.Ctx); err != nil {
@@ -72,15 +74,17 @@ func (e *StandardTxExecutor) CreateChainTx(tx *txs.CreateChainTx) error {
 	txID := e.Tx.ID()
 
 	// Consume the UTXOS
-	utxo.Consume(e.State, tx.Ins)
+	avax.Consume(e.State, tx.Ins)
 	// Produce the UTXOS
-	utxo.Produce(e.State, txID, tx.Outs)
+	avax.Produce(e.State, txID, tx.Outs)
 	// Add the new chain to the database
 	e.State.AddChain(e.Tx)
 
 	// If this proposal is committed and this node is a member of the subnet
 	// that validates the blockchain, create the blockchain
-	e.OnAccept = func() { e.Config.CreateChain(txID, tx) }
+	e.OnAccept = func() {
+		e.Config.CreateChain(txID, tx)
+	}
 	return nil
 }
 
@@ -109,9 +113,9 @@ func (e *StandardTxExecutor) CreateSubnetTx(tx *txs.CreateSubnetTx) error {
 	txID := e.Tx.ID()
 
 	// Consume the UTXOS
-	utxo.Consume(e.State, tx.Ins)
+	avax.Consume(e.State, tx.Ins)
 	// Produce the UTXOS
-	utxo.Produce(e.State, txID, tx.Outs)
+	avax.Produce(e.State, txID, tx.Outs)
 	// Add the new subnet to the database
 	e.State.AddSubnet(e.Tx)
 	return nil
@@ -122,31 +126,17 @@ func (e *StandardTxExecutor) ImportTx(tx *txs.ImportTx) error {
 		return err
 	}
 
-	currentChainTime := e.State.GetTimestamp()
-
-	e.Inputs = ids.NewSet(len(tx.ImportedInputs))
+	e.Inputs = set.NewSet[ids.ID](len(tx.ImportedInputs))
 	utxoIDs := make([][]byte, len(tx.ImportedInputs))
 	for i, in := range tx.ImportedInputs {
 		utxoID := in.UTXOID.InputID()
 
 		e.Inputs.Add(utxoID)
 		utxoIDs[i] = utxoID[:]
-
-		if !e.Config.IsBanffActivated(currentChainTime) {
-			// TODO: Remove this check once the Banff network upgrade is
-			//       complete.
-			//
-			// Banff network upgrade allows exporting of all assets to the
-			// P-chain.
-			assetID := in.AssetID()
-			if assetID != e.Ctx.AVAXAssetID {
-				return errCustomAssetBeforeBanff
-			}
-		}
 	}
 
-	if e.Bootstrapped.GetValue() {
-		if err := verify.SameSubnet(e.Ctx, tx.SourceChain); err != nil {
+	if e.Bootstrapped.Get() {
+		if err := verify.SameSubnet(context.TODO(), e.Ctx, tx.SourceChain); err != nil {
 			return err
 		}
 
@@ -192,9 +182,9 @@ func (e *StandardTxExecutor) ImportTx(tx *txs.ImportTx) error {
 	txID := e.Tx.ID()
 
 	// Consume the UTXOS
-	utxo.Consume(e.State, tx.Ins)
+	avax.Consume(e.State, tx.Ins)
 	// Produce the UTXOS
-	utxo.Produce(e.State, txID, tx.Outs)
+	avax.Produce(e.State, txID, tx.Outs)
 
 	e.AtomicRequests = map[ids.ID]*atomic.Requests{
 		tx.SourceChain: {
@@ -213,8 +203,8 @@ func (e *StandardTxExecutor) ExportTx(tx *txs.ExportTx) error {
 	copy(outs, tx.Outs)
 	copy(outs[len(tx.Outs):], tx.ExportedOutputs)
 
-	if e.Bootstrapped.GetValue() {
-		if err := verify.SameSubnet(e.Ctx, tx.DestinationChain); err != nil {
+	if e.Bootstrapped.Get() {
+		if err := verify.SameSubnet(context.TODO(), e.Ctx, tx.DestinationChain); err != nil {
 			return err
 		}
 	}
@@ -236,9 +226,9 @@ func (e *StandardTxExecutor) ExportTx(tx *txs.ExportTx) error {
 	txID := e.Tx.ID()
 
 	// Consume the UTXOS
-	utxo.Consume(e.State, tx.Ins)
+	avax.Consume(e.State, tx.Ins)
 	// Produce the UTXOS
-	utxo.Produce(e.State, txID, tx.Outs)
+	avax.Produce(e.State, txID, tx.Outs)
 
 	elems := make([]*atomic.Element, len(tx.ExportedOutputs))
 	for i, out := range tx.ExportedOutputs {
@@ -275,19 +265,6 @@ func (e *StandardTxExecutor) ExportTx(tx *txs.ExportTx) error {
 }
 
 func (e *StandardTxExecutor) AddValidatorTx(tx *txs.AddValidatorTx) error {
-	// AddValidatorTx is a proposal transaction until the Banff fork
-	// activation. Following the activation, AddValidatorTxs must be issued into
-	// StandardBlocks.
-	currentTimestamp := e.State.GetTimestamp()
-	if !e.Config.IsBanffActivated(currentTimestamp) {
-		return fmt.Errorf(
-			"%w: timestamp (%s) < Banff fork time (%s)",
-			errIssuedAddStakerTxBeforeBanff,
-			currentTimestamp,
-			e.Config.BanffTime,
-		)
-	}
-
 	if tx.Validator.NodeID == ids.EmptyNodeID {
 		return errEmptyNodeID
 	}
@@ -302,29 +279,19 @@ func (e *StandardTxExecutor) AddValidatorTx(tx *txs.AddValidatorTx) error {
 	}
 
 	txID := e.Tx.ID()
+	newStaker, err := state.NewPendingStaker(txID, tx)
+	if err != nil {
+		return err
+	}
 
-	newStaker := state.NewPendingStaker(txID, tx)
 	e.State.PutPendingValidator(newStaker)
-	utxo.Consume(e.State, tx.Ins)
-	utxo.Produce(e.State, txID, tx.Outs)
+	avax.Consume(e.State, tx.Ins)
+	avax.Produce(e.State, txID, tx.Outs)
 
 	return nil
 }
 
 func (e *StandardTxExecutor) AddSubnetValidatorTx(tx *txs.AddSubnetValidatorTx) error {
-	// AddSubnetValidatorTx is a proposal transaction until the Banff fork
-	// activation. Following the activation, AddSubnetValidatorTxs must be
-	// issued into StandardBlocks.
-	currentTimestamp := e.State.GetTimestamp()
-	if !e.Config.IsBanffActivated(currentTimestamp) {
-		return fmt.Errorf(
-			"%w: timestamp (%s) < Banff fork time (%s)",
-			errIssuedAddStakerTxBeforeBanff,
-			currentTimestamp,
-			e.Config.BanffTime,
-		)
-	}
-
 	if err := verifyAddSubnetValidatorTx(
 		e.Backend,
 		e.State,
@@ -335,29 +302,19 @@ func (e *StandardTxExecutor) AddSubnetValidatorTx(tx *txs.AddSubnetValidatorTx) 
 	}
 
 	txID := e.Tx.ID()
+	newStaker, err := state.NewPendingStaker(txID, tx)
+	if err != nil {
+		return err
+	}
 
-	newStaker := state.NewPendingStaker(txID, tx)
 	e.State.PutPendingValidator(newStaker)
-	utxo.Consume(e.State, tx.Ins)
-	utxo.Produce(e.State, txID, tx.Outs)
+	avax.Consume(e.State, tx.Ins)
+	avax.Produce(e.State, txID, tx.Outs)
 
 	return nil
 }
 
 func (e *StandardTxExecutor) AddDelegatorTx(tx *txs.AddDelegatorTx) error {
-	// AddDelegatorTx is a proposal transaction until the Banff fork
-	// activation. Following the activation, AddDelegatorTxs must be issued into
-	// StandardBlocks.
-	currentTimestamp := e.State.GetTimestamp()
-	if !e.Config.IsBanffActivated(currentTimestamp) {
-		return fmt.Errorf(
-			"%w: timestamp (%s) < Banff fork time (%s)",
-			errIssuedAddStakerTxBeforeBanff,
-			currentTimestamp,
-			e.Config.BanffTime,
-		)
-	}
-
 	if _, err := verifyAddDelegatorTx(
 		e.Backend,
 		e.State,
@@ -368,10 +325,14 @@ func (e *StandardTxExecutor) AddDelegatorTx(tx *txs.AddDelegatorTx) error {
 	}
 
 	txID := e.Tx.ID()
-	newStaker := state.NewPendingStaker(txID, tx)
+	newStaker, err := state.NewPendingStaker(txID, tx)
+	if err != nil {
+		return err
+	}
+
 	e.State.PutPendingDelegator(newStaker)
-	utxo.Consume(e.State, tx.Ins)
-	utxo.Produce(e.State, txID, tx.Outs)
+	avax.Consume(e.State, tx.Ins)
+	avax.Produce(e.State, txID, tx.Outs)
 
 	return nil
 }
@@ -382,16 +343,6 @@ func (e *StandardTxExecutor) AddDelegatorTx(tx *txs.AddDelegatorTx) error {
 // [tx.SubnetID].
 // Note: [tx.NodeID] may be either a current or pending validator.
 func (e *StandardTxExecutor) RemoveSubnetValidatorTx(tx *txs.RemoveSubnetValidatorTx) error {
-	currentTimestamp := e.State.GetTimestamp()
-	if !e.Config.IsBanffActivated(currentTimestamp) {
-		return fmt.Errorf(
-			"%w: timestamp (%s) < Banff fork time (%s)",
-			errRemoveSubnetValidatorTxBeforeBanff,
-			currentTimestamp,
-			e.Config.BanffTime,
-		)
-	}
-
 	staker, isCurrentValidator, err := removeSubnetValidatorValidation(
 		e.Backend,
 		e.State,
@@ -411,27 +362,13 @@ func (e *StandardTxExecutor) RemoveSubnetValidatorTx(tx *txs.RemoveSubnetValidat
 	// Invariant: There are no permissioned subnet delegators to remove.
 
 	txID := e.Tx.ID()
-	utxo.Consume(e.State, tx.Ins)
-	utxo.Produce(e.State, txID, tx.Outs)
+	avax.Consume(e.State, tx.Ins)
+	avax.Produce(e.State, txID, tx.Outs)
 
 	return nil
 }
 
 func (e *StandardTxExecutor) TransformSubnetTx(tx *txs.TransformSubnetTx) error {
-	// TODO: Remove this check once the Banff network upgrade is complete.
-	//
-	// Banff network upgrade allows transforming a permissioned subnet into
-	// a permissionless subnet.
-	currentTimestamp := e.State.GetTimestamp()
-	if !e.Config.IsBanffActivated(currentTimestamp) {
-		return fmt.Errorf(
-			"%w: timestamp (%s) < Banff fork time (%s)",
-			errTransformSubnetTxBeforeBanff,
-			currentTimestamp,
-			e.Config.BanffTime,
-		)
-	}
-
 	if err := e.Tx.SyntacticVerify(e.Ctx); err != nil {
 		return err
 	}
@@ -468,9 +405,9 @@ func (e *StandardTxExecutor) TransformSubnetTx(tx *txs.TransformSubnetTx) error 
 	txID := e.Tx.ID()
 
 	// Consume the UTXOS
-	utxo.Consume(e.State, tx.Ins)
+	avax.Consume(e.State, tx.Ins)
 	// Produce the UTXOS
-	utxo.Produce(e.State, txID, tx.Outs)
+	avax.Produce(e.State, txID, tx.Outs)
 	// Transform the new subnet in the database
 	e.State.AddSubnetTransformation(e.Tx)
 	e.State.SetCurrentSupply(tx.Subnet, tx.InitialSupply)
@@ -478,17 +415,6 @@ func (e *StandardTxExecutor) TransformSubnetTx(tx *txs.TransformSubnetTx) error 
 }
 
 func (e *StandardTxExecutor) AddPermissionlessValidatorTx(tx *txs.AddPermissionlessValidatorTx) error {
-	// TODO: Remove this check once the Banff network upgrade is complete.
-	currentTimestamp := e.State.GetTimestamp()
-	if !e.Config.IsBanffActivated(currentTimestamp) {
-		return fmt.Errorf(
-			"%w: timestamp (%s) < Banff fork time (%s)",
-			errIssuedAddStakerTxBeforeBanff,
-			currentTimestamp,
-			e.Config.BanffTime,
-		)
-	}
-
 	if err := verifyAddPermissionlessValidatorTx(
 		e.Backend,
 		e.State,
@@ -499,27 +425,19 @@ func (e *StandardTxExecutor) AddPermissionlessValidatorTx(tx *txs.AddPermissionl
 	}
 
 	txID := e.Tx.ID()
+	newStaker, err := state.NewPendingStaker(txID, tx)
+	if err != nil {
+		return err
+	}
 
-	newStaker := state.NewPendingStaker(txID, tx)
 	e.State.PutPendingValidator(newStaker)
-	utxo.Consume(e.State, tx.Ins)
-	utxo.Produce(e.State, txID, tx.Outs)
+	avax.Consume(e.State, tx.Ins)
+	avax.Produce(e.State, txID, tx.Outs)
 
 	return nil
 }
 
 func (e *StandardTxExecutor) AddPermissionlessDelegatorTx(tx *txs.AddPermissionlessDelegatorTx) error {
-	// TODO: Remove this check once the Banff network upgrade is complete.
-	currentTimestamp := e.State.GetTimestamp()
-	if !e.Config.IsBanffActivated(currentTimestamp) {
-		return fmt.Errorf(
-			"%w: timestamp (%s) < Banff fork time (%s)",
-			errIssuedAddStakerTxBeforeBanff,
-			currentTimestamp,
-			e.Config.BanffTime,
-		)
-	}
-
 	if err := verifyAddPermissionlessDelegatorTx(
 		e.Backend,
 		e.State,
@@ -530,11 +448,14 @@ func (e *StandardTxExecutor) AddPermissionlessDelegatorTx(tx *txs.AddPermissionl
 	}
 
 	txID := e.Tx.ID()
+	newStaker, err := state.NewPendingStaker(txID, tx)
+	if err != nil {
+		return err
+	}
 
-	newStaker := state.NewPendingStaker(txID, tx)
 	e.State.PutPendingDelegator(newStaker)
-	utxo.Consume(e.State, tx.Ins)
-	utxo.Produce(e.State, txID, tx.Outs)
+	avax.Consume(e.State, tx.Ins)
+	avax.Produce(e.State, txID, tx.Outs)
 
 	return nil
 }

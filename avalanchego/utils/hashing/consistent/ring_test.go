@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package consistent
@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	_ Hashable = &testKey{}
+	_ Hashable = (*testKey)(nil)
 
 	// nodes
 	node1 = testKey{key: "node-1", hash: 1}
@@ -30,7 +30,9 @@ type testKey struct {
 	hash uint64
 }
 
-func (t testKey) ConsistentHashKey() []byte { return []byte(t.key) }
+func (t testKey) ConsistentHashKey() []byte {
+	return []byte(t.key)
+}
 
 // Tests that a key routes to its closest clockwise node.
 // Test cases are described in greater detail below; see diagrams for Ring.

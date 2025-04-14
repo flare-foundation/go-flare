@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package pubsub
@@ -22,7 +22,7 @@ var (
 	ErrAddressLimit                = errors.New("address limit exceeded")
 	ErrInvalidFilterParam          = errors.New("invalid bloom filter params")
 	ErrInvalidCommand              = errors.New("invalid command")
-	_                       Filter = &connection{}
+	_                       Filter = (*connection)(nil)
 )
 
 type Filter interface {

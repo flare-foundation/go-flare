@@ -1,9 +1,10 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package executor
 
 import (
+	"context"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -115,12 +116,11 @@ func TestStatus(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			require := require.New(t)
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
 			blk := tt.blockF(ctrl)
-			require.Equal(tt.expectedStatus, blk.Status())
+			require.Equal(t, tt.expectedStatus, blk.Status())
 		})
 	}
 }
@@ -245,7 +245,7 @@ func TestBlockOptions(t *testing.T) {
 			defer ctrl.Finish()
 
 			blk := tt.blkF()
-			options, err := blk.Options()
+			options, err := blk.Options(context.Background())
 			if tt.expectedErr != nil {
 				require.ErrorIs(err, tt.expectedErr)
 				return

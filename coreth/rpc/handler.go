@@ -29,6 +29,7 @@ package rpc
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -40,27 +41,62 @@ import (
 	"golang.org/x/time/rate"
 )
 
+const (
+	errcodeTimeout          = -32002
+	errcodeResponseTooLarge = -32003
+)
+
+const (
+	errMsgTimeout          = "request timed out"
+	errMsgResponseTooLarge = "response too large"
+	errMsgBatchTooLarge    = "batch too large"
+)
+
+var (
+	batchRequestLimit    = 0 // limit on total number of requests in a batch
+	batchResponseMaxSize = 0 // limit on the size of a batch response
+)
+
+func init() {
+	// Read batchRequestLimit and batchResponseMaxSize from environment variables
+	// RPC_BATCH_REQUEST_LIMIT and RPC_BATCH_RESPONSE_MAX_SIZE.
+	// If their values are invalid integers, panic.
+	if batchRequestLimitStr := os.Getenv("RPC_BATCH_REQUEST_LIMIT"); batchRequestLimitStr != "" {
+		var err error
+		batchRequestLimit, err = strconv.Atoi(batchRequestLimitStr)
+		if err != nil || batchRequestLimit < 0 {
+			panic("RPC_BATCH_REQUEST_LIMIT must be a non-negative integer")
+		}
+	}
+	if batchResponseMaxSizeStr := os.Getenv("RPC_BATCH_RESPONSE_MAX_SIZE"); batchResponseMaxSizeStr != "" {
+		var err error
+		batchResponseMaxSize, err = strconv.Atoi(batchResponseMaxSizeStr)
+		if err != nil || batchResponseMaxSize < 0 {
+			panic("RPC_BATCH_RESPONSE_MAX_SIZE must be a non-negative integer")
+		}
+	}
+}
+
 // handler handles JSON-RPC messages. There is one handler per connection. Note that
 // handler is not safe for concurrent use. Message handling never blocks indefinitely
 // because RPCs are processed on background goroutines launched by handler.
 //
 // The entry points for incoming messages are:
 //
-//    h.handleMsg(message)
-//    h.handleBatch(message)
+//	h.handleMsg(message)
+//	h.handleBatch(message)
 //
 // Outgoing calls use the requestOp struct. Register the request before sending it
 // on the connection:
 //
-//    op := &requestOp{ids: ...}
-//    h.addRequestOp(op)
+//	op := &requestOp{ids: ...}
+//	h.addRequestOp(op)
 //
 // Now send the request, then wait for the reply to be delivered through handleMsg:
 //
-//    if err := op.wait(...); err != nil {
-//        h.removeRequestOp(op) // timeout, etc.
-//    }
-//
+//	if err := op.wait(...); err != nil {
+//		h.removeRequestOp(op) // timeout, etc.
+//	}
 type handler struct {
 	reg            *serviceRegistry
 	unsubscribeCb  *callback
@@ -109,6 +145,75 @@ func newHandler(connCtx context.Context, conn jsonWriter, idgen func() ID, reg *
 	return h
 }
 
+// batchCallBuffer manages in progress call messages and their responses during a batch
+// call. Calls need to be synchronized between the processing and timeout-triggering
+// goroutines.
+type batchCallBuffer struct {
+	mutex sync.Mutex
+	calls []*jsonrpcMessage
+	resp  []*jsonrpcMessage
+	wrote bool
+}
+
+// nextCall returns the next unprocessed message.
+func (b *batchCallBuffer) nextCall() *jsonrpcMessage {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	if len(b.calls) == 0 {
+		return nil
+	}
+	// The popping happens in `pushAnswer`. The in progress call is kept
+	// so we can return an error for it in case of timeout.
+	msg := b.calls[0]
+	return msg
+}
+
+// pushResponse adds the response to last call returned by nextCall.
+func (b *batchCallBuffer) pushResponse(answer *jsonrpcMessage) {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	if answer != nil {
+		b.resp = append(b.resp, answer)
+	}
+	b.calls = b.calls[1:]
+}
+
+// write sends the responses.
+func (b *batchCallBuffer) write(ctx context.Context, conn jsonWriter) {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	b.doWrite(ctx, conn)
+}
+
+// respondWithError sends the responses added so far. For the remaining unanswered call
+// messages, it responds with the given error.
+func (b *batchCallBuffer) respondWithError(ctx context.Context, conn jsonWriter, err error) {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	for _, msg := range b.calls {
+		if !msg.isNotification() {
+			b.resp = append(b.resp, msg.errorResponse(err))
+		}
+	}
+	b.doWrite(ctx, conn)
+}
+
+// doWrite actually writes the response.
+// This assumes b.mutex is held.
+func (b *batchCallBuffer) doWrite(ctx context.Context, conn jsonWriter) {
+	if b.wrote {
+		return
+	}
+	b.wrote = true // can only write once
+	if len(b.resp) > 0 {
+		conn.writeJSONSkipDeadline(ctx, b.resp, true)
+	}
+}
+
 // addLimiter adds a rate limiter to the handler that will allow at most
 // [refillRate] cpu to be used per second. At most [maxStored] cpu time will be
 // stored for this limiter.
@@ -130,6 +235,13 @@ func (h *handler) handleBatch(msgs []*jsonrpcMessage) {
 		})
 		return
 	}
+	// Apply limit on total number of requests.
+	if batchRequestLimit != 0 && len(msgs) > batchRequestLimit {
+		h.startCallProc(func(cp *callProc) {
+			h.respondWithBatchTooLarge(cp, msgs)
+		})
+		return
+	}
 
 	// Handle non-call messages first:
 	calls := make([]*jsonrpcMessage, 0, len(msgs))
@@ -141,22 +253,74 @@ func (h *handler) handleBatch(msgs []*jsonrpcMessage) {
 	if len(calls) == 0 {
 		return
 	}
+
 	// Process calls on a goroutine because they may block indefinitely:
 	h.startCallProc(func(cp *callProc) {
-		answers := make([]*jsonrpcMessage, 0, len(msgs))
-		for _, msg := range calls {
-			if answer := h.handleCallMsg(cp, msg); answer != nil {
-				answers = append(answers, answer)
+		var (
+			timer      *time.Timer
+			cancel     context.CancelFunc
+			callBuffer = &batchCallBuffer{calls: calls, resp: make([]*jsonrpcMessage, 0, len(calls))}
+		)
+
+		cp.ctx, cancel = context.WithCancel(cp.ctx)
+		defer cancel()
+
+		// Cancel the request context after timeout and send an error response. Since the
+		// currently-running method might not return immediately on timeout, we must wait
+		// for the timeout concurrently with processing the request.
+		if timeout, ok := ContextRequestTimeout(cp.ctx); ok {
+			timer = time.AfterFunc(timeout, func() {
+				cancel()
+				err := &internalServerError{errcodeTimeout, errMsgTimeout}
+				callBuffer.respondWithError(cp.ctx, h.conn, err)
+			})
+		}
+
+		responseBytes := 0
+		for {
+			// No need to handle rest of calls if timed out.
+			if cp.ctx.Err() != nil {
+				break
+			}
+			msg := callBuffer.nextCall()
+			if msg == nil {
+				break
+			}
+			resp := h.handleCallMsg(cp, msg)
+			callBuffer.pushResponse(resp)
+			if resp != nil && batchResponseMaxSize != 0 {
+				responseBytes += len(resp.Result)
+				if responseBytes > batchResponseMaxSize {
+					err := &internalServerError{errcodeResponseTooLarge, errMsgResponseTooLarge}
+					callBuffer.respondWithError(cp.ctx, h.conn, err)
+					break
+				}
 			}
 		}
-		h.addSubscriptions(cp.notifiers)
-		if len(answers) > 0 {
-			h.conn.writeJSONSkipDeadline(cp.ctx, answers, h.deadlineContext > 0)
+		if timer != nil {
+			timer.Stop()
 		}
+
+		h.addSubscriptions(cp.notifiers)
+		callBuffer.write(cp.ctx, h.conn)
 		for _, n := range cp.notifiers {
 			n.activate()
 		}
 	})
+}
+
+func (h *handler) respondWithBatchTooLarge(cp *callProc, batch []*jsonrpcMessage) {
+	resp := errorMessage(&invalidRequestError{errMsgBatchTooLarge})
+	// Find the first call and add its "id" field to the error.
+	// This is the best we can do, given that the protocol doesn't have a way
+	// of reporting an error for the entire batch.
+	for _, msg := range batch {
+		if msg.isCall() {
+			resp.ID = msg.ID
+			break
+		}
+	}
+	h.conn.writeJSONSkipDeadline(cp.ctx, []*jsonrpcMessage{resp}, h.deadlineContext > 0)
 }
 
 // handleMsg handles a single message.
@@ -454,7 +618,10 @@ func (h *handler) handleCall(cp *callProc, msg *jsonrpcMessage) *jsonrpcMessage 
 // handleSubscribe processes *_subscribe method calls.
 func (h *handler) handleSubscribe(cp *callProc, msg *jsonrpcMessage) *jsonrpcMessage {
 	if !h.allowSubscribe {
-		return msg.errorResponse(ErrNotificationsUnsupported)
+		return msg.errorResponse(&internalServerError{
+			code:    errcodeNotificationsUnsupported,
+			message: ErrNotificationsUnsupported.Error(),
+		})
 	}
 
 	// Subscription method name is first argument.

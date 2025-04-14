@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package message
@@ -9,46 +9,42 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/ava-labs/avalanchego/utils/constants"
+	"github.com/ava-labs/avalanchego/utils/compression"
+	"github.com/ava-labs/avalanchego/utils/logging"
 )
 
-var _ Creator = &creator{}
+var _ Creator = (*creator)(nil)
 
 type Creator interface {
 	OutboundMsgBuilder
 	InboundMsgBuilder
-	InternalMsgBuilder
 }
 
 type creator struct {
 	OutboundMsgBuilder
 	InboundMsgBuilder
-	InternalMsgBuilder
 }
 
-func NewCreator(metrics prometheus.Registerer, parentNamespace string, compressionEnabled bool, maxInboundMessageTimeout time.Duration) (Creator, error) {
+func NewCreator(
+	log logging.Logger,
+	metrics prometheus.Registerer,
+	parentNamespace string,
+	compressionType compression.Type,
+	maxMessageTimeout time.Duration,
+) (Creator, error) {
 	namespace := fmt.Sprintf("%s_codec", parentNamespace)
-	codec, err := NewCodecWithMemoryPool(namespace, metrics, int64(constants.DefaultMaxMessageSize), maxInboundMessageTimeout)
+	builder, err := newMsgBuilder(
+		log,
+		namespace,
+		metrics,
+		maxMessageTimeout,
+	)
 	if err != nil {
 		return nil, err
 	}
-	return &creator{
-		OutboundMsgBuilder: NewOutboundBuilderWithPacker(codec, compressionEnabled),
-		InboundMsgBuilder:  NewInboundBuilderWithPacker(codec),
-		InternalMsgBuilder: NewInternalBuilder(),
-	}, nil
-}
 
-func NewCreatorWithProto(metrics prometheus.Registerer, parentNamespace string, compressionEnabled bool, maxInboundMessageTimeout time.Duration) (Creator, error) {
-	// different namespace, not to be in conflict with packer
-	namespace := fmt.Sprintf("%s_proto_codec", parentNamespace)
-	builder, err := newMsgBuilderProtobuf(namespace, metrics, int64(constants.DefaultMaxMessageSize), maxInboundMessageTimeout)
-	if err != nil {
-		return nil, err
-	}
 	return &creator{
-		OutboundMsgBuilder: newOutboundBuilderWithProto(compressionEnabled, builder),
-		InboundMsgBuilder:  newInboundBuilderWithProto(builder),
-		InternalMsgBuilder: NewInternalBuilder(),
+		OutboundMsgBuilder: newOutboundBuilder(compressionType, builder),
+		InboundMsgBuilder:  newInboundBuilder(builder),
 	}, nil
 }

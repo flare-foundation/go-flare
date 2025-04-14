@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package indexer
@@ -42,7 +42,7 @@ func TestHeightBlockIndexPostFork(t *testing.T) {
 		dummyPCH := uint64(2022)
 
 		// store postForkStatelessBlk in State ...
-		postForkStatelessBlk, err := block.BuildUnsignedApricot(
+		postForkStatelessBlk, err := block.BuildUnsigned(
 			lastBlkID,
 			dummyTS,
 			dummyPCH,
@@ -68,14 +68,16 @@ func TestHeightBlockIndexPostFork(t *testing.T) {
 		CantGetFullPostForkBlock: true,
 		CantCommit:               true,
 
-		GetFullPostForkBlockF: func(blkID ids.ID) (snowman.Block, error) {
+		GetFullPostForkBlockF: func(_ context.Context, blkID ids.ID) (snowman.Block, error) {
 			blk, found := proBlks[blkID]
 			if !found {
 				return nil, database.ErrNotFound
 			}
 			return blk, nil
 		},
-		CommitF: func() error { return nil },
+		CommitF: func() error {
+			return nil
+		},
 	}
 
 	hIndex := newHeightIndexer(blkSrv,
@@ -120,7 +122,7 @@ func TestHeightBlockIndexAcrossFork(t *testing.T) {
 		dummyPCH := uint64(2022)
 
 		// store postForkStatelessBlk in State ...
-		postForkStatelessBlk, err := block.BuildUnsignedApricot(
+		postForkStatelessBlk, err := block.BuildUnsigned(
 			lastBlkID,
 			dummyTS,
 			dummyPCH,
@@ -146,14 +148,16 @@ func TestHeightBlockIndexAcrossFork(t *testing.T) {
 		CantGetFullPostForkBlock: true,
 		CantCommit:               true,
 
-		GetFullPostForkBlockF: func(blkID ids.ID) (snowman.Block, error) {
+		GetFullPostForkBlockF: func(_ context.Context, blkID ids.ID) (snowman.Block, error) {
 			blk, found := proBlks[blkID]
 			if !found {
 				return nil, database.ErrNotFound
 			}
 			return blk, nil
 		},
-		CommitF: func() error { return nil },
+		CommitF: func() error {
+			return nil
+		},
 	}
 
 	hIndex := newHeightIndexer(blkSrv,
@@ -202,7 +206,7 @@ func TestHeightBlockIndexResumeFromCheckPoint(t *testing.T) {
 		dummyPCH := uint64(2022)
 
 		// store postForkStatelessBlk in State ...
-		postForkStatelessBlk, err := block.BuildUnsignedApricot(
+		postForkStatelessBlk, err := block.BuildUnsigned(
 			lastBlkID,
 			dummyTS,
 			dummyPCH,
@@ -228,14 +232,16 @@ func TestHeightBlockIndexResumeFromCheckPoint(t *testing.T) {
 		CantGetFullPostForkBlock: true,
 		CantCommit:               true,
 
-		GetFullPostForkBlockF: func(blkID ids.ID) (snowman.Block, error) {
+		GetFullPostForkBlockF: func(_ context.Context, blkID ids.ID) (snowman.Block, error) {
 			blk, found := proBlks[blkID]
 			if !found {
 				return nil, database.ErrNotFound
 			}
 			return blk, nil
 		},
-		CommitF: func() error { return nil },
+		CommitF: func() error {
+			return nil
+		},
 	}
 
 	hIndex := newHeightIndexer(blkSrv,

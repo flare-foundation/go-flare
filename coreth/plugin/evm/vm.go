@@ -5,7 +5,6 @@ package evm
 
 import (
 	"context"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -47,12 +46,14 @@ import (
 	// We must import this package (not referenced elsewhere) so that the native "callTracer"
 	// is added to a map of client-accessible tracers. In geth, this is done
 	// inside of cmd/geth.
+	_ "github.com/ava-labs/coreth/eth/tracers/js"
 	_ "github.com/ava-labs/coreth/eth/tracers/native"
 
-	"github.com/ava-labs/coreth/metrics"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
+
+	"github.com/ava-labs/coreth/metrics"
 
 	avalancheRPC "github.com/gorilla/rpc/v2"
 
@@ -69,12 +70,13 @@ import (
 	"github.com/ava-labs/avalanchego/snow/consensus/snowman"
 	"github.com/ava-labs/avalanchego/snow/engine/snowman/block"
 	"github.com/ava-labs/avalanchego/utils/constants"
-	"github.com/ava-labs/avalanchego/utils/crypto"
+	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
 	"github.com/ava-labs/avalanchego/utils/formatting/address"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/math"
 	"github.com/ava-labs/avalanchego/utils/perms"
 	"github.com/ava-labs/avalanchego/utils/profiler"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 	"github.com/ava-labs/avalanchego/utils/units"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
@@ -135,11 +137,10 @@ const (
 
 var (
 	// Set last accepted key to be longer than the keys used to store accepted block IDs.
-	lastAcceptedKey        = []byte("last_accepted_key")
-	acceptedPrefix         = []byte("snowman_accepted")
-	metadataPrefix         = []byte("metadata")
-	ethDBPrefix            = []byte("ethdb")
-	pruneRejectedBlocksKey = []byte("pruned_rejected_blocks")
+	lastAcceptedKey = []byte("last_accepted_key")
+	acceptedPrefix  = []byte("snowman_accepted")
+	metadataPrefix  = []byte("metadata")
+	ethDBPrefix     = []byte("ethdb")
 
 	// Prefixes for atomic trie
 	atomicTrieDBPrefix     = []byte("atomicTrieDB")
@@ -174,7 +175,6 @@ var (
 	errConflictingAtomicTx            = errors.New("conflicting atomic tx present")
 	errTooManyAtomicTx                = errors.New("too many atomic tx")
 	errMissingAtomicTxs               = errors.New("cannot build a block with non-empty extra data and zero atomic transactions")
-	errInvalidExtraStateRoot          = errors.New("invalid ExtraStateRoot")
 	errImportTxsDisabled              = errors.New("import transactions are disabled")
 	errExportTxsDisabled              = errors.New("export transactions are disabled")
 )
@@ -267,7 +267,7 @@ type VM struct {
 	shutdownWg   sync.WaitGroup
 
 	fx          secp256k1fx.Fx
-	secpFactory crypto.FactorySECP256K1R
+	secpFactory secp256k1.Factory
 
 	// Continuous Profiler
 	profiler profiler.ContinuousProfiler
@@ -313,7 +313,8 @@ func (vm *VM) GetActivationTime() time.Time {
 
 // Initialize implements the snowman.ChainVM interface
 func (vm *VM) Initialize(
-	ctx *snow.Context,
+	_ context.Context,
+	chainCtx *snow.Context,
 	dbManager manager.Manager,
 	genesisBytes []byte,
 	upgradeBytes []byte,
@@ -332,7 +333,7 @@ func (vm *VM) Initialize(
 		return err
 	}
 
-	vm.ctx = ctx
+	vm.ctx = chainCtx
 
 	// Create logger
 	alias, err := vm.ctx.BCLookup.PrimaryAlias(vm.ctx.ChainID)
@@ -369,6 +370,16 @@ func (vm *VM) Initialize(
 	vm.db = versiondb.New(baseDB)
 	vm.acceptedBlockDB = prefixdb.New(acceptedPrefix, vm.db)
 	vm.metadataDB = prefixdb.New(metadataPrefix, vm.db)
+
+	if vm.config.InspectDatabase {
+		start := time.Now()
+		log.Info("Starting database inspection")
+		if err := rawdb.InspectDatabase(vm.chaindb, nil, nil); err != nil {
+			return err
+		}
+		log.Info("Completed database inspection", "elapsed", time.Since(start))
+	}
+
 	g := new(core.Genesis)
 	if err := json.Unmarshal(genesisBytes, g); err != nil {
 		return err
@@ -398,6 +409,10 @@ func (vm *VM) Initialize(
 	case g.Config.ChainID.Cmp(params.AvalancheLocalChainID) == 0:
 		g.Config = params.AvalancheLocalChainConfig
 	}
+	// Set the Avalanche Context on the ChainConfig
+	g.Config.AvalancheContext = params.AvalancheContext{
+		BlockchainID: common.Hash(chainCtx.ChainID),
+	}
 	vm.syntacticBlockValidator = NewBlockValidator(extDataHashes)
 
 	// Ensure that non-standard commit interval is only allowed for the local network
@@ -424,28 +439,54 @@ func (vm *VM) Initialize(
 	}
 	vm.ethConfig.Genesis = g
 	vm.ethConfig.NetworkId = vm.chainID.Uint64()
+	vm.genesisHash = vm.ethConfig.Genesis.ToBlock(nil).Hash() // must create genesis hash before [vm.readLastAccepted]
+	lastAcceptedHash, lastAcceptedHeight, err := vm.readLastAccepted()
+	if err != nil {
+		return err
+	}
+	log.Info(fmt.Sprintf("lastAccepted = %s", lastAcceptedHash))
 
 	// Set minimum price for mining and default gas price oracle value to the min
 	// gas price to prevent so transactions and blocks all use the correct fees
 	vm.ethConfig.RPCGasCap = vm.config.RPCGasCap
 	vm.ethConfig.RPCEVMTimeout = vm.config.APIMaxDuration.Duration
 	vm.ethConfig.RPCTxFeeCap = vm.config.RPCTxFeeCap
+
 	vm.ethConfig.TxPool.NoLocals = !vm.config.LocalTxsEnabled
+	vm.ethConfig.TxPool.Journal = vm.config.TxPoolJournal
+	vm.ethConfig.TxPool.Rejournal = vm.config.TxPoolRejournal.Duration
+	vm.ethConfig.TxPool.PriceLimit = vm.config.TxPoolPriceLimit
+	vm.ethConfig.TxPool.PriceBump = vm.config.TxPoolPriceBump
+	vm.ethConfig.TxPool.AccountSlots = vm.config.TxPoolAccountSlots
+	vm.ethConfig.TxPool.GlobalSlots = vm.config.TxPoolGlobalSlots
+	vm.ethConfig.TxPool.AccountQueue = vm.config.TxPoolAccountQueue
+	vm.ethConfig.TxPool.GlobalQueue = vm.config.TxPoolGlobalQueue
+
 	vm.ethConfig.AllowUnfinalizedQueries = vm.config.AllowUnfinalizedQueries
 	vm.ethConfig.AllowUnprotectedTxs = vm.config.AllowUnprotectedTxs
+	vm.ethConfig.AllowUnprotectedTxHashes = vm.config.AllowUnprotectedTxHashes
 	vm.ethConfig.Preimages = vm.config.Preimages
+	vm.ethConfig.TrieCleanCache = vm.config.TrieCleanCache
+	vm.ethConfig.TrieCleanJournal = vm.config.TrieCleanJournal
+	vm.ethConfig.TrieCleanRejournal = vm.config.TrieCleanRejournal.Duration
+	vm.ethConfig.TrieDirtyCache = vm.config.TrieDirtyCache
+	vm.ethConfig.TrieDirtyCommitTarget = vm.config.TrieDirtyCommitTarget
+	vm.ethConfig.SnapshotCache = vm.config.SnapshotCache
 	vm.ethConfig.Pruning = vm.config.Pruning
 	vm.ethConfig.AcceptorQueueLimit = vm.config.AcceptorQueueLimit
 	vm.ethConfig.PopulateMissingTries = vm.config.PopulateMissingTries
 	vm.ethConfig.PopulateMissingTriesParallelism = vm.config.PopulateMissingTriesParallelism
 	vm.ethConfig.AllowMissingTries = vm.config.AllowMissingTries
-	vm.ethConfig.SnapshotDelayInit = vm.config.StateSyncEnabled
+	vm.ethConfig.SnapshotDelayInit = vm.stateSyncEnabled(lastAcceptedHeight)
 	vm.ethConfig.SnapshotAsync = vm.config.SnapshotAsync
 	vm.ethConfig.SnapshotVerify = vm.config.SnapshotVerify
 	vm.ethConfig.OfflinePruning = vm.config.OfflinePruning
 	vm.ethConfig.OfflinePruningBloomFilterSize = vm.config.OfflinePruningBloomFilterSize
 	vm.ethConfig.OfflinePruningDataDirectory = vm.config.OfflinePruningDataDirectory
 	vm.ethConfig.CommitInterval = vm.config.CommitInterval
+	vm.ethConfig.SkipUpgradeCheck = vm.config.SkipUpgradeCheck
+	vm.ethConfig.AcceptedCacheSize = vm.config.AcceptedCacheSize
+	vm.ethConfig.TxLookupLimit = vm.config.TxLookupLimit
 
 	// Create directory for offline pruning
 	if len(vm.ethConfig.OfflinePruningDataDirectory) != 0 {
@@ -455,22 +496,18 @@ func (vm *VM) Initialize(
 		}
 	}
 
-	vm.genesisHash = vm.ethConfig.Genesis.ToBlock(nil).Hash()
-
 	vm.chainConfig = g.Config
 	vm.networkID = vm.ethConfig.NetworkId
-	vm.secpFactory = crypto.FactorySECP256K1R{Cache: cache.LRU{Size: secpFactoryCacheSize}}
+	vm.secpFactory = secp256k1.Factory{
+		Cache: cache.LRU[ids.ID, *secp256k1.PublicKey]{
+			Size: secpFactoryCacheSize,
+		},
+	}
 
 	vm.codec = Codec
 
 	// TODO: read size from settings
-	vm.mempool = NewMempool(ctx.AVAXAssetID, defaultMempoolSize)
-
-	lastAcceptedHash, lastAcceptedHeight, err := vm.readLastAccepted()
-	if err != nil {
-		return err
-	}
-	log.Info(fmt.Sprintf("lastAccepted = %s", lastAcceptedHash))
+	vm.mempool = NewMempool(chainCtx.AVAXAssetID, defaultMempoolSize)
 
 	if err := vm.initializeMetrics(); err != nil {
 		return err
@@ -478,7 +515,7 @@ func (vm *VM) Initialize(
 
 	// initialize peer network
 	vm.networkCodec = message.Codec
-	vm.Network = peer.NewNetwork(appSender, vm.networkCodec, ctx.NodeID, vm.config.MaxOutboundActiveRequests)
+	vm.Network = peer.NewNetwork(appSender, vm.networkCodec, message.CrossChainCodec, chainCtx.NodeID, vm.config.MaxOutboundActiveRequests, vm.config.MaxOutboundActiveCrossChainRequests)
 	vm.client = peer.NewNetworkClient(vm.Network)
 
 	if err := vm.initializeChain(lastAcceptedHash); err != nil {
@@ -582,9 +619,10 @@ func (vm *VM) initializeChain(lastAcceptedHash common.Hash) error {
 // If state sync is disabled, this function will wipe any ongoing summary from
 // disk to ensure that we do not continue syncing from an invalid snapshot.
 func (vm *VM) initializeStateSyncClient(lastAcceptedHeight uint64) error {
+	stateSyncEnabled := vm.stateSyncEnabled(lastAcceptedHeight)
 	// parse nodeIDs from state sync IDs in vm config
 	var stateSyncIDs []ids.NodeID
-	if vm.config.StateSyncEnabled && len(vm.config.StateSyncIDs) > 0 {
+	if stateSyncEnabled && len(vm.config.StateSyncIDs) > 0 {
 		nodeIDs := strings.Split(vm.config.StateSyncIDs, ",")
 		stateSyncIDs = make([]ids.NodeID, len(nodeIDs))
 		for i, nodeIDString := range nodeIDs {
@@ -609,7 +647,7 @@ func (vm *VM) initializeStateSyncClient(lastAcceptedHeight uint64) error {
 				IsSongbirdCode:   vm.chainConfig.IsSongbirdCode(),
 			},
 		),
-		enabled:            vm.config.StateSyncEnabled,
+		enabled:            stateSyncEnabled,
 		skipResume:         vm.config.StateSyncSkipResume,
 		stateSyncMinBlocks: vm.config.StateSyncMinBlocks,
 		lastAcceptedHeight: lastAcceptedHeight, // TODO clean up how this is passed around
@@ -623,7 +661,7 @@ func (vm *VM) initializeStateSyncClient(lastAcceptedHeight uint64) error {
 
 	// If StateSync is disabled, clear any ongoing summary so that we will not attempt to resume
 	// sync using a snapshot that has been modified by the node running normal operations.
-	if !vm.config.StateSyncEnabled {
+	if !stateSyncEnabled {
 		return vm.StateSyncClient.StateSyncClearOngoingSummary()
 	}
 
@@ -639,6 +677,7 @@ func (vm *VM) initializeStateSyncServer() {
 	})
 
 	vm.setAppRequestHandlers()
+	vm.setCrossChainAppRequestHandler()
 }
 
 func (vm *VM) initChainState(lastAcceptedBlock *types.Block) error {
@@ -725,7 +764,7 @@ func (vm *VM) preBatchOnFinalizeAndAssemble(header *types.Header, state *state.S
 func (vm *VM) postBatchOnFinalizeAndAssemble(header *types.Header, state *state.StateDB, txs []*types.Transaction) ([]byte, *big.Int, *big.Int, error) {
 	var (
 		batchAtomicTxs    []*Tx
-		batchAtomicUTXOs  ids.Set
+		batchAtomicUTXOs  set.Set[ids.ID]
 		batchContribution *big.Int = new(big.Int).Set(common.Big0)
 		batchGasUsed      *big.Int = new(big.Int).Set(common.Big0)
 		rules                      = vm.chainConfig.AvalancheRules(header.Number, new(big.Int).SetUint64(header.Time))
@@ -794,19 +833,6 @@ func (vm *VM) postBatchOnFinalizeAndAssemble(header *types.Header, state *state.
 		size += txSize
 	}
 
-	// In Cortina the block header must include the atomic trie root.
-	if rules.IsCortina {
-		// Pass common.Hash{} as the current block's hash to the atomic backend, this avoids
-		// pinning changes to the atomic trie in memory, as we are still computing the header
-		// for this block and don't have its hash yet. Here we calculate the root of the atomic
-		// trie to store in the block header.
-		atomicTrieRoot, err := vm.atomicBackend.InsertTxs(common.Hash{}, header.Number.Uint64(), header.ParentHash, batchAtomicTxs)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		header.ExtraStateRoot = atomicTrieRoot
-	}
-
 	// If there is a non-zero number of transactions, marshal them and return the byte slice
 	// for the block's extra data along with the contribution and gas used.
 	if len(batchAtomicTxs) > 0 {
@@ -863,17 +889,9 @@ func (vm *VM) onExtraStateChange(block *types.Block, state *state.StateDB) (*big
 			}
 		}
 		// Update the atomic backend with [txs] from this block.
-		atomicRoot, err := vm.atomicBackend.InsertTxs(block.Hash(), block.NumberU64(), block.ParentHash(), txs)
+		_, err := vm.atomicBackend.InsertTxs(block.Hash(), block.NumberU64(), block.ParentHash(), txs)
 		if err != nil {
 			return nil, nil, err
-		}
-		if rules.IsCortina {
-			// In Cortina, the atomic trie root should be in ExtraStateRoot.
-			if header.ExtraStateRoot != atomicRoot {
-				return nil, nil, fmt.Errorf(
-					"%w: (expected %s) (got %s)", errInvalidExtraStateRoot, header.ExtraStateRoot, atomicRoot,
-				)
-			}
 		}
 	}
 
@@ -909,31 +927,7 @@ func (vm *VM) onExtraStateChange(block *types.Block, state *state.StateDB) (*big
 	return batchContribution, batchGasUsed, nil
 }
 
-func (vm *VM) pruneChain() error {
-	if !vm.config.Pruning {
-		return nil
-	}
-	pruned, err := vm.db.Has(pruneRejectedBlocksKey)
-	if err != nil {
-		return fmt.Errorf("failed to check if the VM has pruned rejected blocks: %w", err)
-	}
-	if pruned {
-		return nil
-	}
-
-	lastAcceptedHeight := vm.LastAcceptedBlock().Height()
-	if err := vm.blockChain.RemoveRejectedBlocks(0, lastAcceptedHeight); err != nil {
-		return err
-	}
-	heightBytes := make([]byte, 8)
-	binary.PutUvarint(heightBytes, lastAcceptedHeight)
-	if err := vm.db.Put(pruneRejectedBlocksKey, heightBytes); err != nil {
-		return err
-	}
-	return vm.db.Commit()
-}
-
-func (vm *VM) SetState(state snow.State) error {
+func (vm *VM) SetState(_ context.Context, state snow.State) error {
 	switch state {
 	case snow.StateSyncing:
 		vm.bootstrapped = false
@@ -978,6 +972,7 @@ func (vm *VM) setAppRequestHandlers() {
 	)
 	syncRequestHandler := handlers.NewSyncHandler(
 		vm.blockChain,
+		vm.chaindb,
 		evmTrieDB,
 		vm.atomicTrie.TrieDB(),
 		vm.networkCodec,
@@ -986,8 +981,15 @@ func (vm *VM) setAppRequestHandlers() {
 	vm.Network.SetRequestHandler(syncRequestHandler)
 }
 
+// setCrossChainAppRequestHandler sets the request handlers for the VM to serve cross chain
+// requests.
+func (vm *VM) setCrossChainAppRequestHandler() {
+	crossChainRequestHandler := message.NewCrossChainHandler(vm.eth.APIBackend, message.CrossChainCodec)
+	vm.Network.SetCrossChainRequestHandler(crossChainRequestHandler)
+}
+
 // Shutdown implements the snowman.ChainVM interface
-func (vm *VM) Shutdown() error {
+func (vm *VM) Shutdown(context.Context) error {
 	if vm.ctx == nil {
 		return nil
 	}
@@ -1002,7 +1004,7 @@ func (vm *VM) Shutdown() error {
 }
 
 // buildBlock builds a block to be wrapped by ChainState
-func (vm *VM) buildBlock() (snowman.Block, error) {
+func (vm *VM) buildBlock(_ context.Context) (snowman.Block, error) {
 	block, err := vm.miner.GenerateBlock()
 	vm.builder.handleGenerateBlock()
 	if err != nil {
@@ -1045,7 +1047,7 @@ func (vm *VM) buildBlock() (snowman.Block, error) {
 }
 
 // parseBlock parses [b] into a block to be wrapped by ChainState.
-func (vm *VM) parseBlock(b []byte) (snowman.Block, error) {
+func (vm *VM) parseBlock(_ context.Context, b []byte) (snowman.Block, error) {
 	ethBlock := new(types.Block)
 	if err := rlp.DecodeBytes(b, ethBlock); err != nil {
 		return nil, err
@@ -1065,7 +1067,7 @@ func (vm *VM) parseBlock(b []byte) (snowman.Block, error) {
 }
 
 func (vm *VM) ParseEthBlock(b []byte) (*types.Block, error) {
-	block, err := vm.parseBlock(b)
+	block, err := vm.parseBlock(context.TODO(), b)
 	if err != nil {
 		return nil, err
 	}
@@ -1075,7 +1077,7 @@ func (vm *VM) ParseEthBlock(b []byte) (*types.Block, error) {
 
 // getBlock attempts to retrieve block [id] from the VM to be wrapped
 // by ChainState.
-func (vm *VM) getBlock(id ids.ID) (snowman.Block, error) {
+func (vm *VM) getBlock(_ context.Context, id ids.ID) (snowman.Block, error) {
 	ethBlock := vm.blockChain.GetBlockByHash(common.Hash(id))
 	// If [ethBlock] is nil, return [database.ErrNotFound] here
 	// so that the miss is considered cacheable.
@@ -1087,11 +1089,11 @@ func (vm *VM) getBlock(id ids.ID) (snowman.Block, error) {
 }
 
 // SetPreference sets what the current tail of the chain is
-func (vm *VM) SetPreference(blkID ids.ID) error {
+func (vm *VM) SetPreference(ctx context.Context, blkID ids.ID) error {
 	// Since each internal handler used by [vm.State] always returns a block
 	// with non-nil ethBlock value, GetBlockInternal should never return a
 	// (*Block) with a nil ethBlock value.
-	block, err := vm.GetBlockInternal(blkID)
+	block, err := vm.GetBlockInternal(ctx, blkID)
 	if err != nil {
 		return fmt.Errorf("failed to set preference to %s: %w", blkID, err)
 	}
@@ -1101,7 +1103,7 @@ func (vm *VM) SetPreference(blkID ids.ID) error {
 
 // VerifyHeightIndex always returns a nil error since the index is maintained by
 // vm.blockChain.
-func (vm *VM) VerifyHeightIndex() error {
+func (vm *VM) VerifyHeightIndex(context.Context) error {
 	return nil
 }
 
@@ -1113,7 +1115,7 @@ func (vm *VM) VerifyHeightIndex() error {
 // Note: the engine assumes that if a block is not found at [blkHeight], then
 // [database.ErrNotFound] will be returned. This indicates that the VM has state synced
 // and does not have all historical blocks available.
-func (vm *VM) GetBlockIDAtHeight(blkHeight uint64) (ids.ID, error) {
+func (vm *VM) GetBlockIDAtHeight(_ context.Context, blkHeight uint64) (ids.ID, error) {
 	ethBlock := vm.blockChain.GetBlockByNumber(blkHeight)
 	if ethBlock == nil {
 		return ids.ID{}, database.ErrNotFound
@@ -1122,7 +1124,7 @@ func (vm *VM) GetBlockIDAtHeight(blkHeight uint64) (ids.ID, error) {
 	return ids.ID(ethBlock.Hash()), nil
 }
 
-func (vm *VM) Version() (string, error) {
+func (vm *VM) Version(context.Context) (string, error) {
 	return Version, nil
 }
 
@@ -1149,7 +1151,7 @@ func newHandler(name string, service interface{}, lockOption ...commonEng.LockOp
 }
 
 // CreateHandlers makes new http handlers that can handle API calls
-func (vm *VM) CreateHandlers() (map[string]*commonEng.HTTPHandler, error) {
+func (vm *VM) CreateHandlers(context.Context) (map[string]*commonEng.HTTPHandler, error) {
 	handler := rpc.NewServer(vm.config.APIMaxDuration.Duration)
 	enabledAPIs := vm.config.EthAPIs()
 	if err := attachEthService(handler, vm.eth.APIs(), enabledAPIs); err != nil {
@@ -1203,7 +1205,7 @@ func (vm *VM) CreateHandlers() (map[string]*commonEng.HTTPHandler, error) {
 }
 
 // CreateStaticHandlers makes new http handlers that can handle API calls
-func (vm *VM) CreateStaticHandlers() (map[string]*commonEng.HTTPHandler, error) {
+func (vm *VM) CreateStaticHandlers(context.Context) (map[string]*commonEng.HTTPHandler, error) {
 	handler := rpc.NewServer(0)
 	if err := handler.RegisterName("static", &StaticService{}); err != nil {
 		return nil, err
@@ -1224,7 +1226,7 @@ func (vm *VM) CreateStaticHandlers() (map[string]*commonEng.HTTPHandler, error) 
 // or any of its ancestor blocks going back to the last accepted block in its ancestry. If [ancestor] is
 // accepted, then nil will be returned immediately.
 // If the ancestry of [ancestor] cannot be fetched, then [errRejectedParent] may be returned.
-func (vm *VM) conflicts(inputs ids.Set, ancestor *Block) error {
+func (vm *VM) conflicts(inputs set.Set[ids.ID], ancestor *Block) error {
 	for ancestor.Status() != choices.Accepted {
 		// If any of the atomic transactions in the ancestor conflict with [inputs]
 		// return an error.
@@ -1243,7 +1245,7 @@ func (vm *VM) conflicts(inputs ids.Set, ancestor *Block) error {
 		// will be missing.
 		// If the ancestor is processing, then the block may have
 		// been verified.
-		nextAncestorIntf, err := vm.GetBlockInternal(nextAncestorID)
+		nextAncestorIntf, err := vm.GetBlockInternal(context.TODO(), nextAncestorID)
 		if err != nil {
 			return errRejectedParent
 		}
@@ -1373,7 +1375,7 @@ func (vm *VM) verifyTxAtTip(tx *Tx) error {
 // for reverting to the correct snapshot after calling this function. If this function is called with a
 // throwaway state, then this is not necessary.
 func (vm *VM) verifyTx(tx *Tx, parentHash common.Hash, baseFee *big.Int, state *state.StateDB, rules params.Rules) error {
-	parentIntf, err := vm.GetBlockInternal(ids.ID(parentHash))
+	parentIntf, err := vm.GetBlockInternal(context.TODO(), ids.ID(parentHash))
 	if err != nil {
 		return fmt.Errorf("failed to get parent block: %w", err)
 	}
@@ -1400,7 +1402,7 @@ func (vm *VM) verifyTxs(txs []*Tx, parentHash common.Hash, baseFee *big.Int, hei
 	// it was called.
 	// If the ancestor is rejected, then this block shouldn't be inserted
 	// into the canonical chain because the parent will be missing.
-	ancestorInf, err := vm.GetBlockInternal(ancestorID)
+	ancestorInf, err := vm.GetBlockInternal(context.TODO(), ancestorID)
 	if err != nil {
 		return errRejectedParent
 	}
@@ -1414,7 +1416,7 @@ func (vm *VM) verifyTxs(txs []*Tx, parentHash common.Hash, baseFee *big.Int, hei
 
 	// Ensure each tx in [txs] doesn't conflict with any other atomic tx in
 	// a processing ancestor block.
-	inputs := &ids.Set{}
+	inputs := set.Set[ids.ID]{}
 	for _, atomicTx := range txs {
 		utx := atomicTx.UnsignedAtomicTx
 		if err := utx.SemanticVerify(vm, atomicTx, ancestor, baseFee, rules); err != nil {
@@ -1433,7 +1435,7 @@ func (vm *VM) verifyTxs(txs []*Tx, parentHash common.Hash, baseFee *big.Int, hei
 // referenced in.
 func (vm *VM) GetAtomicUTXOs(
 	chainID ids.ID,
-	addrs ids.ShortSet,
+	addrs set.Set[ids.ShortID],
 	startAddr ids.ShortID,
 	startUTXOID ids.ID,
 	limit int,
@@ -1480,21 +1482,21 @@ func (vm *VM) GetAtomicUTXOs(
 
 // GetSpendableFunds returns a list of EVMInputs and keys (in corresponding
 // order) to total [amount] of [assetID] owned by [keys].
-// Note: we return [][]*crypto.PrivateKeySECP256K1R even though each input
+// Note: we return [][]*secp256k1.PrivateKey even though each input
 // corresponds to a single key, so that the signers can be passed in to
 // [tx.Sign] which supports multiple keys on a single input.
 func (vm *VM) GetSpendableFunds(
-	keys []*crypto.PrivateKeySECP256K1R,
+	keys []*secp256k1.PrivateKey,
 	assetID ids.ID,
 	amount uint64,
-) ([]EVMInput, [][]*crypto.PrivateKeySECP256K1R, error) {
+) ([]EVMInput, [][]*secp256k1.PrivateKey, error) {
 	// Note: current state uses the state of the preferred block.
 	state, err := vm.blockChain.State()
 	if err != nil {
 		return nil, nil, err
 	}
 	inputs := []EVMInput{}
-	signers := [][]*crypto.PrivateKeySECP256K1R{}
+	signers := [][]*secp256k1.PrivateKey{}
 	// Note: we assume that each key in [keys] is unique, so that iterating over
 	// the keys will not produce duplicated nonces in the returned EVMInput slice.
 	for _, key := range keys {
@@ -1526,7 +1528,7 @@ func (vm *VM) GetSpendableFunds(
 			AssetID: assetID,
 			Nonce:   nonce,
 		})
-		signers = append(signers, []*crypto.PrivateKeySECP256K1R{key})
+		signers = append(signers, []*secp256k1.PrivateKey{key})
 		amount -= balance
 	}
 
@@ -1542,15 +1544,15 @@ func (vm *VM) GetSpendableFunds(
 // This function accounts for the added cost of the additional inputs needed to
 // create the transaction and makes sure to skip any keys with a balance that is
 // insufficient to cover the additional fee.
-// Note: we return [][]*crypto.PrivateKeySECP256K1R even though each input
+// Note: we return [][]*secp256k1.PrivateKey even though each input
 // corresponds to a single key, so that the signers can be passed in to
 // [tx.Sign] which supports multiple keys on a single input.
 func (vm *VM) GetSpendableAVAXWithFee(
-	keys []*crypto.PrivateKeySECP256K1R,
+	keys []*secp256k1.PrivateKey,
 	amount uint64,
 	cost uint64,
 	baseFee *big.Int,
-) ([]EVMInput, [][]*crypto.PrivateKeySECP256K1R, error) {
+) ([]EVMInput, [][]*secp256k1.PrivateKey, error) {
 	// Note: current state uses the state of the preferred block.
 	state, err := vm.blockChain.State()
 	if err != nil {
@@ -1569,7 +1571,7 @@ func (vm *VM) GetSpendableAVAXWithFee(
 	amount = newAmount
 
 	inputs := []EVMInput{}
-	signers := [][]*crypto.PrivateKeySECP256K1R{}
+	signers := [][]*secp256k1.PrivateKey{}
 	// Note: we assume that each key in [keys] is unique, so that iterating over
 	// the keys will not produce duplicated nonces in the returned EVMInput slice.
 	for _, key := range keys {
@@ -1626,7 +1628,7 @@ func (vm *VM) GetSpendableAVAXWithFee(
 			AssetID: vm.ctx.AVAXAssetID,
 			Nonce:   nonce,
 		})
-		signers = append(signers, []*crypto.PrivateKeySECP256K1R{key})
+		signers = append(signers, []*secp256k1.PrivateKey{key})
 		amount -= inputAmount
 	}
 
@@ -1708,7 +1710,7 @@ func (vm *VM) getAtomicTxFromPreApricot5BlockByHeight(height uint64) (*Tx, error
 // readLastAccepted reads the last accepted hash from [acceptedBlockDB] and returns the
 // last accepted block hash and height by reading directly from [vm.chaindb] instead of relying
 // on [chain].
-// Note: assumes chaindb, ethConfig, and genesisHash have been initialized.
+// Note: assumes [vm.chaindb] and [vm.genesisHash] have been initialized.
 func (vm *VM) readLastAccepted() (common.Hash, uint64, error) {
 	// Attempt to load last accepted block to determine if it is necessary to
 	// initialize state with the genesis block.
@@ -1771,4 +1773,14 @@ func attachEthService(handler *rpc.Server, apis []rpc.API, names []string) error
 	}
 
 	return nil
+}
+
+func (vm *VM) stateSyncEnabled(lastAcceptedHeight uint64) bool {
+	if vm.config.StateSyncEnabled != nil {
+		// if the config is set, use that
+		return *vm.config.StateSyncEnabled
+	}
+
+	// enable state sync by default if the chain is empty.
+	return lastAcceptedHeight == 0
 }

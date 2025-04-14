@@ -1,11 +1,11 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package mempool
 
 import "github.com/ava-labs/avalanchego/vms/platformvm/txs"
 
-var _ txs.Visitor = &remover{}
+var _ txs.Visitor = (*remover)(nil)
 
 type remover struct {
 	m  *mempool
@@ -27,7 +27,7 @@ func (r *remover) AddDelegatorTx(*txs.AddDelegatorTx) error {
 	return nil
 }
 
-func (r *remover) RemoveSubnetValidatorTx(tx *txs.RemoveSubnetValidatorTx) error {
+func (r *remover) RemoveSubnetValidatorTx(*txs.RemoveSubnetValidatorTx) error {
 	r.m.removeDecisionTxs([]*txs.Tx{r.tx})
 	return nil
 }
@@ -52,27 +52,27 @@ func (r *remover) ExportTx(*txs.ExportTx) error {
 	return nil
 }
 
-func (r *remover) TransformSubnetTx(tx *txs.TransformSubnetTx) error {
+func (r *remover) TransformSubnetTx(*txs.TransformSubnetTx) error {
 	r.m.removeDecisionTxs([]*txs.Tx{r.tx})
 	return nil
 }
 
-func (r *remover) AddPermissionlessValidatorTx(tx *txs.AddPermissionlessValidatorTx) error {
+func (r *remover) AddPermissionlessValidatorTx(*txs.AddPermissionlessValidatorTx) error {
 	r.m.removeStakerTx(r.tx)
 	return nil
 }
 
-func (r *remover) AddPermissionlessDelegatorTx(tx *txs.AddPermissionlessDelegatorTx) error {
+func (r *remover) AddPermissionlessDelegatorTx(*txs.AddPermissionlessDelegatorTx) error {
 	r.m.removeStakerTx(r.tx)
 	return nil
 }
 
-func (r *remover) AdvanceTimeTx(*txs.AdvanceTimeTx) error {
+func (*remover) AdvanceTimeTx(*txs.AdvanceTimeTx) error {
 	// this tx is never in mempool
 	return nil
 }
 
-func (r *remover) RewardValidatorTx(*txs.RewardValidatorTx) error {
+func (*remover) RewardValidatorTx(*txs.RewardValidatorTx) error {
 	// this tx is never in mempool
 	return nil
 }

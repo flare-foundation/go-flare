@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package throttling
@@ -57,8 +57,9 @@ type inboundMsgBufferThrottler struct {
 // buffer so that we can read a message from [nodeID].
 // The returned release function must be called (!) when done processing the message
 // (or when we give up trying to read the message.)
+//
 // invariant: There should be a maximum of 1 blocking call to Acquire for a
-//            given nodeID. Callers must enforce this invariant.
+// given nodeID. Callers must enforce this invariant.
 func (t *inboundMsgBufferThrottler) Acquire(ctx context.Context, nodeID ids.NodeID) ReleaseFunc {
 	startTime := time.Now()
 	defer func() {
@@ -69,7 +70,9 @@ func (t *inboundMsgBufferThrottler) Acquire(ctx context.Context, nodeID ids.Node
 	if t.nodeToNumProcessingMsgs[nodeID] < t.maxProcessingMsgsPerNode {
 		t.nodeToNumProcessingMsgs[nodeID]++
 		t.lock.Unlock()
-		return func() { t.release(nodeID) }
+		return func() {
+			t.release(nodeID)
+		}
 	}
 
 	// We're currently processing the maximum number of
@@ -89,7 +92,9 @@ func (t *inboundMsgBufferThrottler) Acquire(ctx context.Context, nodeID ids.Node
 	case <-closeOnAcquireChan:
 		t.lock.Lock()
 		t.nodeToNumProcessingMsgs[nodeID]++
-		releaseFunc = func() { t.release(nodeID) }
+		releaseFunc = func() {
+			t.release(nodeID)
+		}
 	case <-ctx.Done():
 		t.lock.Lock()
 		delete(t.awaitingAcquire, nodeID)

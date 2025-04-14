@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package throttling
@@ -43,7 +43,6 @@ func TestDialThrottler(t *testing.T) {
 
 	select {
 	case <-time.After(25 * time.Millisecond):
-		break
 	case <-acquiredChan:
 		t.Fatal("should not have been able to acquire immediately")
 	}

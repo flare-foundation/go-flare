@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package indexer
@@ -12,6 +12,7 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/formatting"
+	"github.com/ava-labs/avalanchego/utils/json"
 	"github.com/ava-labs/avalanchego/utils/rpc"
 )
 
@@ -21,7 +22,7 @@ type mockClient struct {
 	onSendRequestF func(reply interface{}) error
 }
 
-func (mc *mockClient) SendRequest(ctx context.Context, method string, _ interface{}, reply interface{}, options ...rpc.Option) error {
+func (mc *mockClient) SendRequest(_ context.Context, method string, _ interface{}, reply interface{}, _ ...rpc.Option) error {
 	mc.require.Equal(mc.expectedMethod, method)
 	return mc.onSendRequestF(reply)
 }
@@ -33,7 +34,7 @@ func TestIndexClient(t *testing.T) {
 		// Test GetIndex
 		client.requester = &mockClient{
 			require:        require,
-			expectedMethod: "getIndex",
+			expectedMethod: "index.getIndex",
 			onSendRequestF: func(reply interface{}) error {
 				*(reply.(*GetIndexResponse)) = GetIndexResponse{Index: 5}
 				return nil
@@ -51,19 +52,21 @@ func TestIndexClient(t *testing.T) {
 		require.NoError(err)
 		client.requester = &mockClient{
 			require:        require,
-			expectedMethod: "getLastAccepted",
+			expectedMethod: "index.getLastAccepted",
 			onSendRequestF: func(reply interface{}) error {
 				*(reply.(*FormattedContainer)) = FormattedContainer{
 					ID:    id,
 					Bytes: bytesStr,
+					Index: json.Uint64(10),
 				}
 				return nil
 			},
 		}
-		container, err := client.GetLastAccepted(context.Background())
+		container, index, err := client.GetLastAccepted(context.Background())
 		require.NoError(err)
 		require.EqualValues(id, container.ID)
 		require.EqualValues(bytes, container.Bytes)
+		require.EqualValues(index, 10)
 	}
 	{
 		// Test GetContainerRange
@@ -73,7 +76,7 @@ func TestIndexClient(t *testing.T) {
 		require.NoError(err)
 		client.requester = &mockClient{
 			require:        require,
-			expectedMethod: "getContainerRange",
+			expectedMethod: "index.getContainerRange",
 			onSendRequestF: func(reply interface{}) error {
 				*(reply.(*GetContainerRangeResponse)) = GetContainerRangeResponse{Containers: []FormattedContainer{{
 					ID:    id,
@@ -92,7 +95,7 @@ func TestIndexClient(t *testing.T) {
 		// Test IsAccepted
 		client.requester = &mockClient{
 			require:        require,
-			expectedMethod: "isAccepted",
+			expectedMethod: "index.isAccepted",
 			onSendRequestF: func(reply interface{}) error {
 				*(reply.(*IsAcceptedResponse)) = IsAcceptedResponse{IsAccepted: true}
 				return nil
@@ -110,18 +113,20 @@ func TestIndexClient(t *testing.T) {
 		require.NoError(err)
 		client.requester = &mockClient{
 			require:        require,
-			expectedMethod: "getContainerByID",
+			expectedMethod: "index.getContainerByID",
 			onSendRequestF: func(reply interface{}) error {
 				*(reply.(*FormattedContainer)) = FormattedContainer{
 					ID:    id,
 					Bytes: bytesStr,
+					Index: json.Uint64(10),
 				}
 				return nil
 			},
 		}
-		container, err := client.GetContainerByID(context.Background(), id)
+		container, index, err := client.GetContainerByID(context.Background(), id)
 		require.NoError(err)
 		require.EqualValues(id, container.ID)
 		require.EqualValues(bytes, container.Bytes)
+		require.EqualValues(index, 10)
 	}
 }

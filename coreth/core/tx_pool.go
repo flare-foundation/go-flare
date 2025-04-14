@@ -41,6 +41,7 @@ import (
 	"github.com/ava-labs/coreth/core/types"
 	"github.com/ava-labs/coreth/metrics"
 	"github.com/ava-labs/coreth/params"
+	"github.com/ava-labs/coreth/vmerrs"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/prque"
 	"github.com/ethereum/go-ethereum/event"
@@ -63,7 +64,7 @@ const (
 	// to validate whether they fit into the pool or not.
 	//
 	// Note: the max contract size is 24KB
-	txMaxSize = 32 * 1024 // 32 KB
+	txMaxSize = 4 * txSlotSize // 128KB
 )
 
 var (
@@ -150,7 +151,6 @@ const (
 	TxStatusUnknown TxStatus = iota
 	TxStatusQueued
 	TxStatusPending
-	TxStatusIncluded
 )
 
 // blockChain provides the state of blockchain and current gas limit to do
@@ -261,6 +261,7 @@ type TxPool struct {
 	istanbul bool // Fork indicator whether we are in the istanbul stage.
 	eip2718  bool // Fork indicator whether we are using EIP-2718 type transactions.
 	eip1559  bool // Fork indicator whether we are using EIP-1559 type transactions.
+	eip3860  bool // Fork indicator whether EIP-3860 is activated. (activated in Shanghai Upgrade in Ethereum)
 
 	currentHead *types.Header
 	// [currentState] is the state of the blockchain head. It is reset whenever
@@ -676,6 +677,10 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	if txSize := uint64(tx.Size()); txSize > txMaxSize {
 		return fmt.Errorf("%w tx size %d > max size %d", ErrOversizedData, txSize, txMaxSize)
 	}
+	// Check whether the init code size has been exceeded.
+	if pool.eip3860 && tx.To() == nil && len(tx.Data()) > params.MaxInitCodeSize {
+		return fmt.Errorf("%w: code size %v limit %v", vmerrs.ErrMaxInitCodeSizeExceeded, len(tx.Data()), params.MaxInitCodeSize)
+	}
 	// Transactions can't be negative. This may never happen using RLP decoded
 	// transactions but may occur if you create a transaction using the RPC.
 	if tx.Value().Sign() < 0 {
@@ -723,7 +728,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	}
 
 	// Ensure the transaction has more gas than the basic tx fee.
-	intrGas, err := IntrinsicGas(tx.Data(), tx.AccessList(), tx.To() == nil, true, pool.istanbul)
+	intrGas, err := IntrinsicGas(tx.Data(), tx.AccessList(), tx.To() == nil, true, pool.istanbul, pool.eip3860)
 	if err != nil {
 		return err
 	}
@@ -1417,6 +1422,7 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	timestamp := new(big.Int).SetUint64(newHead.Time)
 	pool.eip2718 = pool.chainconfig.IsApricotPhase2(timestamp)
 	pool.eip1559 = pool.chainconfig.IsApricotPhase3(timestamp)
+	pool.eip3860 = pool.chainconfig.IsDUpgrade(timestamp)
 }
 
 // promoteExecutables moves transactions that have become processable from the

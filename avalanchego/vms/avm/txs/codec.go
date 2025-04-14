@@ -1,10 +1,11 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package txs
 
 import (
 	"reflect"
+	"time"
 
 	"github.com/ava-labs/avalanchego/codec"
 	"github.com/ava-labs/avalanchego/utils/logging"
@@ -14,8 +15,8 @@ import (
 )
 
 var (
-	_ codec.Registry = &codecRegistry{}
-	_ secp256k1fx.VM = &fxVM{}
+	_ codec.Registry = (*codecRegistry)(nil)
+	_ secp256k1fx.VM = (*fxVM)(nil)
 )
 
 type codecRegistry struct {
@@ -41,9 +42,22 @@ type fxVM struct {
 	clock         *mockable.Clock
 	log           logging.Logger
 	codecRegistry codec.Registry
+
+	cortinaTime time.Time
 }
 
-func (vm *fxVM) Clock() *mockable.Clock        { return vm.clock }
-func (vm *fxVM) CodecRegistry() codec.Registry { return vm.codecRegistry }
-func (vm *fxVM) Logger() logging.Logger        { return vm.log }
-func (vm *fxVM) EthVerificationEnabled() bool  { return false }
+func (vm *fxVM) Clock() *mockable.Clock {
+	return vm.clock
+}
+
+func (vm *fxVM) CodecRegistry() codec.Registry {
+	return vm.codecRegistry
+}
+
+func (vm *fxVM) Logger() logging.Logger {
+	return vm.log
+}
+
+func (vm *fxVM) EthVerificationEnabled() bool {
+	return !vm.clock.Time().Before(vm.cortinaTime)
+}

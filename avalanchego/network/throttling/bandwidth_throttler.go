@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package throttling
@@ -20,7 +20,7 @@ import (
 	"github.com/ava-labs/avalanchego/utils/wrappers"
 )
 
-var _ bandwidthThrottler = &bandwidthThrottlerImpl{}
+var _ bandwidthThrottler = (*bandwidthThrottlerImpl)(nil)
 
 // Returns a bandwidth throttler that uses a token bucket
 // model, where each token is 1 byte, to rate-limit bandwidth usage.

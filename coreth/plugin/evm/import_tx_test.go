@@ -12,8 +12,10 @@ import (
 
 	"github.com/ava-labs/avalanchego/chains/atomic"
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/constants"
-	"github.com/ava-labs/avalanchego/utils/crypto"
+	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 )
@@ -51,7 +53,7 @@ func createImportTxOptions(t *testing.T, vm *VM, sharedMemory *atomic.Memory) []
 
 	importTxs := make([]*Tx, 0, 3)
 	for _, ethAddr := range testEthAddrs {
-		importTx, err := vm.newImportTx(vm.ctx.XChainID, ethAddr, initialBaseFee, []*crypto.PrivateKeySECP256K1R{testKeys[0]})
+		importTx, err := vm.newImportTx(vm.ctx.XChainID, ethAddr, initialBaseFee, []*secp256k1.PrivateKey{testKeys[0]})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -112,8 +114,8 @@ func TestImportTxVerify(t *testing.T) {
 		},
 	}
 
-	// // Sort the inputs and outputs to ensure the transaction is canonical
-	avax.SortTransferableInputs(importTx.ImportedInputs)
+	// Sort the inputs and outputs to ensure the transaction is canonical
+	utils.Sort(importTx.ImportedInputs)
 	SortEVMOutputs(importTx.Outs)
 
 	tests := map[string]atomicTxVerifyTest{
@@ -430,7 +432,7 @@ func TestNewImportTx(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		tx, err := vm.newImportTx(vm.ctx.XChainID, testEthAddrs[0], initialBaseFee, []*crypto.PrivateKeySECP256K1R{testKeys[0]})
+		tx, err := vm.newImportTx(vm.ctx.XChainID, testEthAddrs[0], initialBaseFee, []*secp256k1.PrivateKey{testKeys[0]})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -476,7 +478,7 @@ func TestNewImportTx(t *testing.T) {
 		}
 
 		// Ensure that the UTXO has been removed from shared memory within Accept
-		addrSet := ids.ShortSet{}
+		addrSet := set.Set[ids.ShortID]{}
 		addrSet.Add(testShortIDAddrs[0])
 		utxos, _, _, err := vm.GetAtomicUTXOs(vm.ctx.XChainID, addrSet, ids.ShortEmpty, ids.Empty, -1)
 		if err != nil {
@@ -540,7 +542,7 @@ func TestImportTxGasCost(t *testing.T) {
 
 	tests := map[string]struct {
 		UnsignedImportTx *UnsignedImportTx
-		Keys             [][]*crypto.PrivateKeySECP256K1R
+		Keys             [][]*secp256k1.PrivateKey
 
 		ExpectedGasUsed uint64
 		ExpectedFee     uint64
@@ -566,7 +568,7 @@ func TestImportTxGasCost(t *testing.T) {
 					AssetID: avaxAssetID,
 				}},
 			},
-			Keys:            [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}},
+			Keys:            [][]*secp256k1.PrivateKey{{testKeys[0]}},
 			ExpectedGasUsed: 1230,
 			ExpectedFee:     30750,
 			BaseFee:         big.NewInt(25 * params.GWei),
@@ -590,7 +592,7 @@ func TestImportTxGasCost(t *testing.T) {
 					AssetID: avaxAssetID,
 				}},
 			},
-			Keys:            [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}},
+			Keys:            [][]*secp256k1.PrivateKey{{testKeys[0]}},
 			ExpectedGasUsed: 1230,
 			ExpectedFee:     1,
 			BaseFee:         big.NewInt(1),
@@ -614,7 +616,7 @@ func TestImportTxGasCost(t *testing.T) {
 					AssetID: avaxAssetID,
 				}},
 			},
-			Keys:            [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}},
+			Keys:            [][]*secp256k1.PrivateKey{{testKeys[0]}},
 			ExpectedGasUsed: 11230,
 			ExpectedFee:     1,
 			BaseFee:         big.NewInt(1),
@@ -651,7 +653,7 @@ func TestImportTxGasCost(t *testing.T) {
 					},
 				},
 			},
-			Keys:            [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}, {testKeys[0]}},
+			Keys:            [][]*secp256k1.PrivateKey{{testKeys[0]}, {testKeys[0]}},
 			ExpectedGasUsed: 2318,
 			ExpectedFee:     57950,
 			BaseFee:         big.NewInt(25 * params.GWei),
@@ -692,7 +694,7 @@ func TestImportTxGasCost(t *testing.T) {
 					},
 				},
 			},
-			Keys:            [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}, {testKeys[0]}},
+			Keys:            [][]*secp256k1.PrivateKey{{testKeys[0]}, {testKeys[0]}},
 			ExpectedGasUsed: 2378,
 			ExpectedFee:     59450,
 			BaseFee:         big.NewInt(25 * params.GWei),
@@ -716,7 +718,7 @@ func TestImportTxGasCost(t *testing.T) {
 					AssetID: avaxAssetID,
 				}},
 			},
-			Keys:            [][]*crypto.PrivateKeySECP256K1R{{testKeys[0], testKeys[1]}},
+			Keys:            [][]*secp256k1.PrivateKey{{testKeys[0], testKeys[1]}},
 			ExpectedGasUsed: 2234,
 			ExpectedFee:     55850,
 			BaseFee:         big.NewInt(25 * params.GWei),
@@ -816,7 +818,7 @@ func TestImportTxGasCost(t *testing.T) {
 					},
 				},
 			},
-			Keys: [][]*crypto.PrivateKeySECP256K1R{
+			Keys: [][]*secp256k1.PrivateKey{
 				{testKeys[0]},
 				{testKeys[0]},
 				{testKeys[0]},
@@ -886,7 +888,7 @@ func TestImportTxSemanticVerify(t *testing.T) {
 						AssetID: vm.ctx.AVAXAssetID,
 					}},
 				}}
-				if err := tx.Sign(vm.codec, [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}}); err != nil {
+				if err := tx.Sign(vm.codec, [][]*secp256k1.PrivateKey{{testKeys[0]}}); err != nil {
 					t.Fatal(err)
 				}
 				return tx
@@ -915,7 +917,7 @@ func TestImportTxSemanticVerify(t *testing.T) {
 						AssetID: vm.ctx.AVAXAssetID,
 					}},
 				}}
-				if err := tx.Sign(vm.codec, [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}}); err != nil {
+				if err := tx.Sign(vm.codec, [][]*secp256k1.PrivateKey{{testKeys[0]}}); err != nil {
 					t.Fatal(err)
 				}
 				return tx
@@ -955,7 +957,7 @@ func TestImportTxSemanticVerify(t *testing.T) {
 						AssetID: vm.ctx.AVAXAssetID,
 					}},
 				}}
-				if err := tx.Sign(vm.codec, [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}}); err != nil {
+				if err := tx.Sign(vm.codec, [][]*secp256k1.PrivateKey{{testKeys[0]}}); err != nil {
 					t.Fatal(err)
 				}
 				return tx
@@ -989,7 +991,7 @@ func TestImportTxSemanticVerify(t *testing.T) {
 						AssetID: vm.ctx.AVAXAssetID,
 					}},
 				}}
-				if err := tx.Sign(vm.codec, [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}}); err != nil {
+				if err := tx.Sign(vm.codec, [][]*secp256k1.PrivateKey{{testKeys[0]}}); err != nil {
 					t.Fatal(err)
 				}
 				return tx
@@ -1022,7 +1024,7 @@ func TestImportTxSemanticVerify(t *testing.T) {
 						AssetID: vm.ctx.AVAXAssetID,
 					}},
 				}}
-				if err := tx.Sign(vm.codec, [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}}); err != nil {
+				if err := tx.Sign(vm.codec, [][]*secp256k1.PrivateKey{{testKeys[0]}}); err != nil {
 					t.Fatal(err)
 				}
 				return tx
@@ -1056,7 +1058,7 @@ func TestImportTxSemanticVerify(t *testing.T) {
 						AssetID: assetID,
 					}},
 				}}
-				if err := tx.Sign(vm.codec, [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}}); err != nil {
+				if err := tx.Sign(vm.codec, [][]*secp256k1.PrivateKey{{testKeys[0]}}); err != nil {
 					t.Fatal(err)
 				}
 				return tx
@@ -1123,7 +1125,7 @@ func TestImportTxSemanticVerify(t *testing.T) {
 					}},
 				}}
 				// Sign the transaction with the incorrect key
-				if err := tx.Sign(vm.codec, [][]*crypto.PrivateKeySECP256K1R{{testKeys[1]}}); err != nil {
+				if err := tx.Sign(vm.codec, [][]*secp256k1.PrivateKey{{testKeys[1]}}); err != nil {
 					t.Fatal(err)
 				}
 				return tx
@@ -1163,7 +1165,7 @@ func TestImportTxSemanticVerify(t *testing.T) {
 						},
 					},
 				}}
-				if err := tx.Sign(vm.codec, [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}}); err != nil {
+				if err := tx.Sign(vm.codec, [][]*secp256k1.PrivateKey{{testKeys[0]}}); err != nil {
 					t.Fatal(err)
 				}
 				return tx
@@ -1209,7 +1211,7 @@ func TestImportTxEVMStateTransfer(t *testing.T) {
 						AssetID: vm.ctx.AVAXAssetID,
 					}},
 				}}
-				if err := tx.Sign(vm.codec, [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}}); err != nil {
+				if err := tx.Sign(vm.codec, [][]*secp256k1.PrivateKey{{testKeys[0]}}); err != nil {
 					t.Fatal(err)
 				}
 				return tx
@@ -1254,7 +1256,7 @@ func TestImportTxEVMStateTransfer(t *testing.T) {
 						AssetID: assetID,
 					}},
 				}}
-				if err := tx.Sign(vm.codec, [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}}); err != nil {
+				if err := tx.Sign(vm.codec, [][]*secp256k1.PrivateKey{{testKeys[0]}}); err != nil {
 					t.Fatal(err)
 				}
 				return tx

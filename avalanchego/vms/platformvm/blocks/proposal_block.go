@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package blocks
@@ -13,8 +13,8 @@ import (
 )
 
 var (
-	_ BanffBlock = &BanffProposalBlock{}
-	_ Block      = &ApricotProposalBlock{}
+	_ BanffBlock = (*BanffProposalBlock)(nil)
+	_ Block      = (*ApricotProposalBlock)(nil)
 )
 
 type BanffProposalBlock struct {
@@ -35,8 +35,13 @@ func (b *BanffProposalBlock) InitCtx(ctx *snow.Context) {
 	b.ApricotProposalBlock.InitCtx(ctx)
 }
 
-func (b *BanffProposalBlock) Timestamp() time.Time  { return time.Unix(int64(b.Time), 0) }
-func (b *BanffProposalBlock) Visit(v Visitor) error { return v.BanffProposalBlock(b) }
+func (b *BanffProposalBlock) Timestamp() time.Time {
+	return time.Unix(int64(b.Time), 0)
+}
+
+func (b *BanffProposalBlock) Visit(v Visitor) error {
+	return v.BanffProposalBlock(b)
+}
 
 func NewBanffProposalBlock(
 	timestamp time.Time,
@@ -64,7 +69,7 @@ type ApricotProposalBlock struct {
 
 func (b *ApricotProposalBlock) initialize(bytes []byte) error {
 	b.CommonBlock.initialize(bytes)
-	if err := b.Tx.Sign(txs.Codec, nil); err != nil {
+	if err := b.Tx.Initialize(txs.Codec); err != nil {
 		return fmt.Errorf("failed to initialize tx: %w", err)
 	}
 	return nil
@@ -74,9 +79,17 @@ func (b *ApricotProposalBlock) InitCtx(ctx *snow.Context) {
 	b.Tx.Unsigned.InitCtx(ctx)
 }
 
-func (b *ApricotProposalBlock) Txs() []*txs.Tx        { return []*txs.Tx{b.Tx} }
-func (b *ApricotProposalBlock) Visit(v Visitor) error { return v.ApricotProposalBlock(b) }
+func (b *ApricotProposalBlock) Txs() []*txs.Tx {
+	return []*txs.Tx{b.Tx}
+}
 
+func (b *ApricotProposalBlock) Visit(v Visitor) error {
+	return v.ApricotProposalBlock(b)
+}
+
+// NewApricotProposalBlock is kept for testing purposes only.
+// Following Banff activation and subsequent code cleanup, Apricot Proposal blocks
+// should be only verified (upon bootstrap), never created anymore
 func NewApricotProposalBlock(
 	parentID ids.ID,
 	height uint64,

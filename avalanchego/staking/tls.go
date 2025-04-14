@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package staking
@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/ava-labs/avalanchego/utils/perms"
+	"github.com/ava-labs/avalanchego/utils/set"
 )
 
 var errDuplicateExtension = errors.New("duplicate certificate extension")
@@ -153,13 +154,13 @@ func NewCertAndKeyBytes() ([]byte, []byte, error) {
 }
 
 func VerifyCertificate(cert *x509.Certificate) error {
-	extensionSet := make(map[string]struct{}, len(cert.Extensions))
+	extensionSet := set.NewSet[string](len(cert.Extensions))
 	for _, extension := range cert.Extensions {
 		idStr := extension.Id.String()
-		if _, ok := extensionSet[idStr]; ok {
+		if extensionSet.Contains(idStr) {
 			return errDuplicateExtension
 		}
-		extensionSet[idStr] = struct{}{}
+		extensionSet.Add(idStr)
 	}
 	return nil
 }

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package block
@@ -29,7 +29,7 @@ func TestBuild(t *testing.T) {
 	cert := tlsCert.Leaf
 	key := tlsCert.PrivateKey.(crypto.Signer)
 
-	builtBlock, err := BuildApricot(
+	builtBlock, err := Build(
 		parentID,
 		timestamp,
 		pChainHeight,
@@ -60,7 +60,7 @@ func TestBuildUnsigned(t *testing.T) {
 
 	require := require.New(t)
 
-	builtBlock, err := BuildUnsignedApricot(parentID, timestamp, pChainHeight, innerBlockBytes)
+	builtBlock, err := BuildUnsigned(parentID, timestamp, pChainHeight, innerBlockBytes)
 	require.NoError(err)
 
 	require.Equal(parentID, builtBlock.ParentID())

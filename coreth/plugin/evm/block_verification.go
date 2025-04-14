@@ -98,31 +98,39 @@ func (v blockValidator) SyntacticVerify(b *Block, rules params.Rules) error {
 	}
 
 	// Enforce static gas limit after ApricotPhase1 (prior to ApricotPhase1 it's handled in processing).
-
-	if rules.IsSongbirdCode {
-		if rules.IsSongbirdTransition {
-			if ethHeader.GasLimit != params.SgbTransitionGasLimit {
-				return fmt.Errorf(
-					"expected gas limit to be %d in sgb transition but got %d",
-					params.SgbTransitionGasLimit, ethHeader.GasLimit,
-				)
-			}
-		} else if rules.IsApricotPhase5 {
-			if ethHeader.GasLimit != params.SgbApricotPhase5GasLimit {
-				return fmt.Errorf(
-					"expected gas limit to be %d in apricot phase 5 but got %d",
-					params.SgbApricotPhase5GasLimit, ethHeader.GasLimit,
-				)
-
-			}
+	if rules.IsCortina {
+		if ethHeader.GasLimit != params.CortinaGasLimit {
+			return fmt.Errorf(
+				"expected gas limit to be %d after cortina but got %d",
+				params.CortinaGasLimit, ethHeader.GasLimit,
+			)
 		}
 	} else {
-		if rules.IsApricotPhase1 {
-			if ethHeader.GasLimit != params.ApricotPhase1GasLimit {
-				return fmt.Errorf(
-					"expected gas limit to be %d after apricot phase 1 but got %d",
-					params.ApricotPhase1GasLimit, ethHeader.GasLimit,
-				)
+		if rules.IsSongbirdCode {
+			if rules.IsSongbirdTransition {
+				if ethHeader.GasLimit != params.SgbTransitionGasLimit {
+					return fmt.Errorf(
+						"expected gas limit to be %d in sgb transition but got %d",
+						params.SgbTransitionGasLimit, ethHeader.GasLimit,
+					)
+				}
+			} else if rules.IsApricotPhase5 {
+				if ethHeader.GasLimit != params.SgbApricotPhase5GasLimit {
+					return fmt.Errorf(
+						"expected gas limit to be %d in apricot phase 5 but got %d",
+						params.SgbApricotPhase5GasLimit, ethHeader.GasLimit,
+					)
+
+				}
+			}
+		} else {
+			if rules.IsApricotPhase1 {
+				if ethHeader.GasLimit != params.ApricotPhase1GasLimit {
+					return fmt.Errorf(
+						"expected gas limit to be %d after apricot phase 1 but got %d",
+						params.ApricotPhase1GasLimit, ethHeader.GasLimit,
+					)
+				}
 			}
 		}
 	}
@@ -261,16 +269,5 @@ func (v blockValidator) SyntacticVerify(b *Block, rules params.Rules) error {
 		}
 	}
 
-	if rules.IsCortina {
-		// In Cortina, ExtraStateRoot must not be empty (should contain the root of the atomic trie).
-		if ethHeader.ExtraStateRoot == (common.Hash{}) {
-			return fmt.Errorf("%w: ExtraStateRoot must not be empty", errInvalidExtraStateRoot)
-		}
-	} else {
-		// Before Cortina, ExtraStateRoot must be empty.
-		if ethHeader.ExtraStateRoot != (common.Hash{}) {
-			return fmt.Errorf("%w: ExtraStateRoot must be empty", errInvalidExtraStateRoot)
-		}
-	}
 	return nil
 }

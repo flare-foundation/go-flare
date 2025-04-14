@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package node
@@ -7,23 +7,24 @@ import (
 	"crypto/tls"
 	"time"
 
+	"github.com/ava-labs/avalanchego/api/server"
 	"github.com/ava-labs/avalanchego/chains"
 	"github.com/ava-labs/avalanchego/genesis"
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/nat"
 	"github.com/ava-labs/avalanchego/network"
-	"github.com/ava-labs/avalanchego/snow/consensus/avalanche"
 	"github.com/ava-labs/avalanchego/snow/networking/benchlist"
 	"github.com/ava-labs/avalanchego/snow/networking/router"
-	"github.com/ava-labs/avalanchego/snow/networking/sender"
 	"github.com/ava-labs/avalanchego/snow/networking/tracker"
+	"github.com/ava-labs/avalanchego/subnets"
+	"github.com/ava-labs/avalanchego/trace"
 	"github.com/ava-labs/avalanchego/utils/crypto/bls"
 	"github.com/ava-labs/avalanchego/utils/dynamicip"
 	"github.com/ava-labs/avalanchego/utils/ips"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/profiler"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/utils/timer"
-	"github.com/ava-labs/avalanchego/vms"
 )
 
 type IPCConfig struct {
@@ -43,6 +44,7 @@ type APIIndexerConfig struct {
 }
 
 type HTTPConfig struct {
+	server.HTTPConfig
 	APIConfig `json:"apiConfig"`
 	HTTPHost  string `json:"httpHost"`
 	HTTPPort  uint16 `json:"httpPort"`
@@ -155,27 +157,18 @@ type Config struct {
 	// Network configuration
 	NetworkConfig network.Config `json:"networkConfig"`
 
-	GossipConfig sender.GossipConfig `json:"gossipConfig"`
-
 	AdaptiveTimeoutConfig timer.AdaptiveTimeoutConfig `json:"adaptiveTimeoutConfig"`
 
-	// Benchlist Configuration
 	BenchlistConfig benchlist.Config `json:"benchlistConfig"`
 
-	// Profiling configurations
 	ProfilerConfig profiler.Config `json:"profilerConfig"`
 
-	// Logging configuration
 	LoggingConfig logging.Config `json:"loggingConfig"`
 
-	// Plugin directory
 	PluginDir string `json:"pluginDir"`
 
 	// File Descriptor Limit
 	FdLimit uint64 `json:"fdLimit"`
-
-	// Consensus configuration
-	ConsensusParams avalanche.Parameters `json:"consensusParams"`
 
 	// Metrics
 	MeterVMEnabled bool `json:"meterVMEnabled"`
@@ -186,18 +179,18 @@ type Config struct {
 	ConsensusShutdownTimeout time.Duration       `json:"consensusShutdownTimeout"`
 	// Gossip a container in the accepted frontier every [ConsensusGossipFrequency]
 	ConsensusGossipFrequency time.Duration `json:"consensusGossipFreq"`
+	// ConsensusAppConcurrency defines the maximum number of goroutines to
+	// handle App messages per chain.
+	ConsensusAppConcurrency int `json:"consensusAppConcurrency"`
 
-	// Subnet Whitelist
-	WhitelistedSubnets ids.Set `json:"whitelistedSubnets"`
+	TrackedSubnets set.Set[ids.ID] `json:"trackedSubnets"`
 
-	// SubnetConfigs
-	SubnetConfigs map[ids.ID]chains.SubnetConfig `json:"subnetConfigs"`
+	SubnetConfigs map[ids.ID]subnets.Config `json:"subnetConfigs"`
 
-	// ChainConfigs
 	ChainConfigs map[string]chains.ChainConfig `json:"-"`
+	ChainAliases map[ids.ID][]string           `json:"chainAliases"`
 
-	// VM management
-	VMManager vms.Manager `json:"-"`
+	VMAliaser ids.Aliaser `json:"-"`
 
 	// Halflife to use for the processing requests tracker.
 	// Larger halflife --> usage metrics change more slowly.
@@ -222,4 +215,20 @@ type Config struct {
 
 	RequiredAvailableDiskSpace         uint64 `json:"requiredAvailableDiskSpace"`
 	WarningThresholdAvailableDiskSpace uint64 `json:"warningThresholdAvailableDiskSpace"`
+
+	TraceConfig trace.Config `json:"traceConfig"`
+
+	// See comment on [MinPercentConnectedStakeHealthy] in platformvm.Config
+	// TODO: consider moving to subnet config
+	MinPercentConnectedStakeHealthy map[ids.ID]float64 `json:"minPercentConnectedStakeHealthy"`
+
+	// See comment on [UseCurrentHeight] in platformvm.Config
+	UseCurrentHeight bool `json:"useCurrentHeight"`
+
+	// ProvidedFlags contains all the flags set by the user
+	ProvidedFlags map[string]interface{} `json:"-"`
+
+	// ChainDataDir is the root path for per-chain directories where VMs can
+	// write arbitrary data.
+	ChainDataDir string `json:"chainDataDir"`
 }

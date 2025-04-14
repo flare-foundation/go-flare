@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package txs
@@ -9,6 +9,7 @@ import (
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow"
+	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/units"
 	"github.com/ava-labs/avalanchego/vms/components/verify"
@@ -20,7 +21,7 @@ const (
 )
 
 var (
-	_ UnsignedTx = &CreateChainTx{}
+	_ UnsignedTx = (*CreateChainTx)(nil)
 
 	ErrCantValidatePrimaryNetwork = errors.New("new blockchain can't be validated by primary network")
 
@@ -61,7 +62,7 @@ func (tx *CreateChainTx) SyntacticVerify(ctx *snow.Context) error {
 		return errNameTooLong
 	case tx.VMID == ids.Empty:
 		return errInvalidVMID
-	case !ids.IsSortedAndUniqueIDs(tx.FxIDs):
+	case !utils.IsSortedAndUniqueSortable(tx.FxIDs):
 		return errFxIDsNotSortedAndUnique
 	case len(tx.GenesisData) > MaxGenesisLen:
 		return errGenesisTooLong

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inte. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inte. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package linkedhashmap
@@ -9,7 +9,7 @@ import (
 	"github.com/ava-labs/avalanchego/utils"
 )
 
-var _ Iter[int, struct{}] = &iterator[int, struct{}]{}
+var _ Iter[int, struct{}] = (*iterator[int, struct{}])(nil)
 
 // Iterates over the keys and values in a LinkedHashmap
 // from oldest to newest elements.
@@ -66,5 +66,10 @@ func (it *iterator[K, V]) Next() bool {
 	return true
 }
 
-func (it *iterator[K, V]) Key() K   { return it.key }
-func (it *iterator[K, V]) Value() V { return it.value }
+func (it *iterator[K, V]) Key() K {
+	return it.key
+}
+
+func (it *iterator[K, V]) Value() V {
+	return it.value
+}

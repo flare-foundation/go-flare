@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package config
@@ -8,10 +8,10 @@ import (
 
 	"github.com/ava-labs/avalanchego/chains"
 	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/snow/engine/common"
 	"github.com/ava-labs/avalanchego/snow/uptime"
 	"github.com/ava-labs/avalanchego/snow/validators"
 	"github.com/ava-labs/avalanchego/utils/constants"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/vms/platformvm/reward"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
 )
@@ -22,10 +22,12 @@ type Config struct {
 	Chains chains.Manager
 
 	// Node's validator set maps subnetID -> validators of the subnet
+	//
+	// Invariant: The primary network's validator set should have been added to
+	//            the manager before calling VM.Initialize.
+	// Invariant: The primary network's validator set should be empty before
+	//            calling VM.Initialize.
 	Validators validators.Manager
-
-	// Provides access to subnet tracking
-	SubnetTracker common.SubnetTracker
 
 	// Provides access to the uptime manager as a thread safe data structure
 	UptimeLockedCalculator uptime.LockedCalculator
@@ -34,7 +36,7 @@ type Config struct {
 	StakingEnabled bool
 
 	// Set of subnets that this node is validating
-	WhitelistedSubnets ids.Set
+	TrackedSubnets set.Set[ids.ID]
 
 	// Fee that is burned by every non-state creating transaction
 	TxFee uint64
@@ -95,6 +97,27 @@ type Config struct {
 
 	// Time of the Banff network upgrade
 	BanffTime time.Time
+
+	// Time of the Cortina network upgrade
+	CortinaTime time.Time
+
+	// Subnet ID --> Minimum portion of the subnet's stake this node must be
+	// connected to in order to report healthy.
+	// [constants.PrimaryNetworkID] is always a key in this map.
+	// If a subnet is in this map, but it isn't tracked, its corresponding value
+	// isn't used.
+	// If a subnet is tracked but not in this map, we use the value for the
+	// Primary Network.
+	MinPercentConnectedStakeHealthy map[ids.ID]float64
+
+	// UseCurrentHeight forces [GetMinimumHeight] to return the current height
+	// of the P-Chain instead of the oldest block in the [recentlyAccepted]
+	// window.
+	//
+	// This config is particularly useful for triggering proposervm activation
+	// on recently created subnets (without this, users need to wait for
+	// [recentlyAcceptedWindowTTL] to pass for activation to occur).
+	UseCurrentHeight bool
 }
 
 func (c *Config) IsApricotPhase3Activated(timestamp time.Time) bool {
@@ -128,15 +151,17 @@ func (c *Config) GetCreateSubnetTxFee(timestamp time.Time) uint64 {
 func (c *Config) CreateChain(chainID ids.ID, tx *txs.CreateChainTx) {
 	if c.StakingEnabled && // Staking is enabled, so nodes might not validate all chains
 		constants.PrimaryNetworkID != tx.SubnetID && // All nodes must validate the primary network
-		!c.WhitelistedSubnets.Contains(tx.SubnetID) { // This node doesn't validate this blockchain
+		!c.TrackedSubnets.Contains(tx.SubnetID) { // This node doesn't validate this blockchain
 		return
 	}
 
-	c.Chains.CreateChain(chains.ChainParameters{
+	chainParams := chains.ChainParameters{
 		ID:          chainID,
 		SubnetID:    tx.SubnetID,
 		GenesisData: tx.GenesisData,
 		VMID:        tx.VMID,
 		FxIDs:       tx.FxIDs,
-	})
+	}
+
+	c.Chains.QueueChainCreation(chainParams)
 }

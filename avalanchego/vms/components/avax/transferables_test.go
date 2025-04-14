@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package avax
@@ -10,6 +10,7 @@ import (
 	"github.com/ava-labs/avalanchego/codec"
 	"github.com/ava-labs/avalanchego/codec/linearcodec"
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 )
 
@@ -244,11 +245,11 @@ func TestTransferableInputSorting(t *testing.T) {
 		},
 	}
 
-	if IsSortedAndUniqueTransferableInputs(ins) {
+	if utils.IsSortedAndUniqueSortable(ins) {
 		t.Fatalf("Shouldn't be sorted")
 	}
-	SortTransferableInputs(ins)
-	if !IsSortedAndUniqueTransferableInputs(ins) {
+	utils.Sort(ins)
+	if !utils.IsSortedAndUniqueSortable(ins) {
 		t.Fatalf("Should be sorted")
 	}
 
@@ -261,7 +262,7 @@ func TestTransferableInputSorting(t *testing.T) {
 		In:    &TestTransferable{},
 	})
 
-	if IsSortedAndUniqueTransferableInputs(ins) {
+	if utils.IsSortedAndUniqueSortable(ins) {
 		t.Fatalf("Shouldn't be unique")
 	}
 }

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package signer
@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	_ Signer = &ProofOfPossession{}
+	_ Signer = (*ProofOfPossession)(nil)
 
 	errInvalidProofOfPossession = errors.New("invalid proof of possession")
 )
@@ -59,7 +59,9 @@ func (p *ProofOfPossession) Verify() error {
 	return nil
 }
 
-func (p *ProofOfPossession) Key() *bls.PublicKey { return p.publicKey }
+func (p *ProofOfPossession) Key() *bls.PublicKey {
+	return p.publicKey
+}
 
 type jsonProofOfPossession struct {
 	PublicKey         string `json:"publicKey"`

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package peer
@@ -62,33 +62,27 @@ func NewMessageMetrics(
 		metrics.Register(msg.SentBytes),
 	)
 
-	if op.Compressible() {
-		msg.SavedReceivedBytes = metric.NewAveragerWithErrs(
-			namespace,
-			fmt.Sprintf("%s_compression_saved_received_bytes", op),
-			fmt.Sprintf("bytes saved (not received) due to compression of %s messages", op),
-			metrics,
-			errs,
-		)
-		msg.SavedSentBytes = metric.NewAveragerWithErrs(
-			namespace,
-			fmt.Sprintf("%s_compression_saved_sent_bytes", op),
-			fmt.Sprintf("bytes saved (not sent) due to compression of %s messages", op),
-			metrics,
-			errs,
-		)
-	} else {
-		msg.SavedReceivedBytes = metric.NewNoAverager()
-		msg.SavedSentBytes = metric.NewNoAverager()
-	}
+	msg.SavedReceivedBytes = metric.NewAveragerWithErrs(
+		namespace,
+		fmt.Sprintf("%s_compression_saved_received_bytes", op),
+		fmt.Sprintf("bytes saved (not received) due to compression of %s messages", op),
+		metrics,
+		errs,
+	)
+	msg.SavedSentBytes = metric.NewAveragerWithErrs(
+		namespace,
+		fmt.Sprintf("%s_compression_saved_sent_bytes", op),
+		fmt.Sprintf("bytes saved (not sent) due to compression of %s messages", op),
+		metrics,
+		errs,
+	)
 	return msg
 }
 
 type Metrics struct {
-	Log                     logging.Logger
-	FailedToParse           prometheus.Counter
-	NumUselessPeerListBytes prometheus.Counter
-	MessageMetrics          map[message.Op]*MessageMetrics
+	Log            logging.Logger
+	FailedToParse  prometheus.Counter
+	MessageMetrics map[message.Op]*MessageMetrics
 }
 
 func NewMetrics(
@@ -103,18 +97,12 @@ func NewMetrics(
 			Name:      "msgs_failed_to_parse",
 			Help:      "Number of messages that could not be parsed or were invalidly formed",
 		}),
-		NumUselessPeerListBytes: prometheus.NewCounter(prometheus.CounterOpts{
-			Namespace: namespace,
-			Name:      "num_useless_peerlist_bytes",
-			Help:      "Amount of useless bytes (i.e. information about nodes we already knew/don't want to connect to) received in PeerList messages",
-		}),
 		MessageMetrics: make(map[message.Op]*MessageMetrics, len(message.ExternalOps)),
 	}
 
 	errs := wrappers.Errs{}
 	errs.Add(
 		registerer.Register(m.FailedToParse),
-		registerer.Register(m.NumUselessPeerListBytes),
 	)
 	for _, op := range message.ExternalOps {
 		m.MessageMetrics[op] = NewMessageMetrics(op, namespace, registerer, &errs)
@@ -122,8 +110,7 @@ func NewMetrics(
 	return m, errs.Err
 }
 
-// Sent updates the metrics for having sent [msg] and removes a reference from
-// the [msg].
+// Sent updates the metrics for having sent [msg].
 func (m *Metrics) Sent(msg message.OutboundMessage) {
 	op := msg.Op()
 	msgMetrics := m.MessageMetrics[op]
@@ -132,7 +119,6 @@ func (m *Metrics) Sent(msg message.OutboundMessage) {
 			"unknown message being sent",
 			zap.Stringer("messageOp", op),
 		)
-		msg.DecRef()
 		return
 	}
 	msgMetrics.NumSent.Inc()
@@ -141,7 +127,6 @@ func (m *Metrics) Sent(msg message.OutboundMessage) {
 	if saved := msg.BytesSavedCompression(); saved != 0 {
 		msgMetrics.SavedSentBytes.Observe(float64(saved))
 	}
-	msg.DecRef()
 }
 
 func (m *Metrics) MultipleSendsFailed(op message.Op, count int) {
@@ -157,8 +142,7 @@ func (m *Metrics) MultipleSendsFailed(op message.Op, count int) {
 	msgMetrics.NumFailed.Add(float64(count))
 }
 
-// SendFailed updates the metrics for having failed to send [msg] and removes a
-// reference from the [msg].
+// SendFailed updates the metrics for having failed to send [msg].
 func (m *Metrics) SendFailed(msg message.OutboundMessage) {
 	op := msg.Op()
 	msgMetrics := m.MessageMetrics[op]
@@ -167,11 +151,9 @@ func (m *Metrics) SendFailed(msg message.OutboundMessage) {
 			"unknown message failed to be sent",
 			zap.Stringer("messageOp", op),
 		)
-		msg.DecRef()
 		return
 	}
 	msgMetrics.NumFailed.Inc()
-	msg.DecRef()
 }
 
 func (m *Metrics) Received(msg message.InboundMessage, msgLen uint32) {

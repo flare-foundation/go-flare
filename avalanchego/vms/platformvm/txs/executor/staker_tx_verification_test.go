@@ -1,10 +1,9 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package executor
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -24,7 +23,6 @@ import (
 	"github.com/ava-labs/avalanchego/vms/platformvm/state"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
 	"github.com/ava-labs/avalanchego/vms/platformvm/utxo"
-	"github.com/ava-labs/avalanchego/vms/platformvm/validator"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 )
 
@@ -64,7 +62,7 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 					Ins:          []*avax.TransferableInput{},
 				},
 			},
-			Validator: validator.Validator{
+			Validator: txs.Validator{
 				NodeID: ids.GenerateTestNodeID(),
 				Start:  1,
 				End:    1 + uint64(unsignedTransformTx.MinStakeDuration),
@@ -93,7 +91,7 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 			Creds:    []verify.Verifiable{},
 		}
 	)
-	verifiedSignedTx.Initialize([]byte{1}, []byte{2})
+	verifiedSignedTx.SetBytes([]byte{1}, []byte{2})
 
 	tests := []test{
 		{
@@ -106,8 +104,12 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 			stateF: func(*gomock.Controller) state.Chain {
 				return nil
 			},
-			sTxF:        func() *txs.Tx { return nil },
-			txF:         func() *txs.AddPermissionlessValidatorTx { return nil },
+			sTxF: func() *txs.Tx {
+				return nil
+			},
+			txF: func() *txs.AddPermissionlessValidatorTx {
+				return nil
+			},
 			expectedErr: txs.ErrNilSignedTx,
 		},
 		{
@@ -115,21 +117,25 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 			backendF: func(*gomock.Controller) *Backend {
 				return &Backend{
 					Ctx:          snow.DefaultContextTest(),
-					Bootstrapped: &utils.AtomicBool{},
+					Bootstrapped: &utils.Atomic[bool]{},
 				}
 			},
 			stateF: func(ctrl *gomock.Controller) state.Chain {
 				return nil
 			},
-			sTxF:        func() *txs.Tx { return &verifiedSignedTx },
-			txF:         func() *txs.AddPermissionlessValidatorTx { return nil },
+			sTxF: func() *txs.Tx {
+				return &verifiedSignedTx
+			},
+			txF: func() *txs.AddPermissionlessValidatorTx {
+				return nil
+			},
 			expectedErr: nil,
 		},
 		{
 			name: "start time too early",
 			backendF: func(*gomock.Controller) *Backend {
-				bootstrapped := &utils.AtomicBool{}
-				bootstrapped.SetValue(true)
+				bootstrapped := &utils.Atomic[bool]{}
+				bootstrapped.Set(true)
 				return &Backend{
 					Ctx:          snow.DefaultContextTest(),
 					Bootstrapped: bootstrapped,
@@ -140,15 +146,19 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 				state.EXPECT().GetTimestamp().Return(verifiedTx.StartTime())
 				return state
 			},
-			sTxF:        func() *txs.Tx { return &verifiedSignedTx },
-			txF:         func() *txs.AddPermissionlessValidatorTx { return &verifiedTx },
+			sTxF: func() *txs.Tx {
+				return &verifiedSignedTx
+			},
+			txF: func() *txs.AddPermissionlessValidatorTx {
+				return &verifiedTx
+			},
 			expectedErr: errTimestampNotBeforeStartTime,
 		},
 		{
 			name: "weight too low",
 			backendF: func(*gomock.Controller) *Backend {
-				bootstrapped := &utils.AtomicBool{}
-				bootstrapped.SetValue(true)
+				bootstrapped := &utils.Atomic[bool]{}
+				bootstrapped.Set(true)
 				return &Backend{
 					Ctx:          snow.DefaultContextTest(),
 					Bootstrapped: bootstrapped,
@@ -160,7 +170,9 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 				state.EXPECT().GetSubnetTransformation(subnetID).Return(&transformTx, nil)
 				return state
 			},
-			sTxF: func() *txs.Tx { return &verifiedSignedTx },
+			sTxF: func() *txs.Tx {
+				return &verifiedSignedTx
+			},
 			txF: func() *txs.AddPermissionlessValidatorTx {
 				tx := verifiedTx // Note that this copies [verifiedTx]
 				tx.Validator.Wght = unsignedTransformTx.MinValidatorStake - 1
@@ -171,8 +183,8 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 		{
 			name: "weight too high",
 			backendF: func(*gomock.Controller) *Backend {
-				bootstrapped := &utils.AtomicBool{}
-				bootstrapped.SetValue(true)
+				bootstrapped := &utils.Atomic[bool]{}
+				bootstrapped.Set(true)
 				return &Backend{
 					Ctx:          snow.DefaultContextTest(),
 					Bootstrapped: bootstrapped,
@@ -184,7 +196,9 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 				state.EXPECT().GetSubnetTransformation(subnetID).Return(&transformTx, nil)
 				return state
 			},
-			sTxF: func() *txs.Tx { return &verifiedSignedTx },
+			sTxF: func() *txs.Tx {
+				return &verifiedSignedTx
+			},
 			txF: func() *txs.AddPermissionlessValidatorTx {
 				tx := verifiedTx // Note that this copies [verifiedTx]
 				tx.Validator.Wght = unsignedTransformTx.MaxValidatorStake + 1
@@ -195,8 +209,8 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 		{
 			name: "insufficient delegation fee",
 			backendF: func(*gomock.Controller) *Backend {
-				bootstrapped := &utils.AtomicBool{}
-				bootstrapped.SetValue(true)
+				bootstrapped := &utils.Atomic[bool]{}
+				bootstrapped.Set(true)
 				return &Backend{
 					Ctx:          snow.DefaultContextTest(),
 					Bootstrapped: bootstrapped,
@@ -208,7 +222,9 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 				state.EXPECT().GetSubnetTransformation(subnetID).Return(&transformTx, nil)
 				return state
 			},
-			sTxF: func() *txs.Tx { return &verifiedSignedTx },
+			sTxF: func() *txs.Tx {
+				return &verifiedSignedTx
+			},
 			txF: func() *txs.AddPermissionlessValidatorTx {
 				tx := verifiedTx // Note that this copies [verifiedTx]
 				tx.Validator.Wght = unsignedTransformTx.MaxValidatorStake
@@ -220,8 +236,8 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 		{
 			name: "duration too short",
 			backendF: func(*gomock.Controller) *Backend {
-				bootstrapped := &utils.AtomicBool{}
-				bootstrapped.SetValue(true)
+				bootstrapped := &utils.Atomic[bool]{}
+				bootstrapped.Set(true)
 				return &Backend{
 					Ctx:          snow.DefaultContextTest(),
 					Bootstrapped: bootstrapped,
@@ -233,7 +249,9 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 				state.EXPECT().GetSubnetTransformation(subnetID).Return(&transformTx, nil)
 				return state
 			},
-			sTxF: func() *txs.Tx { return &verifiedSignedTx },
+			sTxF: func() *txs.Tx {
+				return &verifiedSignedTx
+			},
 			txF: func() *txs.AddPermissionlessValidatorTx {
 				tx := verifiedTx // Note that this copies [verifiedTx]
 				tx.Validator.Wght = unsignedTransformTx.MaxValidatorStake
@@ -248,8 +266,8 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 		{
 			name: "duration too long",
 			backendF: func(*gomock.Controller) *Backend {
-				bootstrapped := &utils.AtomicBool{}
-				bootstrapped.SetValue(true)
+				bootstrapped := &utils.Atomic[bool]{}
+				bootstrapped.Set(true)
 				return &Backend{
 					Ctx:          snow.DefaultContextTest(),
 					Bootstrapped: bootstrapped,
@@ -261,7 +279,9 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 				state.EXPECT().GetSubnetTransformation(subnetID).Return(&transformTx, nil)
 				return state
 			},
-			sTxF: func() *txs.Tx { return &verifiedSignedTx },
+			sTxF: func() *txs.Tx {
+				return &verifiedSignedTx
+			},
 			txF: func() *txs.AddPermissionlessValidatorTx {
 				tx := verifiedTx // Note that this copies [verifiedTx]
 				tx.Validator.Wght = unsignedTransformTx.MaxValidatorStake
@@ -276,8 +296,8 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 		{
 			name: "wrong assetID",
 			backendF: func(*gomock.Controller) *Backend {
-				bootstrapped := &utils.AtomicBool{}
-				bootstrapped.SetValue(true)
+				bootstrapped := &utils.Atomic[bool]{}
+				bootstrapped.Set(true)
 				return &Backend{
 					Ctx:          snow.DefaultContextTest(),
 					Bootstrapped: bootstrapped,
@@ -289,7 +309,9 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 				state.EXPECT().GetSubnetTransformation(subnetID).Return(&transformTx, nil)
 				return state
 			},
-			sTxF: func() *txs.Tx { return &verifiedSignedTx },
+			sTxF: func() *txs.Tx {
+				return &verifiedSignedTx
+			},
 			txF: func() *txs.AddPermissionlessValidatorTx {
 				tx := verifiedTx // Note that this copies [verifiedTx]
 				tx.StakeOuts = []*avax.TransferableOutput{
@@ -306,8 +328,8 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 		{
 			name: "duplicate validator",
 			backendF: func(*gomock.Controller) *Backend {
-				bootstrapped := &utils.AtomicBool{}
-				bootstrapped.SetValue(true)
+				bootstrapped := &utils.Atomic[bool]{}
+				bootstrapped.Set(true)
 				return &Backend{
 					Ctx:          snow.DefaultContextTest(),
 					Bootstrapped: bootstrapped,
@@ -321,7 +343,9 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 				state.EXPECT().GetCurrentValidator(subnetID, verifiedTx.NodeID()).Return(nil, nil)
 				return state
 			},
-			sTxF: func() *txs.Tx { return &verifiedSignedTx },
+			sTxF: func() *txs.Tx {
+				return &verifiedSignedTx
+			},
 			txF: func() *txs.AddPermissionlessValidatorTx {
 				return &verifiedTx
 			},
@@ -330,8 +354,8 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 		{
 			name: "validator not subset of primary network validator",
 			backendF: func(*gomock.Controller) *Backend {
-				bootstrapped := &utils.AtomicBool{}
-				bootstrapped.SetValue(true)
+				bootstrapped := &utils.Atomic[bool]{}
+				bootstrapped.Set(true)
 				return &Backend{
 					Ctx:          snow.DefaultContextTest(),
 					Bootstrapped: bootstrapped,
@@ -351,7 +375,9 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 				mockState.EXPECT().GetCurrentValidator(constants.PrimaryNetworkID, verifiedTx.NodeID()).Return(primaryNetworkVdr, nil)
 				return mockState
 			},
-			sTxF: func() *txs.Tx { return &verifiedSignedTx },
+			sTxF: func() *txs.Tx {
+				return &verifiedSignedTx
+			},
 			txF: func() *txs.AddPermissionlessValidatorTx {
 				return &verifiedTx
 			},
@@ -360,8 +386,8 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 		{
 			name: "flow check fails",
 			backendF: func(ctrl *gomock.Controller) *Backend {
-				bootstrapped := &utils.AtomicBool{}
-				bootstrapped.SetValue(true)
+				bootstrapped := &utils.Atomic[bool]{}
+				bootstrapped.Set(true)
 
 				flowChecker := utxo.NewMockVerifier(ctrl)
 				flowChecker.EXPECT().VerifySpend(
@@ -371,7 +397,7 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 					gomock.Any(),
-				).Return(errors.New("flow check failed"))
+				).Return(errFlowCheckFailed)
 
 				return &Backend{
 					FlowChecker: flowChecker,
@@ -395,7 +421,9 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 				mockState.EXPECT().GetCurrentValidator(constants.PrimaryNetworkID, verifiedTx.NodeID()).Return(primaryNetworkVdr, nil)
 				return mockState
 			},
-			sTxF: func() *txs.Tx { return &verifiedSignedTx },
+			sTxF: func() *txs.Tx {
+				return &verifiedSignedTx
+			},
 			txF: func() *txs.AddPermissionlessValidatorTx {
 				return &verifiedTx
 			},
@@ -404,8 +432,8 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 		{
 			name: "starts too far in the future",
 			backendF: func(ctrl *gomock.Controller) *Backend {
-				bootstrapped := &utils.AtomicBool{}
-				bootstrapped.SetValue(true)
+				bootstrapped := &utils.Atomic[bool]{}
+				bootstrapped.Set(true)
 
 				flowChecker := utxo.NewMockVerifier(ctrl)
 				flowChecker.EXPECT().VerifySpend(
@@ -439,7 +467,9 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 				mockState.EXPECT().GetCurrentValidator(constants.PrimaryNetworkID, verifiedTx.NodeID()).Return(primaryNetworkVdr, nil)
 				return mockState
 			},
-			sTxF: func() *txs.Tx { return &verifiedSignedTx },
+			sTxF: func() *txs.Tx {
+				return &verifiedSignedTx
+			},
 			txF: func() *txs.AddPermissionlessValidatorTx {
 				// Note this copies [verifiedTx]
 				tx := verifiedTx
@@ -452,8 +482,8 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 		{
 			name: "success",
 			backendF: func(ctrl *gomock.Controller) *Backend {
-				bootstrapped := &utils.AtomicBool{}
-				bootstrapped.SetValue(true)
+				bootstrapped := &utils.Atomic[bool]{}
+				bootstrapped.Set(true)
 
 				flowChecker := utxo.NewMockVerifier(ctrl)
 				flowChecker.EXPECT().VerifySpend(
@@ -487,7 +517,9 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 				mockState.EXPECT().GetCurrentValidator(constants.PrimaryNetworkID, verifiedTx.NodeID()).Return(primaryNetworkVdr, nil)
 				return mockState
 			},
-			sTxF: func() *txs.Tx { return &verifiedSignedTx },
+			sTxF: func() *txs.Tx {
+				return &verifiedSignedTx
+			},
 			txF: func() *txs.AddPermissionlessValidatorTx {
 				return &verifiedTx
 			},
@@ -497,7 +529,6 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			require := require.New(t)
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
@@ -509,7 +540,7 @@ func TestVerifyAddPermissionlessValidatorTx(t *testing.T) {
 			)
 
 			err := verifyAddPermissionlessValidatorTx(backend, state, sTx, tx)
-			require.ErrorIs(err, tt.expectedErr)
+			require.ErrorIs(t, err, tt.expectedErr)
 		})
 	}
 }
@@ -535,7 +566,6 @@ func TestGetValidatorRules(t *testing.T) {
 		avaxAssetID   = ids.GenerateTestID()
 		customAssetID = ids.GenerateTestID()
 		subnetID      = ids.GenerateTestID()
-		testErr       = errors.New("an error")
 	)
 
 	tests := []test{
@@ -567,11 +597,11 @@ func TestGetValidatorRules(t *testing.T) {
 			backend:  nil,
 			chainStateF: func(ctrl *gomock.Controller) state.Chain {
 				state := state.NewMockChain(ctrl)
-				state.EXPECT().GetSubnetTransformation(subnetID).Return(nil, testErr)
+				state.EXPECT().GetSubnetTransformation(subnetID).Return(nil, errTest)
 				return state
 			},
 			expectedRules: &addValidatorRules{},
-			expectedErr:   testErr,
+			expectedErr:   errTest,
 		},
 		{
 			name:     "invalid transformation tx",
@@ -628,7 +658,7 @@ func TestGetValidatorRules(t *testing.T) {
 			chainState := tt.chainStateF(ctrl)
 			rules, err := getValidatorRules(time.Time{}, tt.backend, chainState, tt.subnetID)
 			if tt.expectedErr != nil {
-				require.ErrorIs(tt.expectedErr, err)
+				require.ErrorIs(err, tt.expectedErr)
 				return
 			}
 			require.NoError(err)
@@ -656,7 +686,6 @@ func TestGetDelegatorRules(t *testing.T) {
 		avaxAssetID   = ids.GenerateTestID()
 		customAssetID = ids.GenerateTestID()
 		subnetID      = ids.GenerateTestID()
-		testErr       = errors.New("an error")
 	)
 	tests := []test{
 		{
@@ -686,11 +715,11 @@ func TestGetDelegatorRules(t *testing.T) {
 			backend:  nil,
 			chainStateF: func(ctrl *gomock.Controller) state.Chain {
 				state := state.NewMockChain(ctrl)
-				state.EXPECT().GetSubnetTransformation(subnetID).Return(nil, testErr)
+				state.EXPECT().GetSubnetTransformation(subnetID).Return(nil, errTest)
 				return state
 			},
 			expectedRules: &addDelegatorRules{},
-			expectedErr:   testErr,
+			expectedErr:   errTest,
 		},
 		{
 			name:     "invalid transformation tx",
@@ -748,7 +777,7 @@ func TestGetDelegatorRules(t *testing.T) {
 			chainState := tt.chainStateF(ctrl)
 			rules, err := getDelegatorRules(time.Time{}, tt.backend, chainState, tt.subnetID)
 			if tt.expectedErr != nil {
-				require.ErrorIs(tt.expectedErr, err)
+				require.ErrorIs(err, tt.expectedErr)
 				return
 			}
 			require.NoError(err)

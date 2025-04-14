@@ -12,9 +12,10 @@ import (
 
 	"github.com/ava-labs/avalanchego/api"
 	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/utils/crypto"
+	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
 	"github.com/ava-labs/avalanchego/utils/formatting"
 	"github.com/ava-labs/avalanchego/utils/json"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/coreth/params"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -99,8 +100,8 @@ type ExportKeyArgs struct {
 // ExportKeyReply is the response for ExportKey
 type ExportKeyReply struct {
 	// The decrypted PrivateKey for the Address provided in the arguments
-	PrivateKey    *crypto.PrivateKeySECP256K1R `json:"privateKey"`
-	PrivateKeyHex string                       `json:"privateKeyHex"`
+	PrivateKey    *secp256k1.PrivateKey `json:"privateKey"`
+	PrivateKeyHex string                `json:"privateKeyHex"`
 }
 
 // ExportKey returns a private key from the provided user
@@ -133,7 +134,7 @@ func (service *AvaxAPI) ExportKey(r *http.Request, args *ExportKeyArgs, reply *E
 // ImportKeyArgs are arguments for ImportKey
 type ImportKeyArgs struct {
 	api.UserPass
-	PrivateKey *crypto.PrivateKeySECP256K1R `json:"privateKey"`
+	PrivateKey *secp256k1.PrivateKey `json:"privateKey"`
 }
 
 // ImportKey adds a private key to the provided user
@@ -347,7 +348,7 @@ func (service *AvaxAPI) GetUTXOs(r *http.Request, args *api.GetUTXOsArgs, reply 
 	}
 	sourceChain := chainID
 
-	addrSet := ids.ShortSet{}
+	addrSet := set.Set[ids.ShortID]{}
 	for _, addrStr := range args.Addresses {
 		addr, err := service.vm.ParseLocalAddress(addrStr)
 		if err != nil {
