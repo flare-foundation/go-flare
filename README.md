@@ -7,6 +7,7 @@ go-flare is a modified version of [avalanchego@v1.10.0](https://github.com/ava-l
 - **Songbird: May 6, 2025 at 12 UTC**
 - **Flare: May 13, 2025 at 12 UTC**
 
+See [release notes](./RELEASES-flare.md) for more info.
 
 
 ## System Requirements
