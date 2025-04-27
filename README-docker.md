@@ -51,8 +51,8 @@ These are the environment variables you can edit and their default values:
 | `LOG_DIR` | `/app/logs` | Logging directory |
 | `LOG_LEVEL` | `info` | Logging level set with AvalancheGo flag [`--log-level`](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#--log-level-string-verbo-debug-trace-info-warn-error-fatal-off). |
 | `NETWORK_ID` | `costwo` | The network id. The common ids are `flare \| costwo` |
-| `AUTOCONFIGURE_PUBLIC_IP` | `0` | Set to `1` to autoconfigure `PUBLIC_IP`, skipped if PUBLIC_IP is set |
-| `AUTOCONFIGURE_BOOTSTRAP` | `0` | Set to `1` to autoconfigure `BOOTSTRAP_IPS` and `BOOTSTRAP_IDS` |
+| `AUTOCONFIGURE_PUBLIC_IP` | `1` | Set to `0` to manually configure `PUBLIC_IP`, skipped if PUBLIC_IP is set |
+| `AUTOCONFIGURE_BOOTSTRAP` | `1` | Set to `0` to manually configure `BOOTSTRAP_IPS` and `BOOTSTRAP_IDS` |
 | `AUTOCONFIGURE_BOOTSTRAP_ENDPOINT` | `https://coston2.flare.network/ext/info` | Endpoint used for [bootstrapping](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#bootstrapping) when `AUTOCONFIGURE_BOOTSTRAP` is enabled. Possible values are `https://coston2.flare.network/ext/info` or `https://flare.flare.network/ext/info`. |
 | `AUTOCONFIGURE_FALLBACK_ENDPOINTS` | _(empty)_ | Comma-divided fallback bootstrap endpoints, used if `AUTOCONFIGURE_BOOTSTRAP_ENDPOINT` is not valid (not whitelisted / unreachable / etc), tested from first-to-last until one is valid |
 | `BOOTSTRAP_BEACON_CONNECTION_TIMEOUT` | `1m` | Set the duration value (eg. `45s` / `5m` / `1h`) for [--bootstrap-beacon-connection-timeout](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#--bootstrap-beacon-connection-timeout-duration) AvalancheGo flag. | 
@@ -73,13 +73,13 @@ The external API configuration is set to only respond to API calls so it offload
   "coreth-admin-api-enabled": false,
   "coreth-admin-api-dir": "",
   "eth-apis": [
-    "public-eth",
-    "public-eth-filter",
+    "eth",
+    "eth-filter",
     "net",
     "web3",
-    "internal-public-eth",
-    "internal-public-blockchain",
-    "internal-public-transaction-pool"
+    "internal-eth",
+    "internal-blockchain",
+    "internal-transaction"
   ],
 }
 ```
@@ -94,22 +94,20 @@ Similarly to the external API configuration, this one also responds to API calls
   "coreth-admin-api-enabled": false,
   "coreth-admin-api-dir": "",
   "eth-apis": [
-    "public-eth",
-    "public-eth-filter",
-    "private-admin",
-    "public-debug",
-    "private-debug",
+    "eth",
+    "eth-filter",
+    "admin",
+    "debug",
     "net",
     "debug-tracer",
     "web3",
-    "internal-public-eth",
-    "internal-public-blockchain",
-    "internal-public-transaction-pool",
-    "internal-public-tx-pool",
-    "internal-public-debug",
-    "internal-private-debug",
-    "internal-public-account",
-    "internal-private-personal"
+    "internal-eth",
+    "internal-blockchain",
+    "internal-transaction",
+    "internal-tx-pool",
+    "internal-debug",
+    "internal-account",
+    "internal-personal"
   ],
 }
 ```
