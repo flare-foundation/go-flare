@@ -13,7 +13,6 @@ var inflationSettingsVariants = utils.NewNetworkValue(getDefaultInflationSetting
 	AddValue(constants.FlareID, getFlareInflationSettings).
 	AddValue(constants.CostwoID, getCostwoInflationSettings).
 	AddValue(constants.LocalFlareID, getLocalFlareInflationSettings).
-	AddValue(constants.StagingID, getStagingInflationSettings).
 	AddValue(constants.SongbirdID, getSongbirdInflationSettings).
 	AddValue(constants.CostonID, getCostonInflationSettings).
 	AddValue(constants.LocalID, getLocalInflationSettings)
@@ -40,13 +39,14 @@ func GetCurrentInflationSettings(currentTimestamp time.Time, networkID uint32, c
 func getCurrentValidatorRules(currentTimestamp time.Time, backend *Backend) *addValidatorRules {
 	s := inflationSettingsVariants.GetValue(backend.Ctx.NetworkID)(currentTimestamp, backend.Config)
 	return &addValidatorRules{
-		assetID:           backend.Ctx.AVAXAssetID,
-		minValidatorStake: s.MinValidatorStake,
-		maxValidatorStake: s.MaxValidatorStake,
-		minStakeDuration:  s.MinStakeDuration,
-		maxStakeDuration:  s.MaxStakeDuration,
-		minDelegationFee:  s.MinDelegationFee,
-		minStakeStartTime: s.MinStakeStartTime,
+		assetID:                  backend.Ctx.AVAXAssetID,
+		minValidatorStake:        s.MinValidatorStake,
+		maxValidatorStake:        s.MaxValidatorStake,
+		minStakeDuration:         s.MinStakeDuration,
+		maxStakeDuration:         s.MaxStakeDuration,
+		minDelegationFee:         s.MinDelegationFee,
+		minStakeStartTime:        s.MinStakeStartTime,
+		minFutureStartTimeOffset: s.MinFutureStartTimeOffset,
 	}
 }
 
@@ -59,6 +59,7 @@ func getCurrentDelegatorRules(currentTimestamp time.Time, backend *Backend) *add
 		minStakeDuration:         s.MinDelegateDuration,
 		maxStakeDuration:         s.MaxStakeDuration,
 		maxValidatorWeightFactor: byte(s.MaxValidatorWeightFactor),
+		minFutureStartTimeOffset: s.MinFutureStartTimeOffset,
 	}
 }
 
@@ -158,22 +159,6 @@ func getLocalFlareInflationSettings(currentTimestamp time.Time, _ *config.Config
 			MaxValidatorWeightFactor: MaxValidatorWeightFactor,
 			MinStakeStartTime:        time.Date(2023, time.April, 10, 15, 0, 0, 0, time.UTC),
 		}
-	}
-}
-
-func getStagingInflationSettings(_ time.Time, _ *config.Config) InflationSettings {
-	// Phase 1
-	return InflationSettings{
-		MinValidatorStake:        100 * units.KiloAvax,
-		MaxValidatorStake:        50 * units.MegaAvax,
-		MinDelegatorStake:        1 * units.KiloAvax,
-		MinDelegationFee:         0,
-		MinStakeDuration:         2 * 7 * 24 * time.Hour,
-		MinDelegateDuration:      2 * 7 * 24 * time.Hour,
-		MaxStakeDuration:         365 * 24 * time.Hour,
-		MinFutureStartTimeOffset: MaxFutureStartTime,
-		MaxValidatorWeightFactor: MaxValidatorWeightFactor,
-		MinStakeStartTime:        time.Date(2023, time.May, 10, 15, 0, 0, 0, time.UTC),
 	}
 }
 

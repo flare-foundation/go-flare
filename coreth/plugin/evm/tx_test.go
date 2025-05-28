@@ -9,10 +9,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ava-labs/avalanchego/chains/atomic"
-	"github.com/ava-labs/avalanchego/snow"
-	"github.com/ava-labs/coreth/params"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ethereum/go-ethereum/common"
+
+	"github.com/ava-labs/coreth/params"
+
+	"github.com/ava-labs/avalanchego/chains/atomic"
+	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/snow"
 )
 
 func TestCalculateDynamicFee(t *testing.T) {
@@ -36,7 +41,7 @@ func TestCalculateDynamicFee(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		cost, err := calculateDynamicFee(test.gas, test.baseFee)
+		cost, err := CalculateDynamicFee(test.gas, test.baseFee)
 		if test.expectedErr == nil {
 			if err != nil {
 				t.Fatalf("Unexpectedly failed to calculate dynamic fee: %s", err)
@@ -145,10 +150,12 @@ func executeTxTest(t *testing.T, test atomicTxTest) {
 		// If this test simulates processing txs during bootstrapping (where some verification is skipped),
 		// initialize the block building goroutines normally initialized in SetState(snow.NormalOps).
 		// This ensures that the VM can build a block correctly during the test.
-		vm.initBlockBuilding()
+		if err := vm.initBlockBuilding(); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	if err := vm.issueTx(tx, true /*=local*/); err != nil {
+	if err := vm.mempool.AddLocalTx(tx); err != nil {
 		t.Fatal(err)
 	}
 	<-issuer
@@ -178,5 +185,129 @@ func executeTxTest(t *testing.T, test atomicTxTest) {
 
 	if test.checkState != nil {
 		test.checkState(t, vm)
+	}
+}
+
+func TestEVMOutputCompare(t *testing.T) {
+	type test struct {
+		name     string
+		a, b     EVMOutput
+		expected int
+	}
+
+	tests := []test{
+		{
+			name: "address less",
+			a: EVMOutput{
+				Address: common.BytesToAddress([]byte{0x01}),
+				AssetID: ids.ID{1},
+			},
+			b: EVMOutput{
+				Address: common.BytesToAddress([]byte{0x02}),
+				AssetID: ids.ID{0},
+			},
+			expected: -1,
+		},
+		{
+			name: "address greater; assetIDs equal",
+			a: EVMOutput{
+				Address: common.BytesToAddress([]byte{0x02}),
+				AssetID: ids.ID{},
+			},
+			b: EVMOutput{
+				Address: common.BytesToAddress([]byte{0x01}),
+				AssetID: ids.ID{},
+			},
+			expected: 1,
+		},
+		{
+			name: "addresses equal; assetID less",
+			a: EVMOutput{
+				Address: common.BytesToAddress([]byte{0x01}),
+				AssetID: ids.ID{0},
+			},
+			b: EVMOutput{
+				Address: common.BytesToAddress([]byte{0x01}),
+				AssetID: ids.ID{1},
+			},
+			expected: -1,
+		},
+		{
+			name:     "equal",
+			a:        EVMOutput{},
+			b:        EVMOutput{},
+			expected: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
+
+			require.Equal(tt.expected, tt.a.Compare(tt.b))
+			require.Equal(-tt.expected, tt.b.Compare(tt.a))
+		})
+	}
+}
+
+func TestEVMInputCompare(t *testing.T) {
+	type test struct {
+		name     string
+		a, b     EVMInput
+		expected int
+	}
+
+	tests := []test{
+		{
+			name: "address less",
+			a: EVMInput{
+				Address: common.BytesToAddress([]byte{0x01}),
+				AssetID: ids.ID{1},
+			},
+			b: EVMInput{
+				Address: common.BytesToAddress([]byte{0x02}),
+				AssetID: ids.ID{0},
+			},
+			expected: -1,
+		},
+		{
+			name: "address greater; assetIDs equal",
+			a: EVMInput{
+				Address: common.BytesToAddress([]byte{0x02}),
+				AssetID: ids.ID{},
+			},
+			b: EVMInput{
+				Address: common.BytesToAddress([]byte{0x01}),
+				AssetID: ids.ID{},
+			},
+			expected: 1,
+		},
+		{
+			name: "addresses equal; assetID less",
+			a: EVMInput{
+				Address: common.BytesToAddress([]byte{0x01}),
+				AssetID: ids.ID{0},
+			},
+			b: EVMInput{
+				Address: common.BytesToAddress([]byte{0x01}),
+				AssetID: ids.ID{1},
+			},
+			expected: -1,
+		},
+		{
+			name:     "equal",
+			a:        EVMInput{},
+			b:        EVMInput{},
+			expected: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
+
+			require.Equal(tt.expected, tt.a.Compare(tt.b))
+			require.Equal(-tt.expected, tt.b.Compare(tt.a))
+		})
 	}
 }

@@ -37,6 +37,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -63,11 +64,11 @@ type httpConn struct {
 // and some methods don't work. The panic() stubs here exist to ensure
 // this special treatment is correct.
 
-func (hc *httpConn) writeJSON(ctx context.Context, val interface{}) error {
-	return hc.writeJSONSkipDeadline(ctx, val, false)
+func (hc *httpConn) writeJSON(ctx context.Context, val interface{}, isError bool) error {
+	return hc.writeJSONSkipDeadline(ctx, val, isError, false)
 }
 
-func (hc *httpConn) writeJSONSkipDeadline(context.Context, interface{}, bool) error {
+func (hc *httpConn) writeJSONSkipDeadline(context.Context, interface{}, bool, bool) error {
 	panic("writeJSON called on httpConn")
 }
 
@@ -150,6 +151,7 @@ func DialHTTPWithClient(endpoint string, client *http.Client) (*Client, error) {
 	}
 
 	var cfg clientConfig
+	cfg.httpClient = client
 	fn := newClientTransportHTTP(endpoint, &cfg)
 	return newClient(context.Background(), fn)
 }
@@ -221,7 +223,7 @@ func (hc *httpConn) doRequest(ctx context.Context, msg interface{}) (io.ReadClos
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, "POST", hc.url, io.NopCloser(bytes.NewReader(body)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, hc.url, io.NopCloser(bytes.NewReader(body)))
 	if err != nil {
 		return nil, err
 	}
@@ -232,6 +234,8 @@ func (hc *httpConn) doRequest(ctx context.Context, msg interface{}) (io.ReadClos
 	hc.mu.Lock()
 	req.Header = hc.headers.Clone()
 	hc.mu.Unlock()
+	setHeaders(req.Header, headersFromContext(ctx))
+
 	if hc.auth != nil {
 		if err := hc.auth(req.Header); err != nil {
 			return nil, err
@@ -269,7 +273,42 @@ type httpServerConn struct {
 func newHTTPServerConn(r *http.Request, w http.ResponseWriter) ServerCodec {
 	body := io.LimitReader(r.Body, maxRequestContentLength)
 	conn := &httpServerConn{Reader: body, Writer: w, r: r}
-	return NewCodec(conn)
+
+	encoder := func(v any, isErrorResponse bool) error {
+		if !isErrorResponse {
+			return json.NewEncoder(conn).Encode(v)
+		}
+
+		// It's an error response and requires special treatment.
+		//
+		// In case of a timeout error, the response must be written before the HTTP
+		// server's write timeout occurs. So we need to flush the response. The
+		// Content-Length header also needs to be set to ensure the client knows
+		// when it has the full response.
+		encdata, err := json.Marshal(v)
+		if err != nil {
+			return err
+		}
+		w.Header().Set("content-length", strconv.Itoa(len(encdata)))
+
+		// If this request is wrapped in a handler that might remove Content-Length (such
+		// as the automatic gzip we do in package node), we need to ensure the HTTP server
+		// doesn't perform chunked encoding. In case WriteTimeout is reached, the chunked
+		// encoding might not be finished correctly, and some clients do not like it when
+		// the final chunk is missing.
+		w.Header().Set("transfer-encoding", "identity")
+
+		_, err = w.Write(encdata)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		return err
+	}
+
+	dec := json.NewDecoder(conn)
+	dec.UseNumber()
+
+	return NewFuncCodec(conn, encoder, dec.Decode)
 }
 
 // Close does nothing and always returns nil.

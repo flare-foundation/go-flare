@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package auth
@@ -14,8 +14,6 @@ import (
 	"sync"
 	"time"
 
-	jwt "github.com/golang-jwt/jwt/v4"
-
 	"github.com/gorilla/rpc/v2"
 
 	"github.com/ava-labs/avalanchego/utils/json"
@@ -23,6 +21,8 @@ import (
 	"github.com/ava-labs/avalanchego/utils/password"
 	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
+
+	jwt "github.com/golang-jwt/jwt/v4"
 )
 
 const (
@@ -41,7 +41,7 @@ const (
 var (
 	errNoToken               = errors.New("auth token not provided")
 	errAuthHeaderNotParsable = fmt.Errorf(
-		"couldn't parse auth token. Header \"%s\" should be \"%sTOKEN.GOES.HERE\"",
+		`couldn't parse auth token. Header "%s" should be "%sTOKEN.GOES.HERE"`,
 		headerKey,
 		headerValStart,
 	)
@@ -50,7 +50,6 @@ var (
 	errTokenInsufficientPermission = errors.New("the provided auth token does not allow access to this endpoint")
 	errWrongPassword               = errors.New("incorrect password")
 	errSamePassword                = errors.New("new password can't be same as old password")
-	errNoPassword                  = errors.New("no password")
 	errNoEndpoints                 = errors.New("must name at least one endpoint")
 	errTooManyEndpoints            = fmt.Errorf("can only name at most %d endpoints", maxEndpoints)
 
@@ -121,7 +120,7 @@ func NewFromHash(log logging.Logger, endpoint string, pw password.Hash) Auth {
 
 func (a *auth) NewToken(pw string, duration time.Duration, endpoints []string) (string, error) {
 	if pw == "" {
-		return "", errNoPassword
+		return "", password.ErrEmptyPassword
 	}
 	if l := len(endpoints); l == 0 {
 		return "", errNoEndpoints
@@ -170,7 +169,7 @@ func (a *auth) RevokeToken(tokenStr, pw string) error {
 		return errNoToken
 	}
 	if pw == "" {
-		return errNoPassword
+		return password.ErrEmptyPassword
 	}
 
 	a.lock.Lock()

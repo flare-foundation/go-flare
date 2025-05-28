@@ -1,9 +1,10 @@
-// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package snowman
 
 import (
+	"cmp"
 	"context"
 	"time"
 
@@ -48,6 +49,6 @@ func (b *TestBlock) Bytes() []byte {
 	return b.BytesV
 }
 
-func (b *TestBlock) Less(other *TestBlock) bool {
-	return b.HeightV < other.HeightV
+func (b *TestBlock) Compare(other *TestBlock) int {
+	return cmp.Compare(b.HeightV, other.HeightV)
 }

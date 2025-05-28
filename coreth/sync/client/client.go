@@ -13,7 +13,6 @@ import (
 
 	"github.com/ava-labs/avalanchego/ids"
 
-	"github.com/ava-labs/coreth/ethdb/memorydb"
 	"github.com/ava-labs/coreth/params"
 	"github.com/ava-labs/coreth/sync/client/stats"
 
@@ -24,11 +23,12 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 
+	"github.com/ava-labs/coreth/core/rawdb"
 	"github.com/ava-labs/coreth/core/types"
-	"github.com/ava-labs/coreth/ethdb"
 	"github.com/ava-labs/coreth/peer"
 	"github.com/ava-labs/coreth/plugin/evm/message"
 	"github.com/ava-labs/coreth/trie"
+	"github.com/ethereum/go-ethereum/ethdb"
 )
 
 const (
@@ -159,7 +159,7 @@ func parseLeafsResponse(codec codec.Manager, reqIntf message.Request, data []byt
 	// Populate proof when ProofVals are present in the response. Its ok to pass it as nil to the trie.VerifyRangeProof
 	// function as it will assert that all the leaves belonging to the specified root are present.
 	if len(leafsResponse.ProofVals) > 0 {
-		proof = memorydb.New()
+		proof = rawdb.NewMemoryDatabase()
 		defer proof.Close()
 		for _, proofVal := range leafsResponse.ProofVals {
 			proofKey := crypto.Keccak256(proofVal)
@@ -337,14 +337,14 @@ func (c *client) get(ctx context.Context, request message.Request, parseFn parse
 			if c.isSongbirdCode {
 				minVersion = StateSyncVersionSgb
 			}
-			response, nodeID, err = c.networkClient.SendAppRequestAny(minVersion, requestBytes)
+			response, nodeID, err = c.networkClient.SendAppRequestAny(ctx, minVersion, requestBytes)
 		} else {
 			// get the next nodeID using the nodeIdx offset. If we're out of nodes, loop back to 0
 			// we do this every attempt to ensure we get a different node each time if possible.
 			nodeIdx := atomic.AddUint32(&c.stateSyncNodeIdx, 1)
 			nodeID = c.stateSyncNodes[nodeIdx%uint32(len(c.stateSyncNodes))]
 
-			response, err = c.networkClient.SendAppRequest(nodeID, requestBytes)
+			response, err = c.networkClient.SendAppRequest(ctx, nodeID, requestBytes)
 		}
 		metric.UpdateRequestLatency(time.Since(start))
 
@@ -363,7 +363,7 @@ func (c *client) get(ctx context.Context, request message.Request, parseFn parse
 			responseIntf, numElements, err = parseFn(c.codec, request, response)
 			if err != nil {
 				lastErr = err
-				log.Info("could not validate response, retrying", "nodeID", nodeID, "attempt", attempt, "request", request, "err", err)
+				log.Debug("could not validate response, retrying", "nodeID", nodeID, "attempt", attempt, "request", request, "err", err)
 				c.networkClient.TrackBandwidth(nodeID, 0)
 				metric.IncFailed()
 				metric.IncInvalidResponse()

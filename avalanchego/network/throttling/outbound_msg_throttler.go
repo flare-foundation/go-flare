@@ -1,17 +1,18 @@
-// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package throttling
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
+	"go.uber.org/zap"
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/message"
 	"github.com/ava-labs/avalanchego/snow/validators"
+	"github.com/ava-labs/avalanchego/utils"
+	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/logging"
-	"github.com/ava-labs/avalanchego/utils/math"
-	"github.com/ava-labs/avalanchego/utils/wrappers"
 )
 
 var (
@@ -43,7 +44,7 @@ func NewSybilOutboundMsgThrottler(
 	log logging.Logger,
 	namespace string,
 	registerer prometheus.Registerer,
-	vdrs validators.Set,
+	vdrs validators.Manager,
 	config MsgByteThrottlerConfig,
 ) (OutboundMsgThrottler, error) {
 	t := &outboundMsgThrottler{
@@ -72,7 +73,7 @@ func (t *outboundMsgThrottler) Acquire(msg message.OutboundMessage, nodeID ids.N
 
 	// Take as many bytes as we can from the at-large allocation.
 	bytesNeeded := uint64(len(msg.Bytes()))
-	atLargeBytesUsed := math.Min(
+	atLargeBytesUsed := min(
 		// only give as many bytes as needed
 		bytesNeeded,
 		// don't exceed per-node limit
@@ -85,9 +86,16 @@ func (t *outboundMsgThrottler) Acquire(msg message.OutboundMessage, nodeID ids.N
 	// Take as many bytes as we can from [nodeID]'s validator allocation.
 	// Calculate [nodeID]'s validator allocation size based on its weight
 	vdrAllocationSize := uint64(0)
-	weight := t.vdrs.GetWeight(nodeID)
+	weight := t.vdrs.GetWeight(constants.PrimaryNetworkID, nodeID)
 	if weight != 0 {
-		vdrAllocationSize = uint64(float64(t.maxVdrBytes) * float64(weight) / float64(t.vdrs.Weight()))
+		totalWeight, err := t.vdrs.TotalWeight(constants.PrimaryNetworkID)
+		if err != nil {
+			t.log.Error("Failed to get total weight of primary network validators",
+				zap.Error(err),
+			)
+		} else {
+			vdrAllocationSize = uint64(float64(t.maxVdrBytes) * float64(weight) / float64(totalWeight))
+		}
 	}
 	vdrBytesAlreadyUsed := t.nodeToVdrBytesUsed[nodeID]
 	// [vdrBytesAllowed] is the number of bytes this node
@@ -99,7 +107,7 @@ func (t *outboundMsgThrottler) Acquire(msg message.OutboundMessage, nodeID ids.N
 	} else {
 		vdrBytesAllowed -= vdrBytesAlreadyUsed
 	}
-	vdrBytesUsed := math.Min(t.remainingVdrBytes, bytesNeeded, vdrBytesAllowed)
+	vdrBytesUsed := min(t.remainingVdrBytes, bytesNeeded, vdrBytesAllowed)
 	bytesNeeded -= vdrBytesUsed
 	if bytesNeeded != 0 {
 		// Can't acquire enough bytes to queue this message to be sent
@@ -142,7 +150,7 @@ func (t *outboundMsgThrottler) Release(msg message.OutboundMessage, nodeID ids.N
 	// that will be given back to [nodeID]'s validator allocation.
 	vdrBytesUsed := t.nodeToVdrBytesUsed[nodeID]
 	msgSize := uint64(len(msg.Bytes()))
-	vdrBytesToReturn := math.Min(msgSize, vdrBytesUsed)
+	vdrBytesToReturn := min(msgSize, vdrBytesUsed)
 	t.nodeToVdrBytesUsed[nodeID] -= vdrBytesToReturn
 	if t.nodeToVdrBytesUsed[nodeID] == 0 {
 		delete(t.nodeToVdrBytesUsed, nodeID)
@@ -194,15 +202,13 @@ func (m *outboundMsgThrottlerMetrics) initialize(namespace string, registerer pr
 		Name:      "throttler_outbound_awaiting_release",
 		Help:      "Number of messages waiting to be sent",
 	})
-	errs := wrappers.Errs{}
-	errs.Add(
+	return utils.Err(
 		registerer.Register(m.acquireSuccesses),
 		registerer.Register(m.acquireFailures),
 		registerer.Register(m.remainingAtLargeBytes),
 		registerer.Register(m.remainingVdrBytes),
 		registerer.Register(m.awaitingRelease),
 	)
-	return errs.Err
 }
 
 func NewNoOutboundThrottler() OutboundMsgThrottler {

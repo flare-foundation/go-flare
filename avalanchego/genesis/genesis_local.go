@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package genesis
@@ -6,20 +6,29 @@ package genesis
 import (
 	"time"
 
+	"github.com/ava-labs/avalanchego/utils/cb58"
 	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
 	"github.com/ava-labs/avalanchego/utils/units"
+	"github.com/ava-labs/avalanchego/utils/wrappers"
 	"github.com/ava-labs/avalanchego/vms/platformvm/reward"
 )
 
-var (
-	EWOQKey *secp256k1.PrivateKey
+const (
+	VMRQKeyStr          = "vmRQiZeXEXYMyJhEiqdC2z5JhuDbxL8ix9UVvjgMu2Er1NepE"
+	VMRQKeyFormattedStr = secp256k1.PrivateKeyPrefix + VMRQKeyStr
+
+	EWOQKeyStr          = "ewoqjP7PxY4yr3iLTpLisriqt94hdyDFNgchSxGGztUrTXtNN"
+	EWOQKeyFormattedStr = secp256k1.PrivateKeyPrefix + EWOQKeyStr
 )
 
 var (
+	VMRQKey *secp256k1.PrivateKey
+	EWOQKey *secp256k1.PrivateKey
+
 	localGenesisConfigJSON = `{
 		"networkID": 12345,
 		"allocations": [],
-		"startTime": 1630987200,
+		"startTime": 1743984000,
 		"initialStakeDuration": 31536000,
 		"initialStakeDurationOffset": 5400,
 		"initialStakedFunds": [],
@@ -112,3 +121,20 @@ var (
 		},
 	}
 )
+
+func init() {
+	errs := wrappers.Errs{}
+	vmrqBytes, err := cb58.Decode(VMRQKeyStr)
+	errs.Add(err)
+	ewoqBytes, err := cb58.Decode(EWOQKeyStr)
+	errs.Add(err)
+
+	VMRQKey, err = secp256k1.ToPrivateKey(vmrqBytes)
+	errs.Add(err)
+	EWOQKey, err = secp256k1.ToPrivateKey(ewoqBytes)
+	errs.Add(err)
+
+	if errs.Err != nil {
+		panic(errs.Err)
+	}
+}

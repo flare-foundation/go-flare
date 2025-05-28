@@ -4,7 +4,6 @@
 package evm
 
 import (
-	"encoding/binary"
 	"fmt"
 	"time"
 
@@ -16,10 +15,12 @@ import (
 	"github.com/ava-labs/avalanchego/utils/wrappers"
 
 	"github.com/ava-labs/coreth/core"
+	"github.com/ava-labs/coreth/core/rawdb"
 	"github.com/ava-labs/coreth/core/types"
-	"github.com/ava-labs/coreth/ethdb"
 	"github.com/ava-labs/coreth/trie"
+	"github.com/ava-labs/coreth/trie/trienode"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -36,6 +37,7 @@ var (
 	_                            AtomicTrie = &atomicTrie{}
 	lastCommittedKey                        = []byte("atomicTrieLastCommittedBlock")
 	appliedSharedMemoryCursorKey            = []byte("atomicTrieLastAppliedToSharedMemory")
+	heightMapRepairKey                      = []byte("atomicTrieHeightMapRepair")
 )
 
 // AtomicTrie maintains an index of atomic operations by blockchainIDs for every block
@@ -73,7 +75,7 @@ type AtomicTrie interface {
 	// InsertTrie updates the trieDB with the provided node set and adds a reference
 	// to root in the trieDB. Once InsertTrie is called, it is expected either
 	// AcceptTrie or RejectTrie be called for the same root.
-	InsertTrie(nodes *trie.NodeSet, root common.Hash) error
+	InsertTrie(nodes *trienode.NodeSet, root common.Hash) error
 
 	// AcceptTrie marks root as the last accepted atomic trie root, and
 	// commits the trie to persistent storage if height is divisible by
@@ -82,6 +84,10 @@ type AtomicTrie interface {
 
 	// RejectTrie dereferences root from the trieDB, freeing memory.
 	RejectTrie(root common.Hash) error
+
+	// RepairHeightMap repairs the height map of the atomic trie by iterating
+	// over all leaves in the trie and committing the trie at every commit interval.
+	RepairHeightMap(to uint64) (bool, error)
 }
 
 // AtomicTrieIterator is a stateful iterator that iterates the leafs of an AtomicTrie
@@ -93,6 +99,9 @@ type AtomicTrieIterator interface {
 	// Key returns the current database key that the iterator is iterating
 	// returned []byte can be freely modified
 	Key() []byte
+
+	// Value returns the current database value that the iterator is iterating
+	Value() []byte
 
 	// BlockNumber returns the current block number
 	BlockNumber() uint64
@@ -146,7 +155,7 @@ func newAtomicTrie(
 	}
 
 	trieDB := trie.NewDatabaseWithConfig(
-		Database{atomicTrieDB},
+		rawdb.NewDatabase(Database{atomicTrieDB}),
 		&trie.Config{
 			Cache: 64, // Allocate 64MB of memory for clean cache
 		},
@@ -181,10 +190,13 @@ func lastCommittedRootIfExists(db database.Database) (common.Hash, uint64, error
 		return common.Hash{}, 0, nil
 	case err != nil:
 		return common.Hash{}, 0, err
-	case len(lastCommittedHeightBytes) != wrappers.LongLen:
-		return common.Hash{}, 0, fmt.Errorf("expected value of lastCommittedKey to be %d but was %d", wrappers.LongLen, len(lastCommittedHeightBytes))
 	}
-	height := binary.BigEndian.Uint64(lastCommittedHeightBytes)
+
+	height, err := database.ParseUInt64(lastCommittedHeightBytes)
+	if err != nil {
+		return common.Hash{}, 0, fmt.Errorf("expected value at lastCommittedKey to be a valid uint64: %w", err)
+	}
+
 	hash, err := db.Get(lastCommittedHeightBytes)
 	if err != nil {
 		return common.Hash{}, 0, fmt.Errorf("committed hash does not exist for committed height: %d: %w", height, err)
@@ -198,12 +210,12 @@ func nearestCommitHeight(blockNumber uint64, commitInterval uint64) uint64 {
 }
 
 func (a *atomicTrie) OpenTrie(root common.Hash) (*trie.Trie, error) {
-	return trie.New(common.Hash{}, root, a.trieDB)
+	return trie.New(trie.TrieID(root), a.trieDB)
 }
 
 // commit calls commit on the underlying trieDB and updates metadata pointers.
 func (a *atomicTrie) commit(height uint64, root common.Hash) error {
-	if err := a.trieDB.Commit(root, false, nil); err != nil {
+	if err := a.trieDB.Commit(root, false); err != nil {
 		return err
 	}
 	log.Info("committed atomic trie", "root", root.String(), "height", height)
@@ -223,7 +235,7 @@ func (a *atomicTrie) UpdateTrie(trie *trie.Trie, height uint64, atomicOps map[id
 		keyPacker := wrappers.Packer{Bytes: make([]byte, atomicKeyLength)}
 		keyPacker.PackLong(height)
 		keyPacker.PackFixedBytes(blockchainID[:])
-		if err := trie.TryUpdate(keyPacker.Bytes, valueBytes); err != nil {
+		if err := trie.Update(keyPacker.Bytes, valueBytes); err != nil {
 			return err
 		}
 	}
@@ -239,8 +251,7 @@ func (a *atomicTrie) LastCommitted() (common.Hash, uint64) {
 // updateLastCommitted adds [height] -> [root] to the index and marks it as the last committed
 // root/height pair.
 func (a *atomicTrie) updateLastCommitted(root common.Hash, height uint64) error {
-	heightBytes := make([]byte, wrappers.LongLen)
-	binary.BigEndian.PutUint64(heightBytes, height)
+	heightBytes := database.PackUInt64(height)
 
 	// now save the trie hash against the height it was committed at
 	if err := a.metadataDB.Put(heightBytes, root[:]); err != nil {
@@ -260,7 +271,7 @@ func (a *atomicTrie) updateLastCommitted(root common.Hash, height uint64) error 
 // Iterator returns a types.AtomicTrieIterator that iterates the trie from the given
 // atomic trie root, starting at the specified [cursor].
 func (a *atomicTrie) Iterator(root common.Hash, cursor []byte) (AtomicTrieIterator, error) {
-	t, err := trie.New(common.Hash{}, root, a.trieDB)
+	t, err := trie.New(trie.TrieID(root), a.trieDB)
 	if err != nil {
 		return nil, err
 	}
@@ -290,9 +301,7 @@ func getRoot(metadataDB database.Database, height uint64) (common.Hash, error) {
 		return types.EmptyRootHash, nil
 	}
 
-	heightBytes := make([]byte, wrappers.LongLen)
-	binary.BigEndian.PutUint64(heightBytes, height)
-
+	heightBytes := database.PackUInt64(height)
 	hash, err := metadataDB.Get(heightBytes)
 	switch {
 	case err == database.ErrNotFound:
@@ -307,9 +316,9 @@ func (a *atomicTrie) LastAcceptedRoot() common.Hash {
 	return a.lastAcceptedRoot
 }
 
-func (a *atomicTrie) InsertTrie(nodes *trie.NodeSet, root common.Hash) error {
+func (a *atomicTrie) InsertTrie(nodes *trienode.NodeSet, root common.Hash) error {
 	if nodes != nil {
-		if err := a.trieDB.Update(trie.NewWithNodeSet(nodes)); err != nil {
+		if err := a.trieDB.Update(root, types.EmptyRootHash, trienode.NewWithNodeSet(nodes)); err != nil {
 			return err
 		}
 	}
@@ -330,12 +339,10 @@ func (a *atomicTrie) InsertTrie(nodes *trie.NodeSet, root common.Hash) error {
 // AcceptTrie commits the triedb at [root] if needed and returns true if a commit
 // was performed.
 func (a *atomicTrie) AcceptTrie(height uint64, root common.Hash) (bool, error) {
-	// Check whether we have crossed over a commitHeight.
-	// If so, make a commit with the last accepted root.
 	hasCommitted := false
-	commitHeight := nearestCommitHeight(height, a.commitInterval)
-	for commitHeight > a.lastCommittedHeight && height > commitHeight {
-		nextCommitHeight := a.lastCommittedHeight + a.commitInterval
+	// Because we do not accept the trie at every height, we may need to
+	// populate roots at prior commit heights that were skipped.
+	for nextCommitHeight := a.lastCommittedHeight + a.commitInterval; nextCommitHeight < height; nextCommitHeight += a.commitInterval {
 		if err := a.commit(nextCommitHeight, a.lastAcceptedRoot); err != nil {
 			return false, err
 		}
@@ -349,7 +356,7 @@ func (a *atomicTrie) AcceptTrie(height uint64, root common.Hash) (bool, error) {
 	a.tipBuffer.Insert(root)
 
 	// Commit this root if we have reached the [commitInterval].
-	if commitHeight == height {
+	if height%a.commitInterval == 0 {
 		if err := a.commit(height, root); err != nil {
 			return false, err
 		}

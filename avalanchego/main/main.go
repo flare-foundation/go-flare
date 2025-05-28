@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package main
@@ -9,7 +9,6 @@ import (
 	"os"
 
 	"github.com/spf13/pflag"
-
 	"golang.org/x/term"
 
 	"github.com/ava-labs/avalanchego/app"
@@ -45,9 +44,14 @@ func main() {
 	// Flare specific: set the application prefix (flare for songbird and avalanche for flare)
 	version.InitApplicationPrefix(nodeConfig.NetworkID)
 
-	nodeApp := app.New(nodeConfig) // Create node wrapper
 	if term.IsTerminal(int(os.Stdout.Fd())) {
 		fmt.Println(app.Header)
+	}
+
+	nodeApp, err := app.New(nodeConfig)
+	if err != nil {
+		fmt.Printf("couldn't start node: %s\n", err)
+		os.Exit(1)
 	}
 
 	exitCode := app.Run(nodeApp)

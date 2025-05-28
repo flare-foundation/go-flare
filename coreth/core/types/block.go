@@ -34,18 +34,9 @@ import (
 	"reflect"
 	"sync/atomic"
 
-	"github.com/ethereum/go-ethereum/crypto"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/rlp"
-)
-
-var (
-	EmptyRootHash    = common.HexToHash("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
-	EmptyCodeHash    = common.BytesToHash(crypto.Keccak256(nil))
-	EmptyUncleHash   = rlpHash([]*Header(nil))
-	EmptyExtDataHash = rlpHash([]byte(nil))
 )
 
 // A BlockNonce is a 64-bit hash which proves (combined with the
@@ -110,6 +101,9 @@ type Header struct {
 	// BlockGasCost was added by Apricot Phase 4 and is ignored in legacy
 	// headers.
 	BlockGasCost *big.Int `json:"blockGasCost" rlp:"optional"`
+
+	// ExcessDataGas was added by EIP-4844 and is ignored in legacy headers.
+	ExcessDataGas *big.Int `json:"excessDataGas" rlp:"optional"`
 }
 
 // field type overrides for gencodec
@@ -137,18 +131,22 @@ var headerSize = common.StorageSize(reflect.TypeOf(Header{}).Size())
 // Size returns the approximate memory used by all internal contents. It is used
 // to approximate and limit the memory consumption of various caches.
 func (h *Header) Size() common.StorageSize {
-	return headerSize + common.StorageSize(len(h.Extra)+(h.Difficulty.BitLen()+h.Number.BitLen())/8)
+	var baseFeeBits int
+	if h.BaseFee != nil {
+		baseFeeBits = h.BaseFee.BitLen()
+	}
+	return headerSize + common.StorageSize(len(h.Extra)+(h.Difficulty.BitLen()+h.Number.BitLen()+baseFeeBits)/8)
 }
 
 // EmptyBody returns true if there is no additional 'body' to complete the header
 // that is: no transactions and no uncles.
 func (h *Header) EmptyBody() bool {
-	return h.TxHash == EmptyRootHash && h.UncleHash == EmptyUncleHash
+	return h.TxHash == EmptyTxsHash && h.UncleHash == EmptyUncleHash
 }
 
 // EmptyReceipts returns true if there are no receipts for this header/block.
 func (h *Header) EmptyReceipts() bool {
-	return h.ReceiptHash == EmptyRootHash
+	return h.ReceiptHash == EmptyReceiptsHash
 }
 
 // Body is a simple (mutable, non-safe) data container for storing and moving
@@ -192,14 +190,13 @@ type extblock struct {
 // are ignored and set to values derived from the given txs, uncles
 // and receipts.
 func NewBlock(
-	header *Header, txs []*Transaction, uncles []*Header, receipts []*Receipt,
-	hasher TrieHasher, extdata []byte, recalc bool,
+	header *Header, txs []*Transaction, uncles []*Header, receipts []*Receipt, hasher TrieHasher,
 ) *Block {
 	b := &Block{header: CopyHeader(header)}
 
 	// TODO: panic if len(txs) != len(receipts)
 	if len(txs) == 0 {
-		b.header.TxHash = EmptyRootHash
+		b.header.TxHash = EmptyTxsHash
 	} else {
 		b.header.TxHash = DeriveSha(Transactions(txs), hasher)
 		b.transactions = make(Transactions, len(txs))
@@ -207,7 +204,7 @@ func NewBlock(
 	}
 
 	if len(receipts) == 0 {
-		b.header.ReceiptHash = EmptyRootHash
+		b.header.ReceiptHash = EmptyReceiptsHash
 	} else {
 		b.header.ReceiptHash = DeriveSha(Receipts(receipts), hasher)
 		b.header.Bloom = CreateBloom(receipts)
@@ -223,7 +220,6 @@ func NewBlock(
 		}
 	}
 
-	b.setExtData(extdata, recalc)
 	return b
 }
 
@@ -268,40 +264,8 @@ func (b *Block) DecodeRLP(s *rlp.Stream) error {
 		return err
 	}
 	b.header, b.uncles, b.transactions, b.version, b.extdata = eb.Header, eb.Uncles, eb.Txs, eb.Version, eb.ExtData
-	b.size.Store(common.StorageSize(rlp.ListSize(size)))
+	b.size.Store(rlp.ListSize(size))
 	return nil
-}
-
-func (b *Block) setExtDataHelper(data *[]byte, recalc bool) {
-	if data == nil {
-		b.setExtData(nil, recalc)
-		return
-	}
-	b.setExtData(*data, recalc)
-}
-
-func (b *Block) setExtData(data []byte, recalc bool) {
-	_data := make([]byte, len(data))
-	b.extdata = &_data
-	copy(*b.extdata, data)
-	if recalc {
-		b.header.ExtDataHash = CalcExtDataHash(*b.extdata)
-	}
-}
-
-func (b *Block) ExtData() []byte {
-	if b.extdata == nil {
-		return nil
-	}
-	return *b.extdata
-}
-
-func (b *Block) SetVersion(ver uint32) {
-	b.version = ver
-}
-
-func (b *Block) Version() uint32 {
-	return b.version
 }
 
 // EncodeRLP serializes b into the Ethereum RLP block format.
@@ -334,7 +298,7 @@ func (b *Block) GasLimit() uint64     { return b.header.GasLimit }
 func (b *Block) GasUsed() uint64      { return b.header.GasUsed }
 func (b *Block) Difficulty() *big.Int { return new(big.Int).Set(b.header.Difficulty) }
 func (b *Block) Time() uint64         { return b.header.Time }
-func (b *Block) Timestamp() *big.Int  { return new(big.Int).SetUint64(b.header.Time) }
+func (b *Block) Timestamp() uint64    { return b.header.Time }
 
 func (b *Block) NumberU64() uint64        { return b.header.Number.Uint64() }
 func (b *Block) MixDigest() common.Hash   { return b.header.MixDigest }
@@ -355,13 +319,6 @@ func (b *Block) BaseFee() *big.Int {
 	return new(big.Int).Set(b.header.BaseFee)
 }
 
-func (b *Block) ExtDataGasUsed() *big.Int {
-	if b.header.ExtDataGasUsed == nil {
-		return nil
-	}
-	return new(big.Int).Set(b.header.ExtDataGasUsed)
-}
-
 func (b *Block) BlockGasCost() *big.Int {
 	if b.header.BlockGasCost == nil {
 		return nil
@@ -376,28 +333,21 @@ func (b *Block) Body() *Body { return &Body{b.transactions, b.uncles, b.version,
 
 // Size returns the true RLP encoded storage size of the block, either by encoding
 // and returning it, or returning a previously cached value.
-func (b *Block) Size() common.StorageSize {
+func (b *Block) Size() uint64 {
 	if size := b.size.Load(); size != nil {
-		return size.(common.StorageSize)
+		return size.(uint64)
 	}
 	c := writeCounter(0)
 	rlp.Encode(&c, b)
-	b.size.Store(common.StorageSize(c))
-	return common.StorageSize(c)
+	b.size.Store(uint64(c))
+	return uint64(c)
 }
 
-type writeCounter common.StorageSize
+type writeCounter uint64
 
 func (c *writeCounter) Write(b []byte) (int, error) {
 	*c += writeCounter(len(b))
 	return len(b), nil
-}
-
-func CalcExtDataHash(extdata []byte) common.Hash {
-	if len(extdata) == 0 {
-		return EmptyExtDataHash
-	}
-	return rlpHash(extdata)
 }
 
 func CalcUncleHash(uncles []*Header) common.Hash {
@@ -420,18 +370,16 @@ func (b *Block) WithSeal(header *Header) *Block {
 }
 
 // WithBody returns a new block with the given transaction and uncle contents.
-func (b *Block) WithBody(transactions []*Transaction, uncles []*Header, version uint32, extdata *[]byte) *Block {
+func (b *Block) WithBody(transactions []*Transaction, uncles []*Header) *Block {
 	block := &Block{
 		header:       CopyHeader(b.header),
 		transactions: make([]*Transaction, len(transactions)),
 		uncles:       make([]*Header, len(uncles)),
-		version:      version,
 	}
 	copy(block.transactions, transactions)
 	for i := range uncles {
 		block.uncles[i] = CopyHeader(uncles[i])
 	}
-	block.setExtDataHelper(extdata, false)
 	return block
 }
 

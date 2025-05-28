@@ -1,12 +1,14 @@
-// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package genesis
 
 import (
+	"cmp"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,10 +18,14 @@ import (
 	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/formatting/address"
 	"github.com/ava-labs/avalanchego/utils/math"
-	"github.com/ava-labs/avalanchego/utils/wrappers"
+	"github.com/ava-labs/avalanchego/vms/platformvm/signer"
 )
 
-var _ utils.Sortable[Allocation] = Allocation{}
+var (
+	_ utils.Sortable[Allocation] = Allocation{}
+
+	errInvalidGenesisJSON = errors.New("could not unmarshal genesis JSON")
+)
 
 type LockedAmount struct {
 	Amount   uint64 `json:"amount"`
@@ -48,15 +54,18 @@ func (a Allocation) Unparse(networkID uint32) (UnparsedAllocation, error) {
 	return ua, err
 }
 
-func (a Allocation) Less(other Allocation) bool {
-	return a.InitialAmount < other.InitialAmount ||
-		(a.InitialAmount == other.InitialAmount && a.AVAXAddr.Less(other.AVAXAddr))
+func (a Allocation) Compare(other Allocation) int {
+	if amountCmp := cmp.Compare(a.InitialAmount, other.InitialAmount); amountCmp != 0 {
+		return amountCmp
+	}
+	return a.AVAXAddr.Compare(other.AVAXAddr)
 }
 
 type Staker struct {
-	NodeID        ids.NodeID  `json:"nodeID"`
-	RewardAddress ids.ShortID `json:"rewardAddress"`
-	DelegationFee uint32      `json:"delegationFee"`
+	NodeID        ids.NodeID                `json:"nodeID"`
+	RewardAddress ids.ShortID               `json:"rewardAddress"`
+	DelegationFee uint32                    `json:"delegationFee"`
+	Signer        *signer.ProofOfPossession `json:"signer,omitempty"`
 }
 
 func (s Staker) Unparse(networkID uint32) (UnparsedStaker, error) {
@@ -69,6 +78,7 @@ func (s Staker) Unparse(networkID uint32) (UnparsedStaker, error) {
 		NodeID:        s.NodeID,
 		RewardAddress: avaxAddr,
 		DelegationFee: s.DelegationFee,
+		Signer:        s.Signer,
 	}, err
 }
 
@@ -170,10 +180,6 @@ var (
 	// genesis.
 	CostwoConfig Config
 
-	// StagingConfig is the config that should be used to generate a flare
-	// staging genesis.
-	StagingConfig Config
-
 	// LocalFlareConfig is the config that should be used to generate a localFlare
 	// genesis.
 	LocalFlareConfig Config
@@ -192,64 +198,60 @@ func init() {
 	unparsedLocalConfig := UnparsedConfig{}
 	unparsedFlareConfig := UnparsedConfig{}
 	unparsedCostwoConfig := UnparsedConfig{}
-	unparsedStagingConfig := UnparsedConfig{}
 	unparsedLocalFlareConfig := UnparsedConfig{}
 	unparsedSongbirdConfig := UnparsedConfig{}
 	unparsedCostonConfig := UnparsedConfig{}
 
-	errs := wrappers.Errs{}
-	errs.Add(
+	err := utils.Err(
 		json.Unmarshal(mainnetGenesisConfigJSON, &unparsedMainnetConfig),
 		json.Unmarshal([]byte(localGenesisConfigJSON), &unparsedLocalConfig),
 		json.Unmarshal(flareGenesisConfigJSON, &unparsedFlareConfig),
 		json.Unmarshal(costwoGenesisConfigJSON, &unparsedCostwoConfig),
-		json.Unmarshal(stagingGenesisConfigJSON, &unparsedStagingConfig),
 		json.Unmarshal(localFlareGenesisConfigJSON, &unparsedLocalFlareConfig),
 		json.Unmarshal([]byte(songbirdGenesisConfigJSON), &unparsedSongbirdConfig),
 		json.Unmarshal([]byte(costonGenesisConfigJSON), &unparsedCostonConfig),
 	)
-	if errs.Errored() {
-		panic(errs.Err)
+	if err != nil {
+		panic(err)
 	}
 
-	mainnetConfig, err := unparsedMainnetConfig.Parse()
-	errs.Add(err)
-	MainnetConfig = mainnetConfig
-
-	localConfig, err := unparsedLocalConfig.Parse()
-	localConfig.CChainGenesis = localCChainGenesis
-	errs.Add(err)
-	LocalConfig = localConfig
-
-	flareConfig, err := unparsedFlareConfig.Parse()
-	errs.Add(err)
-	FlareConfig = flareConfig
-
-	costwoConfig, err := unparsedCostwoConfig.Parse()
-	errs.Add(err)
-	CostwoConfig = costwoConfig
-
-	stagingConfig, err := unparsedStagingConfig.Parse()
-	errs.Add(err)
-	StagingConfig = stagingConfig
-
-	localFlareConfig, err := unparsedLocalFlareConfig.Parse()
-	errs.Add(err)
-	LocalFlareConfig = localFlareConfig
-
-	songbirdConfig, err := unparsedSongbirdConfig.Parse()
-	songbirdConfig.CChainGenesis = songbirdCChainGenesis
-	errs.Add(err)
-	SongbirdConfig = songbirdConfig
-
-	costonConfig, err := unparsedCostonConfig.Parse()
-	costonConfig.CChainGenesis = costonCChainGenesis
-	errs.Add(err)
-	CostonConfig = costonConfig
-
-	if errs.Errored() {
-		panic(errs.Err)
+	MainnetConfig, err = unparsedMainnetConfig.Parse()
+	if err != nil {
+		panic(err)
 	}
+
+	LocalConfig, err = unparsedLocalConfig.Parse()
+	if err != nil {
+		panic(err)
+	}
+	LocalConfig.CChainGenesis = localCChainGenesis
+
+	FlareConfig, err = unparsedFlareConfig.Parse()
+	if err != nil {
+		panic(err)
+	}
+
+	CostwoConfig, err = unparsedCostwoConfig.Parse()
+	if err != nil {
+		panic(err)
+	}
+
+	LocalFlareConfig, err = unparsedLocalFlareConfig.Parse()
+	if err != nil {
+		panic(err)
+	}
+
+	SongbirdConfig, err = unparsedSongbirdConfig.Parse()
+	if err != nil {
+		panic(err)
+	}
+	SongbirdConfig.CChainGenesis = songbirdCChainGenesis
+
+	CostonConfig, err = unparsedCostonConfig.Parse()
+	if err != nil {
+		panic(err)
+	}
+	CostonConfig.CChainGenesis = costonCChainGenesis
 }
 
 func GetConfig(networkID uint32) *Config {
@@ -262,8 +264,6 @@ func GetConfig(networkID uint32) *Config {
 		return &FlareConfig
 	case constants.CostwoID:
 		return &CostwoConfig
-	case constants.StagingID:
-		return &StagingConfig
 	case constants.LocalFlareID:
 		return &LocalFlareConfig
 	case constants.SongbirdID:
@@ -298,7 +298,7 @@ func GetConfigContent(genesisContent string) (*Config, error) {
 func parseGenesisJSONBytesToConfig(bytes []byte) (*Config, error) {
 	var unparsedConfig UnparsedConfig
 	if err := json.Unmarshal(bytes, &unparsedConfig); err != nil {
-		return nil, fmt.Errorf("could not unmarshal JSON: %w", err)
+		return nil, fmt.Errorf("%w: %w", errInvalidGenesisJSON, err)
 	}
 
 	config, err := unparsedConfig.Parse()
