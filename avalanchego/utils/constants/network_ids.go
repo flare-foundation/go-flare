@@ -1,14 +1,16 @@
-// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package constants
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils/set"
 )
 
 // Const variables to be exported
@@ -22,7 +24,6 @@ const (
 	LocalID      uint32 = 12345
 	FlareID      uint32 = 14
 	CostwoID     uint32 = 114
-	StagingID    uint32 = 161
 	LocalFlareID uint32 = 162
 	SongbirdID   uint32 = 5
 	CostonID     uint32 = 7
@@ -35,7 +36,6 @@ const (
 	LocalName      = "local"
 	FlareName      = "flare"
 	CostwoName     = "costwo"
-	StagingName    = "staging"
 	LocalFlareName = "localflare"
 	SongbirdName   = "songbird"
 	CostonName     = "coston"
@@ -49,7 +49,6 @@ const (
 	FallbackHRP   = "custom"
 	FlareHRP      = "flare"
 	CostwoHRP     = "costwo"
-	StagingHRP    = "staging"
 	LocalFlareHRP = "localflare"
 	SongbirdHRP   = "songbird"
 	CostonHRP     = "coston"
@@ -69,7 +68,6 @@ var (
 		LocalID:      LocalName,
 		FlareID:      FlareName,
 		CostwoID:     CostwoName,
-		StagingID:    StagingName,
 		LocalFlareID: LocalFlareName,
 		SongbirdID:   SongbirdName,
 		CostonID:     CostonName,
@@ -83,7 +81,6 @@ var (
 		LocalName:      LocalID,
 		FlareName:      FlareID,
 		CostwoName:     CostwoID,
-		StagingName:    StagingID,
 		LocalFlareName: LocalFlareID,
 		SongbirdName:   SongbirdID,
 		CostonName:     CostonID,
@@ -98,7 +95,6 @@ var (
 		LocalID:      LocalHRP,
 		FlareID:      FlareHRP,
 		CostwoID:     CostwoHRP,
-		StagingID:    StagingHRP,
 		LocalFlareID: LocalFlareHRP,
 		SongbirdID:   SongbirdHRP,
 		CostonID:     CostonHRP,
@@ -112,13 +108,15 @@ var (
 		LocalHRP:      LocalID,
 		FlareHRP:      FlareID,
 		CostwoHRP:     CostwoID,
-		StagingHRP:    StagingID,
 		LocalFlareHRP: LocalFlareID,
 		SongbirdHRP:   SongbirdID,
 		CostonHRP:     CostonID,
 	}
+	ProductionNetworkIDs = set.Of(FlareID, SongbirdID, CostwoID, CostonID)
 
 	ValidNetworkPrefix = "network-"
+
+	ErrParseNetworkName = errors.New("failed to parse network name")
 )
 
 // GetHRP returns the Human-Readable-Part of bech32 addresses for a networkID
@@ -151,13 +149,13 @@ func NetworkID(networkName string) (uint32, error) {
 	}
 	id, err := strconv.ParseUint(idStr, 10, 32)
 	if err != nil {
-		return 0, fmt.Errorf("failed to parse %q as a network name", networkName)
+		return 0, fmt.Errorf("%w: %q", ErrParseNetworkName, networkName)
 	}
 	return uint32(id), nil
 }
 
 func IsFlareNetworkID(networkID uint32) bool {
-	return networkID == FlareID || networkID == CostwoID || networkID == StagingID || networkID == LocalFlareID
+	return networkID == FlareID || networkID == CostwoID || networkID == LocalFlareID
 }
 
 func IsSgbNetworkID(networkID uint32) bool {

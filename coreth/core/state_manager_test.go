@@ -18,10 +18,11 @@ type MockTrieDB struct {
 	LastCommit      common.Hash
 }
 
-func (t *MockTrieDB) Dereference(root common.Hash) {
+func (t *MockTrieDB) Dereference(root common.Hash) error {
 	t.LastDereference = root
+	return nil
 }
-func (t *MockTrieDB) Commit(root common.Hash, report bool, callback func(common.Hash)) error {
+func (t *MockTrieDB) Commit(root common.Hash, report bool) error {
 	t.LastCommit = root
 	return nil
 }
@@ -44,7 +45,7 @@ func TestCappedMemoryTrieWriter(t *testing.T) {
 				Root:   common.BigToHash(bigI),
 				Number: bigI,
 			},
-			nil, nil, nil, nil, nil, true,
+			nil, nil, nil, nil,
 		)
 
 		assert.NoError(w.InsertTrie(block))
@@ -83,7 +84,7 @@ func TestNoPruningTrieWriter(t *testing.T) {
 				Root:   common.BigToHash(bigI),
 				Number: bigI,
 			},
-			nil, nil, nil, nil, nil, true,
+			nil, nil, nil, nil,
 		)
 
 		assert.NoError(w.InsertTrie(block))

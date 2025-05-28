@@ -17,6 +17,7 @@ import (
 	"github.com/ava-labs/avalanchego/chains/atomic"
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow"
+	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
 	"github.com/ava-labs/avalanchego/utils/hashing"
@@ -124,7 +125,7 @@ func (utx *UnsignedExportTx) Verify(
 	if !avax.IsSortedTransferableOutputs(utx.ExportedOutputs, Codec) {
 		return errOutputsNotSorted
 	}
-	if rules.IsApricotPhase1 && !IsSortedAndUniqueEVMInputs(utx.Ins) {
+	if rules.IsApricotPhase1 && !utils.IsSortedAndUnique(utx.Ins) {
 		return errInputsNotSortedUnique
 	}
 
@@ -200,7 +201,7 @@ func (utx *UnsignedExportTx) SemanticVerify(
 		if err != nil {
 			return err
 		}
-		txFee, err := calculateDynamicFee(gasUsed, baseFee)
+		txFee, err := CalculateDynamicFee(gasUsed, baseFee)
 		if err != nil {
 			return err
 		}
@@ -241,25 +242,25 @@ func (utx *UnsignedExportTx) SemanticVerify(
 		}
 
 		sig := cred.Sigs[0][:]
-
-		// Verify the address recovered from the signature of the transaction hash without a prefix
-		// (Standard Avalanche approach, but unsupported/deprecated by most signing tools)
-		recoveredAddress, err := recoverAddress(vm, txHash, sig)
+		pubKey, err := vm.secpCache.RecoverPublicKeyFromHash(txHash, sig)
 		if err != nil {
 			return err
 		}
-		if input.Address == recoveredAddress {
+
+		// Verify the address recovered from the signature of the transaction hash without a prefix
+		// (Standard Avalanche approach, but unsupported/deprecated by most signing tools)
+		if input.Address == PublicKeyToEthAddress(pubKey) {
 			continue
 		}
 
 		// Verify the address recovered from the signature of the transaction hash with the
 		// standard Ethereum prefix (see accounts.TextHash)
 		if rules.IsBanff {
-			recoveredAddress, err = recoverAddress(vm, txHashEth, sig)
+			pubKey, err := vm.secpCache.RecoverPublicKeyFromHash(txHashEth, sig)
 			if err != nil {
 				return err
 			}
-			if input.Address == recoveredAddress {
+			if input.Address == PublicKeyToEthAddress(pubKey) {
 				continue
 			}
 		}
@@ -427,13 +428,4 @@ func (utx *UnsignedExportTx) EVMStateTransfer(ctx *snow.Context, state *state.St
 		state.SetNonce(addr, nonce+1)
 	}
 	return nil
-}
-
-// Recover the address from the signature of the transaction hash
-func recoverAddress(vm *VM, txHash []byte, sig []byte) (common.Address, error) {
-	pubKey, err := vm.secpFactory.RecoverHashPublicKey(txHash, sig)
-	if err != nil {
-		return common.Address{}, err
-	}
-	return PublicKeyToEthAddress(pubKey), nil
 }

@@ -8,25 +8,16 @@ import (
 	"time"
 
 	"github.com/ava-labs/avalanchego/utils/timer"
+	"github.com/ava-labs/coreth/core"
+	"github.com/ava-labs/coreth/core/txpool"
 	"github.com/ava-labs/coreth/params"
 
 	"github.com/ava-labs/avalanchego/snow"
 	commonEng "github.com/ava-labs/avalanchego/snow/engine/common"
-	"github.com/ava-labs/coreth/core"
 	"github.com/ethereum/go-ethereum/log"
 )
 
 const (
-	// waitBlockTime is the amount of time to wait for BuildBlock to be
-	// called by the engine before deciding whether or not to gossip the
-	// transaction that triggered the PendingTxs message to the engine.
-	//
-	// This is done to reduce contention in the network when there is no
-	// preferred producer. If we did not wait here, we may gossip a new
-	// transaction to a peer while building a block that will conflict with
-	// whatever the peer makes.
-	waitBlockTime = 100 * time.Millisecond
-
 	// Minimum amount of time to wait after building a block before attempting to build a block
 	// a second time without changing the contents of the mempool.
 	minBlockBuildingRetryDelay = 500 * time.Millisecond
@@ -36,7 +27,7 @@ type blockBuilder struct {
 	ctx         *snow.Context
 	chainConfig *params.ChainConfig
 
-	txPool   *core.TxPool
+	txPool   *txpool.TxPool
 	mempool  *Mempool
 	gossiper Gossiper
 
@@ -111,7 +102,7 @@ func (b *blockBuilder) handleGenerateBlock() {
 // needToBuild returns true if there are outstanding transactions to be issued
 // into a block.
 func (b *blockBuilder) needToBuild() bool {
-	size := b.txPool.PendingSize()
+	size := b.txPool.PendingSize(true)
 	return size > 0 || b.mempool.Len() > 0
 }
 
@@ -168,9 +159,6 @@ func (b *blockBuilder) awaitSubmittedTxs() {
 				b.signalTxsReady()
 
 				if b.gossiper != nil && len(ethTxsEvent.Txs) > 0 {
-					// Give time for this node to build a block before attempting to
-					// gossip
-					time.Sleep(waitBlockTime)
 					// [GossipEthTxs] will block unless [gossiper.ethTxsToGossipChan] (an
 					// unbuffered channel) is listened on
 					if err := b.gossiper.GossipEthTxs(ethTxsEvent.Txs); err != nil {
@@ -186,9 +174,6 @@ func (b *blockBuilder) awaitSubmittedTxs() {
 
 				newTxs := b.mempool.GetNewTxs()
 				if b.gossiper != nil && len(newTxs) > 0 {
-					// Give time for this node to build a block before attempting to
-					// gossip
-					time.Sleep(waitBlockTime)
 					if err := b.gossiper.GossipAtomicTxs(newTxs); err != nil {
 						log.Warn(
 							"failed to gossip new atomic transactions",

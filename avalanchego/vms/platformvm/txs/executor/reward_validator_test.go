@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package executor
@@ -11,6 +11,7 @@ import (
 
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/snow/snowtest"
 	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
 	"github.com/ava-labs/avalanchego/utils/math"
@@ -23,12 +24,18 @@ import (
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 )
 
+func newRewardValidatorTx(t testing.TB, txID ids.ID) (*txs.Tx, error) {
+	utx := &txs.RewardValidatorTx{TxID: txID}
+	tx, err := txs.NewSigned(utx, txs.Codec, nil)
+	if err != nil {
+		return nil, err
+	}
+	return tx, tx.SyntacticVerify(snowtest.Context(t, snowtest.PChainID))
+}
+
 func TestRewardValidatorTxExecuteOnCommit(t *testing.T) {
 	require := require.New(t)
-	env := newEnvironment(false /*=postBanff*/, false /*=postCortina*/)
-	defer func() {
-		require.NoError(shutdownEnvironment(env))
-	}()
+	env := newEnvironment(t, apricotPhase5)
 	dummyHeight := uint64(1)
 
 	currentStakerIterator, err := env.state.GetCurrentStakerIterator()
@@ -43,7 +50,7 @@ func TestRewardValidatorTxExecuteOnCommit(t *testing.T) {
 	stakerToRemoveTx := stakerToRemoveTxIntf.Unsigned.(*txs.AddValidatorTx)
 
 	// Case 1: Chain timestamp is wrong
-	tx, err := env.txBuilder.NewRewardValidatorTx(stakerToRemove.TxID)
+	tx, err := newRewardValidatorTx(t, stakerToRemove.TxID)
 	require.NoError(err)
 
 	onCommitState, err := state.NewDiff(lastAcceptedID, env)
@@ -58,13 +65,14 @@ func TestRewardValidatorTxExecuteOnCommit(t *testing.T) {
 		Backend:       &env.backend,
 		Tx:            tx,
 	}
-	require.Error(tx.Unsigned.Visit(&txExecutor))
+	err = tx.Unsigned.Visit(&txExecutor)
+	require.ErrorIs(err, ErrRemoveStakerTooEarly)
 
 	// Advance chain timestamp to time that next validator leaves
 	env.state.SetTimestamp(stakerToRemove.EndTime)
 
 	// Case 2: Wrong validator
-	tx, err = env.txBuilder.NewRewardValidatorTx(ids.GenerateTestID())
+	tx, err = newRewardValidatorTx(t, ids.GenerateTestID())
 	require.NoError(err)
 
 	onCommitState, err = state.NewDiff(lastAcceptedID, env)
@@ -79,10 +87,11 @@ func TestRewardValidatorTxExecuteOnCommit(t *testing.T) {
 		Backend:       &env.backend,
 		Tx:            tx,
 	}
-	require.Error(tx.Unsigned.Visit(&txExecutor))
+	err = tx.Unsigned.Visit(&txExecutor)
+	require.ErrorIs(err, ErrRemoveWrongStaker)
 
 	// Case 3: Happy path
-	tx, err = env.txBuilder.NewRewardValidatorTx(stakerToRemove.TxID)
+	tx, err = newRewardValidatorTx(t, stakerToRemove.TxID)
 	require.NoError(err)
 
 	onCommitState, err = state.NewDiff(lastAcceptedID, env)
@@ -126,10 +135,7 @@ func TestRewardValidatorTxExecuteOnCommit(t *testing.T) {
 
 func TestRewardValidatorTxExecuteOnAbort(t *testing.T) {
 	require := require.New(t)
-	env := newEnvironment(false /*=postBanff*/, false /*=postCortina*/)
-	defer func() {
-		require.NoError(shutdownEnvironment(env))
-	}()
+	env := newEnvironment(t, apricotPhase5)
 	dummyHeight := uint64(1)
 
 	currentStakerIterator, err := env.state.GetCurrentStakerIterator()
@@ -144,7 +150,7 @@ func TestRewardValidatorTxExecuteOnAbort(t *testing.T) {
 	stakerToRemoveTx := stakerToRemoveTxIntf.Unsigned.(*txs.AddValidatorTx)
 
 	// Case 1: Chain timestamp is wrong
-	tx, err := env.txBuilder.NewRewardValidatorTx(stakerToRemove.TxID)
+	tx, err := newRewardValidatorTx(t, stakerToRemove.TxID)
 	require.NoError(err)
 
 	onCommitState, err := state.NewDiff(lastAcceptedID, env)
@@ -159,13 +165,14 @@ func TestRewardValidatorTxExecuteOnAbort(t *testing.T) {
 		Backend:       &env.backend,
 		Tx:            tx,
 	}
-	require.Error(tx.Unsigned.Visit(&txExecutor))
+	err = tx.Unsigned.Visit(&txExecutor)
+	require.ErrorIs(err, ErrRemoveStakerTooEarly)
 
 	// Advance chain timestamp to time that next validator leaves
 	env.state.SetTimestamp(stakerToRemove.EndTime)
 
 	// Case 2: Wrong validator
-	tx, err = env.txBuilder.NewRewardValidatorTx(ids.GenerateTestID())
+	tx, err = newRewardValidatorTx(t, ids.GenerateTestID())
 	require.NoError(err)
 
 	txExecutor = ProposalTxExecutor{
@@ -174,10 +181,11 @@ func TestRewardValidatorTxExecuteOnAbort(t *testing.T) {
 		Backend:       &env.backend,
 		Tx:            tx,
 	}
-	require.Error(tx.Unsigned.Visit(&txExecutor))
+	err = tx.Unsigned.Visit(&txExecutor)
+	require.ErrorIs(err, ErrRemoveWrongStaker)
 
 	// Case 3: Happy path
-	tx, err = env.txBuilder.NewRewardValidatorTx(stakerToRemove.TxID)
+	tx, err = newRewardValidatorTx(t, stakerToRemove.TxID)
 	require.NoError(err)
 
 	onCommitState, err = state.NewDiff(lastAcceptedID, env)
@@ -221,10 +229,7 @@ func TestRewardValidatorTxExecuteOnAbort(t *testing.T) {
 
 func TestRewardDelegatorTxExecuteOnCommitPreDelegateeDeferral(t *testing.T) {
 	require := require.New(t)
-	env := newEnvironment(false /*=postBanff*/, false /*=postCortina*/)
-	defer func() {
-		require.NoError(shutdownEnvironment(env))
-	}()
+	env := newEnvironment(t, apricotPhase5)
 	dummyHeight := uint64(1)
 
 	vdrRewardAddress := ids.GenerateTestShortID()
@@ -243,6 +248,7 @@ func TestRewardDelegatorTxExecuteOnCommitPreDelegateeDeferral(t *testing.T) {
 		reward.PercentDenominator/4,
 		[]*secp256k1.PrivateKey{preFundedKeys[0]},
 		ids.ShortEmpty,
+		nil,
 	)
 	require.NoError(err)
 
@@ -257,19 +263,24 @@ func TestRewardDelegatorTxExecuteOnCommitPreDelegateeDeferral(t *testing.T) {
 		delRewardAddress,
 		[]*secp256k1.PrivateKey{preFundedKeys[0]},
 		ids.ShortEmpty, // Change address
+		nil,
 	)
 	require.NoError(err)
 
+	addValTx := vdrTx.Unsigned.(*txs.AddValidatorTx)
 	vdrStaker, err := state.NewCurrentStaker(
 		vdrTx.ID(),
-		vdrTx.Unsigned.(*txs.AddValidatorTx),
+		addValTx,
+		addValTx.StartTime(),
 		0,
 	)
 	require.NoError(err)
 
+	addDelTx := delTx.Unsigned.(*txs.AddDelegatorTx)
 	delStaker, err := state.NewCurrentStaker(
 		delTx.ID(),
-		delTx.Unsigned.(*txs.AddDelegatorTx),
+		addDelTx,
+		addDelTx.StartTime(),
 		1000000,
 	)
 	require.NoError(err)
@@ -283,13 +294,10 @@ func TestRewardDelegatorTxExecuteOnCommitPreDelegateeDeferral(t *testing.T) {
 	require.NoError(env.state.Commit())
 
 	// test validator stake
-	vdrSet, ok := env.config.Validators.Get(constants.PrimaryNetworkID)
-	require.True(ok)
-
-	stake := vdrSet.GetWeight(vdrNodeID)
+	stake := env.config.Validators.GetWeight(constants.PrimaryNetworkID, vdrNodeID)
 	require.Equal(env.config.MinValidatorStake+env.config.MinDelegatorStake, stake)
 
-	tx, err := env.txBuilder.NewRewardValidatorTx(delTx.ID())
+	tx, err := newRewardValidatorTx(t, delTx.ID())
 	require.NoError(err)
 
 	onCommitState, err := state.NewDiff(lastAcceptedID, env)
@@ -304,13 +312,10 @@ func TestRewardDelegatorTxExecuteOnCommitPreDelegateeDeferral(t *testing.T) {
 		Backend:       &env.backend,
 		Tx:            tx,
 	}
-	err = tx.Unsigned.Visit(&txExecutor)
-	require.NoError(err)
+	require.NoError(tx.Unsigned.Visit(&txExecutor))
 
-	vdrDestSet := set.Set[ids.ShortID]{}
-	vdrDestSet.Add(vdrRewardAddress)
-	delDestSet := set.Set[ids.ShortID]{}
-	delDestSet.Add(delRewardAddress)
+	vdrDestSet := set.Of(vdrRewardAddress)
+	delDestSet := set.Of(delRewardAddress)
 
 	expectedReward := uint64(1000000)
 
@@ -341,15 +346,13 @@ func TestRewardDelegatorTxExecuteOnCommitPreDelegateeDeferral(t *testing.T) {
 	require.Less(vdrReward, delReward, "the delegator's reward should be greater than the delegatee's because the delegatee's share is 25%")
 	require.Equal(expectedReward, delReward+vdrReward, "expected total reward to be %d but is %d", expectedReward, delReward+vdrReward)
 
-	require.Equal(env.config.MinValidatorStake, vdrSet.GetWeight(vdrNodeID))
+	stake = env.config.Validators.GetWeight(constants.PrimaryNetworkID, vdrNodeID)
+	require.Equal(env.config.MinValidatorStake, stake)
 }
 
 func TestRewardDelegatorTxExecuteOnCommitPostDelegateeDeferral(t *testing.T) {
 	require := require.New(t)
-	env := newEnvironment(true /*=postBanff*/, true /*=postCortina*/)
-	defer func() {
-		require.NoError(shutdownEnvironment(env))
-	}()
+	env := newEnvironment(t, cortina)
 	dummyHeight := uint64(1)
 
 	vdrRewardAddress := ids.GenerateTestShortID()
@@ -368,6 +371,7 @@ func TestRewardDelegatorTxExecuteOnCommitPostDelegateeDeferral(t *testing.T) {
 		reward.PercentDenominator/4,
 		[]*secp256k1.PrivateKey{preFundedKeys[0]},
 		ids.ShortEmpty, /*=changeAddr*/
+		nil,
 	)
 	require.NoError(err)
 
@@ -382,21 +386,26 @@ func TestRewardDelegatorTxExecuteOnCommitPostDelegateeDeferral(t *testing.T) {
 		delRewardAddress,
 		[]*secp256k1.PrivateKey{preFundedKeys[0]},
 		ids.ShortEmpty, /*=changeAddr*/
+		nil,
 	)
 	require.NoError(err)
 
+	addValTx := vdrTx.Unsigned.(*txs.AddValidatorTx)
 	vdrRewardAmt := uint64(2000000)
 	vdrStaker, err := state.NewCurrentStaker(
 		vdrTx.ID(),
-		vdrTx.Unsigned.(*txs.AddValidatorTx),
+		addValTx,
+		time.Unix(int64(vdrStartTime), 0),
 		vdrRewardAmt,
 	)
 	require.NoError(err)
 
+	addDelTx := delTx.Unsigned.(*txs.AddDelegatorTx)
 	delRewardAmt := uint64(1000000)
 	delStaker, err := state.NewCurrentStaker(
 		delTx.ID(),
-		delTx.Unsigned.(*txs.AddDelegatorTx),
+		addDelTx,
+		time.Unix(int64(delStartTime), 0),
 		delRewardAmt,
 	)
 	require.NoError(err)
@@ -409,10 +418,8 @@ func TestRewardDelegatorTxExecuteOnCommitPostDelegateeDeferral(t *testing.T) {
 	env.state.SetHeight(dummyHeight)
 	require.NoError(env.state.Commit())
 
-	vdrDestSet := set.Set[ids.ShortID]{}
-	vdrDestSet.Add(vdrRewardAddress)
-	delDestSet := set.Set[ids.ShortID]{}
-	delDestSet.Add(delRewardAddress)
+	vdrDestSet := set.Of(vdrRewardAddress)
+	delDestSet := set.Of(delRewardAddress)
 
 	oldVdrBalance, err := avax.GetBalance(env.state, vdrDestSet)
 	require.NoError(err)
@@ -420,13 +427,10 @@ func TestRewardDelegatorTxExecuteOnCommitPostDelegateeDeferral(t *testing.T) {
 	require.NoError(err)
 
 	// test validator stake
-	vdrSet, ok := env.config.Validators.Get(constants.PrimaryNetworkID)
-	require.True(ok)
-
-	stake := vdrSet.GetWeight(vdrNodeID)
+	stake := env.config.Validators.GetWeight(constants.PrimaryNetworkID, vdrNodeID)
 	require.Equal(env.config.MinValidatorStake+env.config.MinDelegatorStake, stake)
 
-	tx, err := env.txBuilder.NewRewardValidatorTx(delTx.ID())
+	tx, err := newRewardValidatorTx(t, delTx.ID())
 	require.NoError(err)
 
 	// Create Delegator Diff
@@ -442,8 +446,7 @@ func TestRewardDelegatorTxExecuteOnCommitPostDelegateeDeferral(t *testing.T) {
 		Backend:       &env.backend,
 		Tx:            tx,
 	}
-	err = tx.Unsigned.Visit(&txExecutor)
-	require.NoError(err)
+	require.NoError(tx.Unsigned.Visit(&txExecutor))
 
 	// The delegator should be rewarded if the ProposalTx is committed. Since the
 	// delegatee's share is 25%, we expect the delegator to receive 75% of the reward.
@@ -457,8 +460,8 @@ func TestRewardDelegatorTxExecuteOnCommitPostDelegateeDeferral(t *testing.T) {
 
 	utxo, err := onCommitState.GetUTXO(delRewardUTXOID.InputID())
 	require.NoError(err)
-	castUTXO, ok := utxo.Out.(*secp256k1fx.TransferOutput)
-	require.True(ok)
+	require.IsType(&secp256k1fx.TransferOutput{}, utxo.Out)
+	castUTXO := utxo.Out.(*secp256k1fx.TransferOutput)
 	require.Equal(delRewardAmt*3/4, castUTXO.Amt, "expected delegator balance to increase by 3/4 of reward amount")
 	require.True(delDestSet.Equals(castUTXO.AddressesSet()), "expected reward UTXO to be issued to delDestSet")
 
@@ -475,7 +478,7 @@ func TestRewardDelegatorTxExecuteOnCommitPostDelegateeDeferral(t *testing.T) {
 	env.state.SetHeight(dummyHeight)
 	require.NoError(env.state.Commit())
 
-	tx, err = env.txBuilder.NewRewardValidatorTx(vdrStaker.TxID)
+	tx, err = newRewardValidatorTx(t, vdrStaker.TxID)
 	require.NoError(err)
 
 	// Create Validator Diff
@@ -505,8 +508,8 @@ func TestRewardDelegatorTxExecuteOnCommitPostDelegateeDeferral(t *testing.T) {
 
 	utxo, err = onCommitState.GetUTXO(vdrRewardUTXOID.InputID())
 	require.NoError(err)
-	castUTXO, ok = utxo.Out.(*secp256k1fx.TransferOutput)
-	require.True(ok)
+	require.IsType(&secp256k1fx.TransferOutput{}, utxo.Out)
+	castUTXO = utxo.Out.(*secp256k1fx.TransferOutput)
 	require.Equal(vdrRewardAmt, castUTXO.Amt, "expected validator to be rewarded")
 	require.True(vdrDestSet.Equals(castUTXO.AddressesSet()), "expected reward UTXO to be issued to vdrDestSet")
 
@@ -518,8 +521,8 @@ func TestRewardDelegatorTxExecuteOnCommitPostDelegateeDeferral(t *testing.T) {
 
 	utxo, err = onCommitState.GetUTXO(onCommitVdrDelRewardUTXOID.InputID())
 	require.NoError(err)
-	castUTXO, ok = utxo.Out.(*secp256k1fx.TransferOutput)
-	require.True(ok)
+	require.IsType(&secp256k1fx.TransferOutput{}, utxo.Out)
+	castUTXO = utxo.Out.(*secp256k1fx.TransferOutput)
 	require.Equal(delRewardAmt/4, castUTXO.Amt, "expected validator to be rewarded with accrued delegator rewards")
 	require.True(vdrDestSet.Equals(castUTXO.AddressesSet()), "expected reward UTXO to be issued to vdrDestSet")
 
@@ -531,8 +534,8 @@ func TestRewardDelegatorTxExecuteOnCommitPostDelegateeDeferral(t *testing.T) {
 
 	utxo, err = onAbortState.GetUTXO(onAbortVdrDelRewardUTXOID.InputID())
 	require.NoError(err)
-	castUTXO, ok = utxo.Out.(*secp256k1fx.TransferOutput)
-	require.True(ok)
+	require.IsType(&secp256k1fx.TransferOutput{}, utxo.Out)
+	castUTXO = utxo.Out.(*secp256k1fx.TransferOutput)
 	require.Equal(delRewardAmt/4, castUTXO.Amt, "expected validator to be rewarded with accrued delegator rewards")
 	require.True(vdrDestSet.Equals(castUTXO.AddressesSet()), "expected reward UTXO to be issued to vdrDestSet")
 
@@ -567,10 +570,7 @@ func TestRewardDelegatorTxExecuteOnCommitPostDelegateeDeferral(t *testing.T) {
 
 func TestRewardDelegatorTxAndValidatorTxExecuteOnCommitPostDelegateeDeferral(t *testing.T) {
 	require := require.New(t)
-	env := newEnvironment(true /*=postBanff*/, true /*=postCortina*/)
-	defer func() {
-		require.NoError(shutdownEnvironment(env))
-	}()
+	env := newEnvironment(t, cortina)
 	dummyHeight := uint64(1)
 
 	vdrRewardAddress := ids.GenerateTestShortID()
@@ -589,6 +589,7 @@ func TestRewardDelegatorTxAndValidatorTxExecuteOnCommitPostDelegateeDeferral(t *
 		reward.PercentDenominator/4,
 		[]*secp256k1.PrivateKey{preFundedKeys[0]},
 		ids.ShortEmpty,
+		nil,
 	)
 	require.NoError(err)
 
@@ -603,21 +604,26 @@ func TestRewardDelegatorTxAndValidatorTxExecuteOnCommitPostDelegateeDeferral(t *
 		delRewardAddress,
 		[]*secp256k1.PrivateKey{preFundedKeys[0]},
 		ids.ShortEmpty, // Change address
+		nil,
 	)
 	require.NoError(err)
 
+	addValTx := vdrTx.Unsigned.(*txs.AddValidatorTx)
 	vdrRewardAmt := uint64(2000000)
 	vdrStaker, err := state.NewCurrentStaker(
 		vdrTx.ID(),
-		vdrTx.Unsigned.(*txs.AddValidatorTx),
+		addValTx,
+		addValTx.StartTime(),
 		vdrRewardAmt,
 	)
 	require.NoError(err)
 
+	addDelTx := delTx.Unsigned.(*txs.AddDelegatorTx)
 	delRewardAmt := uint64(1000000)
 	delStaker, err := state.NewCurrentStaker(
 		delTx.ID(),
-		delTx.Unsigned.(*txs.AddDelegatorTx),
+		addDelTx,
+		time.Unix(int64(delStartTime), 0),
 		delRewardAmt,
 	)
 	require.NoError(err)
@@ -630,17 +636,15 @@ func TestRewardDelegatorTxAndValidatorTxExecuteOnCommitPostDelegateeDeferral(t *
 	env.state.SetHeight(dummyHeight)
 	require.NoError(env.state.Commit())
 
-	vdrDestSet := set.Set[ids.ShortID]{}
-	vdrDestSet.Add(vdrRewardAddress)
-	delDestSet := set.Set[ids.ShortID]{}
-	delDestSet.Add(delRewardAddress)
+	vdrDestSet := set.Of(vdrRewardAddress)
+	delDestSet := set.Of(delRewardAddress)
 
 	oldVdrBalance, err := avax.GetBalance(env.state, vdrDestSet)
 	require.NoError(err)
 	oldDelBalance, err := avax.GetBalance(env.state, delDestSet)
 	require.NoError(err)
 
-	tx, err := env.txBuilder.NewRewardValidatorTx(delTx.ID())
+	tx, err := newRewardValidatorTx(t, delTx.ID())
 	require.NoError(err)
 
 	// Create Delegator Diffs
@@ -668,7 +672,7 @@ func TestRewardDelegatorTxAndValidatorTxExecuteOnCommitPostDelegateeDeferral(t *
 	vdrOnAbortState, err := state.NewDiff(testID, env)
 	require.NoError(err)
 
-	tx, err = env.txBuilder.NewRewardValidatorTx(vdrTx.ID())
+	tx, err = newRewardValidatorTx(t, vdrTx.ID())
 	require.NoError(err)
 
 	txExecutor = ProposalTxExecutor{
@@ -688,8 +692,8 @@ func TestRewardDelegatorTxAndValidatorTxExecuteOnCommitPostDelegateeDeferral(t *
 
 	utxo, err := vdrOnAbortState.GetUTXO(onAbortVdrDelRewardUTXOID.InputID())
 	require.NoError(err)
-	castUTXO, ok := utxo.Out.(*secp256k1fx.TransferOutput)
-	require.True(ok)
+	require.IsType(&secp256k1fx.TransferOutput{}, utxo.Out)
+	castUTXO := utxo.Out.(*secp256k1fx.TransferOutput)
 	require.Equal(delRewardAmt/4, castUTXO.Amt, "expected validator to be rewarded with accrued delegator rewards")
 	require.True(vdrDestSet.Equals(castUTXO.AddressesSet()), "expected reward UTXO to be issued to vdrDestSet")
 
@@ -727,10 +731,7 @@ func TestRewardDelegatorTxAndValidatorTxExecuteOnCommitPostDelegateeDeferral(t *
 
 func TestRewardDelegatorTxExecuteOnAbort(t *testing.T) {
 	require := require.New(t)
-	env := newEnvironment(false /*=postBanff*/, false /*=postCortina*/)
-	defer func() {
-		require.NoError(shutdownEnvironment(env))
-	}()
+	env := newEnvironment(t, apricotPhase5)
 	dummyHeight := uint64(1)
 
 	initialSupply, err := env.state.GetCurrentSupply(constants.PrimaryNetworkID)
@@ -752,6 +753,7 @@ func TestRewardDelegatorTxExecuteOnAbort(t *testing.T) {
 		reward.PercentDenominator/4,
 		[]*secp256k1.PrivateKey{preFundedKeys[0]},
 		ids.ShortEmpty,
+		nil,
 	)
 	require.NoError(err)
 
@@ -765,19 +767,24 @@ func TestRewardDelegatorTxExecuteOnAbort(t *testing.T) {
 		delRewardAddress,
 		[]*secp256k1.PrivateKey{preFundedKeys[0]},
 		ids.ShortEmpty,
+		nil,
 	)
 	require.NoError(err)
 
+	addValTx := vdrTx.Unsigned.(*txs.AddValidatorTx)
 	vdrStaker, err := state.NewCurrentStaker(
 		vdrTx.ID(),
-		vdrTx.Unsigned.(*txs.AddValidatorTx),
+		addValTx,
+		addValTx.StartTime(),
 		0,
 	)
 	require.NoError(err)
 
+	addDelTx := delTx.Unsigned.(*txs.AddDelegatorTx)
 	delStaker, err := state.NewCurrentStaker(
 		delTx.ID(),
-		delTx.Unsigned.(*txs.AddDelegatorTx),
+		addDelTx,
+		addDelTx.StartTime(),
 		1000000,
 	)
 	require.NoError(err)
@@ -790,7 +797,7 @@ func TestRewardDelegatorTxExecuteOnAbort(t *testing.T) {
 	env.state.SetHeight(dummyHeight)
 	require.NoError(env.state.Commit())
 
-	tx, err := env.txBuilder.NewRewardValidatorTx(delTx.ID())
+	tx, err := newRewardValidatorTx(t, delTx.ID())
 	require.NoError(err)
 
 	onCommitState, err := state.NewDiff(lastAcceptedID, env)
@@ -805,13 +812,10 @@ func TestRewardDelegatorTxExecuteOnAbort(t *testing.T) {
 		Backend:       &env.backend,
 		Tx:            tx,
 	}
-	err = tx.Unsigned.Visit(&txExecutor)
-	require.NoError(err)
+	require.NoError(tx.Unsigned.Visit(&txExecutor))
 
-	vdrDestSet := set.Set[ids.ShortID]{}
-	vdrDestSet.Add(vdrRewardAddress)
-	delDestSet := set.Set[ids.ShortID]{}
-	delDestSet.Add(delRewardAddress)
+	vdrDestSet := set.Of(vdrRewardAddress)
+	delDestSet := set.Of(delRewardAddress)
 
 	expectedReward := uint64(1000000)
 

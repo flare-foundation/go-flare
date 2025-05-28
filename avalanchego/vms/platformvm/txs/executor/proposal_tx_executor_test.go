@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package executor
@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
 	"github.com/ava-labs/avalanchego/utils/hashing"
@@ -24,7 +25,7 @@ import (
 func TestProposalTxExecuteAddDelegator(t *testing.T) {
 	dummyHeight := uint64(1)
 	rewardAddress := preFundedKeys[0].PublicKey().Address()
-	nodeID := ids.NodeID(rewardAddress)
+	nodeID := genesisNodeIDs[0]
 
 	newValidatorID := ids.GenerateTestNodeID()
 	newValidatorStartTime := uint64(defaultValidateStartTime.Add(5 * time.Second).Unix())
@@ -42,12 +43,15 @@ func TestProposalTxExecuteAddDelegator(t *testing.T) {
 			reward.PercentDenominator,       // Shares
 			[]*secp256k1.PrivateKey{preFundedKeys[0]},
 			ids.ShortEmpty,
+			nil,
 		)
 		require.NoError(t, err)
 
+		addValTx := tx.Unsigned.(*txs.AddValidatorTx)
 		staker, err := state.NewCurrentStaker(
 			tx.ID(),
-			tx.Unsigned.(*txs.AddValidatorTx),
+			addValTx,
+			addValTx.StartTime(),
 			0,
 		)
 		require.NoError(t, err)
@@ -55,8 +59,7 @@ func TestProposalTxExecuteAddDelegator(t *testing.T) {
 		target.state.PutCurrentValidator(staker)
 		target.state.AddTx(tx, status.Committed)
 		target.state.SetHeight(dummyHeight)
-		err = target.state.Commit()
-		require.NoError(t, err)
+		require.NoError(t, target.state.Commit())
 	}
 
 	// [addMaxStakeValidator] adds a new validator to the primary network's
@@ -71,12 +74,15 @@ func TestProposalTxExecuteAddDelegator(t *testing.T) {
 			reward.PercentDenominator,       // Shared
 			[]*secp256k1.PrivateKey{preFundedKeys[0]},
 			ids.ShortEmpty,
+			nil,
 		)
 		require.NoError(t, err)
 
+		addValTx := tx.Unsigned.(*txs.AddValidatorTx)
 		staker, err := state.NewCurrentStaker(
 			tx.ID(),
-			tx.Unsigned.(*txs.AddValidatorTx),
+			addValTx,
+			addValTx.StartTime(),
 			0,
 		)
 		require.NoError(t, err)
@@ -84,14 +90,14 @@ func TestProposalTxExecuteAddDelegator(t *testing.T) {
 		target.state.PutCurrentValidator(staker)
 		target.state.AddTx(tx, status.Committed)
 		target.state.SetHeight(dummyHeight)
-		err = target.state.Commit()
-		require.NoError(t, err)
+		require.NoError(t, target.state.Commit())
 	}
 
-	dummyH := newEnvironment(false /*=postBanff*/, false /*=postCortina*/)
+	dummyH := newEnvironment(t, apricotPhase5)
 	currentTimestamp := dummyH.state.GetTimestamp()
 
 	type test struct {
+		description   string
 		stakeAmount   uint64
 		startTime     uint64
 		endTime       uint64
@@ -100,48 +106,36 @@ func TestProposalTxExecuteAddDelegator(t *testing.T) {
 		feeKeys       []*secp256k1.PrivateKey
 		setup         func(*environment)
 		AP3Time       time.Time
-		shouldErr     bool
-		description   string
+		expectedErr   error
 	}
 
 	tests := []test{
 		{
+			description:   "validator stops validating earlier than delegator",
 			stakeAmount:   dummyH.config.MinDelegatorStake,
-			startTime:     uint64(defaultValidateStartTime.Unix()),
+			startTime:     uint64(defaultValidateStartTime.Unix()) + 1,
 			endTime:       uint64(defaultValidateEndTime.Unix()) + 1,
 			nodeID:        nodeID,
 			rewardAddress: rewardAddress,
 			feeKeys:       []*secp256k1.PrivateKey{preFundedKeys[0]},
 			setup:         nil,
 			AP3Time:       defaultGenesisTime,
-			shouldErr:     true,
-			description:   "validator stops validating primary network earlier than subnet",
+			expectedErr:   ErrPeriodMismatch,
 		},
 		{
+			description:   fmt.Sprintf("delegator should not be added more than (%s) in the future", MaxFutureStartTime),
 			stakeAmount:   dummyH.config.MinDelegatorStake,
 			startTime:     uint64(currentTimestamp.Add(MaxFutureStartTime + time.Second).Unix()),
-			endTime:       uint64(currentTimestamp.Add(MaxFutureStartTime * 2).Unix()),
+			endTime:       uint64(currentTimestamp.Add(MaxFutureStartTime + defaultMinStakingDuration + time.Second).Unix()),
 			nodeID:        nodeID,
 			rewardAddress: rewardAddress,
 			feeKeys:       []*secp256k1.PrivateKey{preFundedKeys[0]},
 			setup:         nil,
 			AP3Time:       defaultGenesisTime,
-			shouldErr:     true,
-			description:   fmt.Sprintf("validator should not be added more than (%s) in the future", MaxFutureStartTime),
+			expectedErr:   ErrFutureStakeTime,
 		},
 		{
-			stakeAmount:   dummyH.config.MinDelegatorStake,
-			startTime:     uint64(defaultValidateStartTime.Unix()),
-			endTime:       uint64(defaultValidateEndTime.Unix()) + 1,
-			nodeID:        nodeID,
-			rewardAddress: rewardAddress,
-			feeKeys:       []*secp256k1.PrivateKey{preFundedKeys[0]},
-			setup:         nil,
-			AP3Time:       defaultGenesisTime,
-			shouldErr:     true,
-			description:   "end time is after the primary network end time",
-		},
-		{
+			description:   "validator not in the current or pending validator sets",
 			stakeAmount:   dummyH.config.MinDelegatorStake,
 			startTime:     uint64(defaultValidateStartTime.Add(5 * time.Second).Unix()),
 			endTime:       uint64(defaultValidateEndTime.Add(-5 * time.Second).Unix()),
@@ -150,10 +144,10 @@ func TestProposalTxExecuteAddDelegator(t *testing.T) {
 			feeKeys:       []*secp256k1.PrivateKey{preFundedKeys[0]},
 			setup:         nil,
 			AP3Time:       defaultGenesisTime,
-			shouldErr:     true,
-			description:   "validator not in the current or pending validator sets of the subnet",
+			expectedErr:   database.ErrNotFound,
 		},
 		{
+			description:   "delegator starts before validator",
 			stakeAmount:   dummyH.config.MinDelegatorStake,
 			startTime:     newValidatorStartTime - 1, // start validating subnet before primary network
 			endTime:       newValidatorEndTime,
@@ -162,10 +156,10 @@ func TestProposalTxExecuteAddDelegator(t *testing.T) {
 			feeKeys:       []*secp256k1.PrivateKey{preFundedKeys[0]},
 			setup:         addMinStakeValidator,
 			AP3Time:       defaultGenesisTime,
-			shouldErr:     true,
-			description:   "validator starts validating subnet before primary network",
+			expectedErr:   ErrPeriodMismatch,
 		},
 		{
+			description:   "delegator stops before validator",
 			stakeAmount:   dummyH.config.MinDelegatorStake,
 			startTime:     newValidatorStartTime,
 			endTime:       newValidatorEndTime + 1, // stop validating subnet after stopping validating primary network
@@ -174,10 +168,10 @@ func TestProposalTxExecuteAddDelegator(t *testing.T) {
 			feeKeys:       []*secp256k1.PrivateKey{preFundedKeys[0]},
 			setup:         addMinStakeValidator,
 			AP3Time:       defaultGenesisTime,
-			shouldErr:     true,
-			description:   "validator stops validating primary network before subnet",
+			expectedErr:   ErrPeriodMismatch,
 		},
 		{
+			description:   "valid",
 			stakeAmount:   dummyH.config.MinDelegatorStake,
 			startTime:     newValidatorStartTime, // same start time as for primary network
 			endTime:       newValidatorEndTime,   // same end time as for primary network
@@ -186,10 +180,10 @@ func TestProposalTxExecuteAddDelegator(t *testing.T) {
 			feeKeys:       []*secp256k1.PrivateKey{preFundedKeys[0]},
 			setup:         addMinStakeValidator,
 			AP3Time:       defaultGenesisTime,
-			shouldErr:     false,
-			description:   "valid",
+			expectedErr:   nil,
 		},
 		{
+			description:   "starts delegating at current timestamp",
 			stakeAmount:   dummyH.config.MinDelegatorStake,           // weight
 			startTime:     uint64(currentTimestamp.Unix()),           // start time
 			endTime:       uint64(defaultValidateEndTime.Unix()),     // end time
@@ -198,16 +192,16 @@ func TestProposalTxExecuteAddDelegator(t *testing.T) {
 			feeKeys:       []*secp256k1.PrivateKey{preFundedKeys[0]}, // tx fee payer
 			setup:         nil,
 			AP3Time:       defaultGenesisTime,
-			shouldErr:     true,
-			description:   "starts validating at current timestamp",
+			expectedErr:   ErrTimestampNotBeforeStartTime,
 		},
 		{
-			stakeAmount:   dummyH.config.MinDelegatorStake,           // weight
-			startTime:     uint64(defaultValidateStartTime.Unix()),   // start time
-			endTime:       uint64(defaultValidateEndTime.Unix()),     // end time
-			nodeID:        nodeID,                                    // node ID
-			rewardAddress: rewardAddress,                             // Reward Address
-			feeKeys:       []*secp256k1.PrivateKey{preFundedKeys[1]}, // tx fee payer
+			description:   "tx fee paying key has no funds",
+			stakeAmount:   dummyH.config.MinDelegatorStake,             // weight
+			startTime:     uint64(defaultValidateStartTime.Unix()) + 1, // start time
+			endTime:       uint64(defaultValidateEndTime.Unix()),       // end time
+			nodeID:        nodeID,                                      // node ID
+			rewardAddress: rewardAddress,                               // Reward Address
+			feeKeys:       []*secp256k1.PrivateKey{preFundedKeys[1]},   // tx fee payer
 			setup: func(target *environment) { // Remove all UTXOs owned by keys[1]
 				utxoIDs, err := target.state.UTXOIDs(
 					preFundedKeys[1].PublicKey().Address().Bytes(),
@@ -219,14 +213,13 @@ func TestProposalTxExecuteAddDelegator(t *testing.T) {
 					target.state.DeleteUTXO(utxoID)
 				}
 				target.state.SetHeight(dummyHeight)
-				err = target.state.Commit()
-				require.NoError(t, err)
+				require.NoError(t, target.state.Commit())
 			},
 			AP3Time:     defaultGenesisTime,
-			shouldErr:   true,
-			description: "tx fee paying key has no funds",
+			expectedErr: ErrFlowCheckFailed,
 		},
 		{
+			description:   "over delegation before AP3",
 			stakeAmount:   dummyH.config.MinDelegatorStake,
 			startTime:     newValidatorStartTime, // same start time as for primary network
 			endTime:       newValidatorEndTime,   // same end time as for primary network
@@ -235,10 +228,10 @@ func TestProposalTxExecuteAddDelegator(t *testing.T) {
 			feeKeys:       []*secp256k1.PrivateKey{preFundedKeys[0]},
 			setup:         addMaxStakeValidator,
 			AP3Time:       defaultValidateEndTime,
-			shouldErr:     false,
-			description:   "over delegation before AP3",
+			expectedErr:   nil,
 		},
 		{
+			description:   "over delegation after AP3",
 			stakeAmount:   dummyH.config.MinDelegatorStake,
 			startTime:     newValidatorStartTime, // same start time as for primary network
 			endTime:       newValidatorEndTime,   // same end time as for primary network
@@ -247,19 +240,15 @@ func TestProposalTxExecuteAddDelegator(t *testing.T) {
 			feeKeys:       []*secp256k1.PrivateKey{preFundedKeys[0]},
 			setup:         addMaxStakeValidator,
 			AP3Time:       defaultGenesisTime,
-			shouldErr:     true,
-			description:   "over delegation after AP3",
+			expectedErr:   ErrOverDelegated,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.description, func(t *testing.T) {
 			require := require.New(t)
-			freshTH := newEnvironment(false /*=postBanff*/, false /*=postCortina*/)
+			freshTH := newEnvironment(t, apricotPhase5)
 			freshTH.config.ApricotPhase3Time = tt.AP3Time
-			defer func() {
-				require.NoError(shutdownEnvironment(freshTH))
-			}()
 
 			tx, err := freshTH.txBuilder.NewAddDelegatorTx(
 				tt.stakeAmount,
@@ -269,6 +258,7 @@ func TestProposalTxExecuteAddDelegator(t *testing.T) {
 				tt.rewardAddress,
 				tt.feeKeys,
 				ids.ShortEmpty,
+				nil,
 			)
 			require.NoError(err)
 
@@ -289,37 +279,31 @@ func TestProposalTxExecuteAddDelegator(t *testing.T) {
 				Tx:            tx,
 			}
 			err = tx.Unsigned.Visit(&executor)
-			if tt.shouldErr {
-				require.Error(err)
-			} else {
-				require.NoError(err)
-			}
+			require.ErrorIs(err, tt.expectedErr)
 		})
 	}
 }
 
 func TestProposalTxExecuteAddSubnetValidator(t *testing.T) {
 	require := require.New(t)
-	env := newEnvironment(false /*=postBanff*/, false /*=postCortina*/)
+	env := newEnvironment(t, apricotPhase5)
 	env.ctx.Lock.Lock()
-	defer func() {
-		require.NoError(shutdownEnvironment(env))
-	}()
+	defer env.ctx.Lock.Unlock()
 
-	nodeID := preFundedKeys[0].PublicKey().Address()
-
+	nodeID := genesisNodeIDs[0]
 	{
 		// Case: Proposed validator currently validating primary network
 		// but stops validating subnet after stops validating primary network
 		// (note that keys[0] is a genesis validator)
 		tx, err := env.txBuilder.NewAddSubnetValidatorTx(
 			defaultWeight,
-			uint64(defaultValidateStartTime.Unix()),
+			uint64(defaultValidateStartTime.Unix())+1,
 			uint64(defaultValidateEndTime.Unix())+1,
-			ids.NodeID(nodeID),
+			nodeID,
 			testSubnet1.ID(),
 			[]*secp256k1.PrivateKey{testSubnet1ControlKeys[0], testSubnet1ControlKeys[1]},
 			ids.ShortEmpty, // change addr
+			nil,
 		)
 		require.NoError(err)
 
@@ -336,7 +320,7 @@ func TestProposalTxExecuteAddSubnetValidator(t *testing.T) {
 			Tx:            tx,
 		}
 		err = tx.Unsigned.Visit(&executor)
-		require.Error(err, "should have failed because validator stops validating primary network earlier than subnet")
+		require.ErrorIs(err, ErrPeriodMismatch)
 	}
 
 	{
@@ -346,12 +330,13 @@ func TestProposalTxExecuteAddSubnetValidator(t *testing.T) {
 		// (note that keys[0] is a genesis validator)
 		tx, err := env.txBuilder.NewAddSubnetValidatorTx(
 			defaultWeight,
-			uint64(defaultValidateStartTime.Unix()+1),
+			uint64(defaultValidateStartTime.Unix())+1,
 			uint64(defaultValidateEndTime.Unix()),
-			ids.NodeID(nodeID),
+			nodeID,
 			testSubnet1.ID(),
 			[]*secp256k1.PrivateKey{testSubnet1ControlKeys[0], testSubnet1ControlKeys[1]},
 			ids.ShortEmpty, // change addr
+			nil,
 		)
 		require.NoError(err)
 
@@ -367,17 +352,13 @@ func TestProposalTxExecuteAddSubnetValidator(t *testing.T) {
 			Backend:       &env.backend,
 			Tx:            tx,
 		}
-		err = tx.Unsigned.Visit(&executor)
-		require.NoError(err)
+		require.NoError(tx.Unsigned.Visit(&executor))
 	}
 
 	// Add a validator to pending validator set of primary network
-	key, err := testKeyfactory.NewPrivateKey()
-	require.NoError(err)
-	pendingDSValidatorID := ids.NodeID(key.PublicKey().Address())
-
-	// starts validating primary network 10 seconds after genesis
-	dsStartTime := defaultGenesisTime.Add(10 * time.Second)
+	// Starts validating primary network 10 seconds after genesis
+	pendingDSValidatorID := ids.GenerateTestNodeID()
+	dsStartTime := defaultValidateStartTime.Add(10 * time.Second)
 	dsEndTime := dsStartTime.Add(5 * defaultMinStakingDuration)
 
 	addDSTx, err := env.txBuilder.NewAddValidatorTx(
@@ -385,10 +366,11 @@ func TestProposalTxExecuteAddSubnetValidator(t *testing.T) {
 		uint64(dsStartTime.Unix()),   // start time
 		uint64(dsEndTime.Unix()),     // end time
 		pendingDSValidatorID,         // node ID
-		nodeID,                       // reward address
+		ids.GenerateTestShortID(),    // reward address
 		reward.PercentDenominator,    // shares
 		[]*secp256k1.PrivateKey{preFundedKeys[0]},
 		ids.ShortEmpty,
+		nil,
 	)
 	require.NoError(err)
 
@@ -402,6 +384,7 @@ func TestProposalTxExecuteAddSubnetValidator(t *testing.T) {
 			testSubnet1.ID(),
 			[]*secp256k1.PrivateKey{testSubnet1ControlKeys[0], testSubnet1ControlKeys[1]},
 			ids.ShortEmpty, // change addr
+			nil,
 		)
 		require.NoError(err)
 
@@ -418,12 +401,14 @@ func TestProposalTxExecuteAddSubnetValidator(t *testing.T) {
 			Tx:            tx,
 		}
 		err = tx.Unsigned.Visit(&executor)
-		require.Error(err, "should have failed because validator not in the current or pending validator sets of the primary network")
+		require.ErrorIs(err, ErrNotValidator)
 	}
 
+	addValTx := addDSTx.Unsigned.(*txs.AddValidatorTx)
 	staker, err := state.NewCurrentStaker(
 		addDSTx.ID(),
-		addDSTx.Unsigned.(*txs.AddValidatorTx),
+		addValTx,
+		addValTx.StartTime(),
 		0,
 	)
 	require.NoError(err)
@@ -432,8 +417,7 @@ func TestProposalTxExecuteAddSubnetValidator(t *testing.T) {
 	env.state.AddTx(addDSTx, status.Committed)
 	dummyHeight := uint64(1)
 	env.state.SetHeight(dummyHeight)
-	err = env.state.Commit()
-	require.NoError(err)
+	require.NoError(env.state.Commit())
 
 	// Node with ID key.PublicKey().Address() now a pending validator for primary network
 
@@ -448,6 +432,7 @@ func TestProposalTxExecuteAddSubnetValidator(t *testing.T) {
 			testSubnet1.ID(),
 			[]*secp256k1.PrivateKey{testSubnet1ControlKeys[0], testSubnet1ControlKeys[1]},
 			ids.ShortEmpty, // change addr
+			nil,
 		)
 		require.NoError(err)
 
@@ -464,7 +449,7 @@ func TestProposalTxExecuteAddSubnetValidator(t *testing.T) {
 			Tx:            tx,
 		}
 		err = tx.Unsigned.Visit(&executor)
-		require.Error(err, "should have failed because validator starts validating primary network before starting to validate primary network")
+		require.ErrorIs(err, ErrPeriodMismatch)
 	}
 
 	{
@@ -478,6 +463,7 @@ func TestProposalTxExecuteAddSubnetValidator(t *testing.T) {
 			testSubnet1.ID(),
 			[]*secp256k1.PrivateKey{testSubnet1ControlKeys[0], testSubnet1ControlKeys[1]},
 			ids.ShortEmpty, // change addr
+			nil,
 		)
 		require.NoError(err)
 
@@ -494,7 +480,7 @@ func TestProposalTxExecuteAddSubnetValidator(t *testing.T) {
 			Tx:            tx,
 		}
 		err = tx.Unsigned.Visit(&executor)
-		require.Error(err, "should have failed because validator stops validating primary network after stops validating primary network")
+		require.ErrorIs(err, ErrPeriodMismatch)
 	}
 
 	{
@@ -508,6 +494,7 @@ func TestProposalTxExecuteAddSubnetValidator(t *testing.T) {
 			testSubnet1.ID(),
 			[]*secp256k1.PrivateKey{testSubnet1ControlKeys[0], testSubnet1ControlKeys[1]},
 			ids.ShortEmpty, // change addr
+			nil,
 		)
 		require.NoError(err)
 
@@ -523,13 +510,12 @@ func TestProposalTxExecuteAddSubnetValidator(t *testing.T) {
 			Backend:       &env.backend,
 			Tx:            tx,
 		}
-		err = tx.Unsigned.Visit(&executor)
-		require.NoError(err)
+		require.NoError(tx.Unsigned.Visit(&executor))
 	}
 
 	// Case: Proposed validator start validating at/before current timestamp
 	// First, advance the timestamp
-	newTimestamp := defaultGenesisTime.Add(2 * time.Second)
+	newTimestamp := defaultValidateStartTime.Add(2 * time.Second)
 	env.state.SetTimestamp(newTimestamp)
 
 	{
@@ -537,10 +523,11 @@ func TestProposalTxExecuteAddSubnetValidator(t *testing.T) {
 			defaultWeight,               // weight
 			uint64(newTimestamp.Unix()), // start time
 			uint64(newTimestamp.Add(defaultMinStakingDuration).Unix()), // end time
-			ids.NodeID(nodeID), // node ID
-			testSubnet1.ID(),   // subnet ID
+			nodeID,           // node ID
+			testSubnet1.ID(), // subnet ID
 			[]*secp256k1.PrivateKey{testSubnet1ControlKeys[0], testSubnet1ControlKeys[1]},
 			ids.ShortEmpty, // change addr
+			nil,
 		)
 		require.NoError(err)
 
@@ -557,11 +544,11 @@ func TestProposalTxExecuteAddSubnetValidator(t *testing.T) {
 			Tx:            tx,
 		}
 		err = tx.Unsigned.Visit(&executor)
-		require.Error(err, "should have failed verification because starts validating at current timestamp")
+		require.ErrorIs(err, ErrTimestampNotBeforeStartTime)
 	}
 
 	// reset the timestamp
-	env.state.SetTimestamp(defaultGenesisTime)
+	env.state.SetTimestamp(defaultValidateStartTime)
 
 	// Case: Proposed validator already validating the subnet
 	// First, add validator as validator of subnet
@@ -569,16 +556,19 @@ func TestProposalTxExecuteAddSubnetValidator(t *testing.T) {
 		defaultWeight,                           // weight
 		uint64(defaultValidateStartTime.Unix()), // start time
 		uint64(defaultValidateEndTime.Unix()),   // end time
-		ids.NodeID(nodeID),                      // node ID
+		nodeID,                                  // node ID
 		testSubnet1.ID(),                        // subnet ID
 		[]*secp256k1.PrivateKey{testSubnet1ControlKeys[0], testSubnet1ControlKeys[1]},
 		ids.ShortEmpty,
+		nil,
 	)
 	require.NoError(err)
 
+	addSubnetValTx := subnetTx.Unsigned.(*txs.AddSubnetValidatorTx)
 	staker, err = state.NewCurrentStaker(
 		subnetTx.ID(),
-		subnetTx.Unsigned.(*txs.AddSubnetValidatorTx),
+		addSubnetValTx,
+		addSubnetValTx.StartTime(),
 		0,
 	)
 	require.NoError(err)
@@ -586,19 +576,19 @@ func TestProposalTxExecuteAddSubnetValidator(t *testing.T) {
 	env.state.PutCurrentValidator(staker)
 	env.state.AddTx(subnetTx, status.Committed)
 	env.state.SetHeight(dummyHeight)
-	err = env.state.Commit()
-	require.NoError(err)
+	require.NoError(env.state.Commit())
 
 	{
 		// Node with ID nodeIDKey.PublicKey().Address() now validating subnet with ID testSubnet1.ID
 		duplicateSubnetTx, err := env.txBuilder.NewAddSubnetValidatorTx(
-			defaultWeight,                           // weight
-			uint64(defaultValidateStartTime.Unix()), // start time
-			uint64(defaultValidateEndTime.Unix()),   // end time
-			ids.NodeID(nodeID),                      // node ID
-			testSubnet1.ID(),                        // subnet ID
+			defaultWeight, // weight
+			uint64(defaultValidateStartTime.Unix())+1, // start time
+			uint64(defaultValidateEndTime.Unix()),     // end time
+			nodeID,                                    // node ID
+			testSubnet1.ID(),                          // subnet ID
 			[]*secp256k1.PrivateKey{testSubnet1ControlKeys[0], testSubnet1ControlKeys[1]},
 			ids.ShortEmpty, // change addr
+			nil,
 		)
 		require.NoError(err)
 
@@ -615,53 +605,24 @@ func TestProposalTxExecuteAddSubnetValidator(t *testing.T) {
 			Tx:            duplicateSubnetTx,
 		}
 		err = duplicateSubnetTx.Unsigned.Visit(&executor)
-		require.Error(err, "should have failed verification because validator already validating the specified subnet")
+		require.ErrorIs(err, ErrDuplicateValidator)
 	}
 
 	env.state.DeleteCurrentValidator(staker)
 	env.state.SetHeight(dummyHeight)
-	err = env.state.Commit()
-	require.NoError(err)
-
-	{
-		// Case: Too many signatures
-		tx, err := env.txBuilder.NewAddSubnetValidatorTx(
-			defaultWeight,                     // weight
-			uint64(defaultGenesisTime.Unix()), // start time
-			uint64(defaultGenesisTime.Add(defaultMinStakingDuration).Unix())+1, // end time
-			ids.NodeID(nodeID), // node ID
-			testSubnet1.ID(),   // subnet ID
-			[]*secp256k1.PrivateKey{testSubnet1ControlKeys[0], testSubnet1ControlKeys[1], testSubnet1ControlKeys[2]},
-			ids.ShortEmpty, // change addr
-		)
-		require.NoError(err)
-
-		onCommitState, err := state.NewDiff(lastAcceptedID, env)
-		require.NoError(err)
-
-		onAbortState, err := state.NewDiff(lastAcceptedID, env)
-		require.NoError(err)
-
-		executor := ProposalTxExecutor{
-			OnCommitState: onCommitState,
-			OnAbortState:  onAbortState,
-			Backend:       &env.backend,
-			Tx:            tx,
-		}
-		err = tx.Unsigned.Visit(&executor)
-		require.Error(err, "should have failed verification because tx has 3 signatures but only 2 needed")
-	}
+	require.NoError(env.state.Commit())
 
 	{
 		// Case: Too few signatures
 		tx, err := env.txBuilder.NewAddSubnetValidatorTx(
-			defaultWeight,                     // weight
-			uint64(defaultGenesisTime.Unix()), // start time
-			uint64(defaultGenesisTime.Add(defaultMinStakingDuration).Unix()), // end time
-			ids.NodeID(nodeID), // node ID
-			testSubnet1.ID(),   // subnet ID
+			defaultWeight, // weight
+			uint64(defaultValidateStartTime.Unix())+1,                                // start time
+			uint64(defaultValidateStartTime.Add(defaultMinStakingDuration).Unix())+1, // end time
+			nodeID,           // node ID
+			testSubnet1.ID(), // subnet ID
 			[]*secp256k1.PrivateKey{testSubnet1ControlKeys[0], testSubnet1ControlKeys[2]},
 			ids.ShortEmpty, // change addr
+			nil,
 		)
 		require.NoError(err)
 
@@ -685,26 +646,27 @@ func TestProposalTxExecuteAddSubnetValidator(t *testing.T) {
 			Tx:            tx,
 		}
 		err = tx.Unsigned.Visit(&executor)
-		require.Error(err, "should have failed verification because not enough control sigs")
+		require.ErrorIs(err, errUnauthorizedSubnetModification)
 	}
 
 	{
 		// Case: Control Signature from invalid key (keys[3] is not a control key)
 		tx, err := env.txBuilder.NewAddSubnetValidatorTx(
-			defaultWeight,                     // weight
-			uint64(defaultGenesisTime.Unix()), // start time
-			uint64(defaultGenesisTime.Add(defaultMinStakingDuration).Unix()), // end time
-			ids.NodeID(nodeID), // node ID
-			testSubnet1.ID(),   // subnet ID
+			defaultWeight, // weight
+			uint64(defaultValidateStartTime.Unix())+1,                                // start time
+			uint64(defaultValidateStartTime.Add(defaultMinStakingDuration).Unix())+1, // end time
+			nodeID,           // node ID
+			testSubnet1.ID(), // subnet ID
 			[]*secp256k1.PrivateKey{testSubnet1ControlKeys[0], preFundedKeys[1]},
 			ids.ShortEmpty, // change addr
+			nil,
 		)
 		require.NoError(err)
 
 		// Replace a valid signature with one from keys[3]
 		sig, err := preFundedKeys[3].SignHash(hashing.ComputeHash256(tx.Unsigned.Bytes()))
 		require.NoError(err)
-		copy(tx.Creds[0].(*secp256k1fx.Credential).Sigs[0][:], sig)
+		copy(tx.Creds[1].(*secp256k1fx.Credential).Sigs[0][:], sig)
 
 		onCommitState, err := state.NewDiff(lastAcceptedID, env)
 		require.NoError(err)
@@ -719,26 +681,29 @@ func TestProposalTxExecuteAddSubnetValidator(t *testing.T) {
 			Tx:            tx,
 		}
 		err = tx.Unsigned.Visit(&executor)
-		require.Error(err, "should have failed verification because a control sig is invalid")
+		require.ErrorIs(err, errUnauthorizedSubnetModification)
 	}
 
 	{
 		// Case: Proposed validator in pending validator set for subnet
 		// First, add validator to pending validator set of subnet
 		tx, err := env.txBuilder.NewAddSubnetValidatorTx(
-			defaultWeight,                       // weight
-			uint64(defaultGenesisTime.Unix())+1, // start time
-			uint64(defaultGenesisTime.Add(defaultMinStakingDuration).Unix())+1, // end time
-			ids.NodeID(nodeID), // node ID
-			testSubnet1.ID(),   // subnet ID
+			defaultWeight, // weight
+			uint64(defaultValidateStartTime.Unix())+1,                                // start time
+			uint64(defaultValidateStartTime.Add(defaultMinStakingDuration).Unix())+1, // end time
+			nodeID,           // node ID
+			testSubnet1.ID(), // subnet ID
 			[]*secp256k1.PrivateKey{testSubnet1ControlKeys[0], testSubnet1ControlKeys[1]},
 			ids.ShortEmpty, // change addr
+			nil,
 		)
 		require.NoError(err)
 
+		addSubnetValTx := subnetTx.Unsigned.(*txs.AddSubnetValidatorTx)
 		staker, err = state.NewCurrentStaker(
 			subnetTx.ID(),
-			subnetTx.Unsigned.(*txs.AddSubnetValidatorTx),
+			addSubnetValTx,
+			addSubnetValTx.StartTime(),
 			0,
 		)
 		require.NoError(err)
@@ -746,8 +711,7 @@ func TestProposalTxExecuteAddSubnetValidator(t *testing.T) {
 		env.state.PutCurrentValidator(staker)
 		env.state.AddTx(tx, status.Committed)
 		env.state.SetHeight(dummyHeight)
-		err = env.state.Commit()
-		require.NoError(err)
+		require.NoError(env.state.Commit())
 
 		onCommitState, err := state.NewDiff(lastAcceptedID, env)
 		require.NoError(err)
@@ -762,31 +726,31 @@ func TestProposalTxExecuteAddSubnetValidator(t *testing.T) {
 			Tx:            tx,
 		}
 		err = tx.Unsigned.Visit(&executor)
-		require.Error(err, "should have failed verification because validator already in pending validator set of the specified subnet")
+		require.ErrorIs(err, ErrDuplicateValidator)
 	}
 }
 
 func TestProposalTxExecuteAddValidator(t *testing.T) {
 	require := require.New(t)
-	env := newEnvironment(false /*=postBanff*/, false /*=postCortina*/)
+	env := newEnvironment(t, apricotPhase5)
 	env.ctx.Lock.Lock()
-	defer func() {
-		require.NoError(shutdownEnvironment(env))
-	}()
+	defer env.ctx.Lock.Unlock()
 
 	nodeID := ids.GenerateTestNodeID()
+	chainTime := env.state.GetTimestamp()
 
 	{
 		// Case: Validator's start time too early
 		tx, err := env.txBuilder.NewAddValidatorTx(
 			env.config.MinValidatorStake,
-			uint64(defaultValidateStartTime.Unix())-1,
+			uint64(chainTime.Unix()),
 			uint64(defaultValidateEndTime.Unix()),
 			nodeID,
 			ids.ShortEmpty,
 			reward.PercentDenominator,
 			[]*secp256k1.PrivateKey{preFundedKeys[0]},
 			ids.ShortEmpty, // change addr
+			nil,
 		)
 		require.NoError(err)
 
@@ -803,7 +767,7 @@ func TestProposalTxExecuteAddValidator(t *testing.T) {
 			Tx:            tx,
 		}
 		err = tx.Unsigned.Visit(&executor)
-		require.Error(err, "should've errored because start time too early")
+		require.ErrorIs(err, ErrTimestampNotBeforeStartTime)
 	}
 
 	{
@@ -817,6 +781,7 @@ func TestProposalTxExecuteAddValidator(t *testing.T) {
 			reward.PercentDenominator,
 			[]*secp256k1.PrivateKey{preFundedKeys[0]},
 			ids.ShortEmpty, // change addr
+			nil,
 		)
 		require.NoError(err)
 
@@ -833,20 +798,23 @@ func TestProposalTxExecuteAddValidator(t *testing.T) {
 			Tx:            tx,
 		}
 		err = tx.Unsigned.Visit(&executor)
-		require.Error(err, "should've errored because start time too far in the future")
+		require.ErrorIs(err, ErrFutureStakeTime)
 	}
 
 	{
+		nodeID := genesisNodeIDs[0]
+
 		// Case: Validator already validating primary network
 		tx, err := env.txBuilder.NewAddValidatorTx(
 			env.config.MinValidatorStake,
-			uint64(defaultValidateStartTime.Unix()),
+			uint64(defaultValidateStartTime.Unix())+1,
 			uint64(defaultValidateEndTime.Unix()),
 			nodeID,
 			ids.ShortEmpty,
 			reward.PercentDenominator,
 			[]*secp256k1.PrivateKey{preFundedKeys[0]},
 			ids.ShortEmpty, // change addr
+			nil,
 		)
 		require.NoError(err)
 
@@ -863,12 +831,12 @@ func TestProposalTxExecuteAddValidator(t *testing.T) {
 			Tx:            tx,
 		}
 		err = tx.Unsigned.Visit(&executor)
-		require.Error(err, "should've errored because validator already validating")
+		require.ErrorIs(err, ErrAlreadyValidator)
 	}
 
 	{
 		// Case: Validator in pending validator set of primary network
-		startTime := defaultGenesisTime.Add(1 * time.Second)
+		startTime := defaultValidateStartTime.Add(1 * time.Second)
 		tx, err := env.txBuilder.NewAddValidatorTx(
 			env.config.MinValidatorStake,                            // stake amount
 			uint64(startTime.Unix()),                                // start time
@@ -878,22 +846,24 @@ func TestProposalTxExecuteAddValidator(t *testing.T) {
 			reward.PercentDenominator, // shares
 			[]*secp256k1.PrivateKey{preFundedKeys[0]},
 			ids.ShortEmpty, // change addr
+			nil,
 		)
 		require.NoError(err)
 
+		addValTx := tx.Unsigned.(*txs.AddValidatorTx)
 		staker, err := state.NewCurrentStaker(
 			tx.ID(),
-			tx.Unsigned.(*txs.AddValidatorTx),
+			addValTx,
+			addValTx.StartTime(),
 			0,
 		)
 		require.NoError(err)
 
-		env.state.PutCurrentValidator(staker)
+		env.state.PutPendingValidator(staker)
 		env.state.AddTx(tx, status.Committed)
 		dummyHeight := uint64(1)
 		env.state.SetHeight(dummyHeight)
-		err = env.state.Commit()
-		require.NoError(err)
+		require.NoError(env.state.Commit())
 
 		onCommitState, err := state.NewDiff(lastAcceptedID, env)
 		require.NoError(err)
@@ -908,20 +878,21 @@ func TestProposalTxExecuteAddValidator(t *testing.T) {
 			Tx:            tx,
 		}
 		err = tx.Unsigned.Visit(&executor)
-		require.Error(err, "should have failed because validator in pending validator set")
+		require.ErrorIs(err, ErrAlreadyValidator)
 	}
 
 	{
 		// Case: Validator doesn't have enough tokens to cover stake amount
 		tx, err := env.txBuilder.NewAddValidatorTx( // create the tx
 			env.config.MinValidatorStake,
-			uint64(defaultValidateStartTime.Unix()),
+			uint64(defaultValidateStartTime.Unix())+1,
 			uint64(defaultValidateEndTime.Unix()),
-			nodeID,
+			ids.GenerateTestNodeID(),
 			ids.ShortEmpty,
 			reward.PercentDenominator,
 			[]*secp256k1.PrivateKey{preFundedKeys[0]},
 			ids.ShortEmpty, // change addr
+			nil,
 		)
 		require.NoError(err)
 
@@ -946,6 +917,6 @@ func TestProposalTxExecuteAddValidator(t *testing.T) {
 			Tx:            tx,
 		}
 		err = tx.Unsigned.Visit(&executor)
-		require.Error(err, "should have failed because tx fee paying key has no funds")
+		require.ErrorIs(err, ErrFlowCheckFailed)
 	}
 }

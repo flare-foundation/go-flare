@@ -1,9 +1,11 @@
-// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package sampler
 
 import (
+	"cmp"
+
 	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/math"
 )
@@ -19,8 +21,8 @@ type weightedLinearElement struct {
 }
 
 // Note that this sorts in order of decreasing cumulative weight.
-func (e weightedLinearElement) Less(other weightedLinearElement) bool {
-	return e.cumulativeWeight > other.cumulativeWeight
+func (e weightedLinearElement) Compare(other weightedLinearElement) int {
+	return cmp.Compare(other.cumulativeWeight, e.cumulativeWeight)
 }
 
 // Sampling is performed by executing a linear search over the provided elements
@@ -68,7 +70,7 @@ func (s *weightedLinear) Initialize(weights []uint64) error {
 
 func (s *weightedLinear) Sample(value uint64) (int, error) {
 	if len(s.arr) == 0 || s.arr[len(s.arr)-1].cumulativeWeight <= value {
-		return 0, errOutOfRange
+		return 0, ErrOutOfRange
 	}
 
 	index := 0

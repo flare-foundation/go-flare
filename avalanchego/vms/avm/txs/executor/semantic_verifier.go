@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package executor
@@ -10,7 +10,7 @@ import (
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/version"
-	"github.com/ava-labs/avalanchego/vms/avm/states"
+	"github.com/ava-labs/avalanchego/vms/avm/state"
 	"github.com/ava-labs/avalanchego/vms/avm/txs"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/components/verify"
@@ -27,7 +27,7 @@ var (
 
 type SemanticVerifier struct {
 	*Backend
-	State states.ReadOnlyChain
+	State state.ReadOnlyChain
 	Tx    *txs.Tx
 }
 
@@ -35,7 +35,7 @@ func (v *SemanticVerifier) BaseTx(tx *txs.BaseTx) error {
 	for i, in := range tx.Ins {
 		// Note: Verification of the length of [t.tx.Creds] happens during
 		// syntactic verification, which happens before semantic verification.
-		cred := v.Tx.Creds[i].Verifiable
+		cred := v.Tx.Creds[i].Credential
 		if err := v.verifyTransfer(tx, in, cred); err != nil {
 			return err
 		}
@@ -73,7 +73,7 @@ func (v *SemanticVerifier) OperationTx(tx *txs.OperationTx) error {
 	for i, op := range tx.Ops {
 		// Note: Verification of the length of [t.tx.Creds] happens during
 		// syntactic verification, which happens before semantic verification.
-		cred := v.Tx.Creds[i+offset].Verifiable
+		cred := v.Tx.Creds[i+offset].Credential
 		if err := v.verifyOperation(tx, op, cred); err != nil {
 			return err
 		}
@@ -114,7 +114,7 @@ func (v *SemanticVerifier) ImportTx(tx *txs.ImportTx) error {
 
 		// Note: Verification of the length of [t.tx.Creds] happens during
 		// syntactic verification, which happens before semantic verification.
-		cred := v.Tx.Creds[i+offset].Verifiable
+		cred := v.Tx.Creds[i+offset].Credential
 		if err := v.verifyTransferOfUTXO(tx, in, cred, &utxo); err != nil {
 			return err
 		}
@@ -152,7 +152,7 @@ func (v *SemanticVerifier) verifyTransfer(
 	in *avax.TransferableInput,
 	cred verify.Verifiable,
 ) error {
-	utxo, err := v.State.GetUTXOFromID(&in.UTXOID)
+	utxo, err := v.State.GetUTXO(in.UTXOID.InputID())
 	if err != nil {
 		return err
 	}
@@ -195,7 +195,7 @@ func (v *SemanticVerifier) verifyOperation(
 		utxos     = make([]interface{}, numUTXOs)
 	)
 	for i, utxoID := range op.UTXOIDs {
-		utxo, err := v.State.GetUTXOFromID(utxoID)
+		utxo, err := v.State.GetUTXO(utxoID.InputID())
 		if err != nil {
 			return err
 		}

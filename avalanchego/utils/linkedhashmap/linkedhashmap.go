@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2023, Ava Labs, Inte. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package linkedhashmap
@@ -17,7 +17,7 @@ var _ LinkedHashmap[int, struct{}] = (*linkedHashmap[int, struct{}])(nil)
 type Hashmap[K, V any] interface {
 	Put(key K, val V)
 	Get(key K) (val V, exists bool)
-	Delete(key K)
+	Delete(key K) (deleted bool)
 	Len() int
 }
 
@@ -57,36 +57,36 @@ func (lh *linkedHashmap[K, V]) Put(key K, val V) {
 }
 
 func (lh *linkedHashmap[K, V]) Get(key K) (V, bool) {
-	lh.lock.Lock()
-	defer lh.lock.Unlock()
+	lh.lock.RLock()
+	defer lh.lock.RUnlock()
 
 	return lh.get(key)
 }
 
-func (lh *linkedHashmap[K, V]) Delete(key K) {
+func (lh *linkedHashmap[K, V]) Delete(key K) bool {
 	lh.lock.Lock()
 	defer lh.lock.Unlock()
 
-	lh.delete(key)
+	return lh.delete(key)
 }
 
 func (lh *linkedHashmap[K, V]) Len() int {
-	lh.lock.Lock()
-	defer lh.lock.Unlock()
+	lh.lock.RLock()
+	defer lh.lock.RUnlock()
 
 	return lh.len()
 }
 
 func (lh *linkedHashmap[K, V]) Oldest() (K, V, bool) {
-	lh.lock.Lock()
-	defer lh.lock.Unlock()
+	lh.lock.RLock()
+	defer lh.lock.RUnlock()
 
 	return lh.oldest()
 }
 
 func (lh *linkedHashmap[K, V]) Newest() (K, V, bool) {
-	lh.lock.Lock()
-	defer lh.lock.Unlock()
+	lh.lock.RLock()
+	defer lh.lock.RUnlock()
 
 	return lh.newest()
 }
@@ -108,16 +108,19 @@ func (lh *linkedHashmap[K, V]) put(key K, value V) {
 
 func (lh *linkedHashmap[K, V]) get(key K) (V, bool) {
 	if e, ok := lh.entryMap[key]; ok {
-		return e.Value.(keyValue[K, V]).value, true
+		kv := e.Value.(keyValue[K, V])
+		return kv.value, true
 	}
 	return utils.Zero[V](), false
 }
 
-func (lh *linkedHashmap[K, V]) delete(key K) {
-	if e, ok := lh.entryMap[key]; ok {
+func (lh *linkedHashmap[K, V]) delete(key K) bool {
+	e, ok := lh.entryMap[key]
+	if ok {
 		lh.entryList.Remove(e)
 		delete(lh.entryMap, key)
 	}
+	return ok
 }
 
 func (lh *linkedHashmap[K, V]) len() int {
@@ -126,14 +129,16 @@ func (lh *linkedHashmap[K, V]) len() int {
 
 func (lh *linkedHashmap[K, V]) oldest() (K, V, bool) {
 	if val := lh.entryList.Front(); val != nil {
-		return val.Value.(keyValue[K, V]).key, val.Value.(keyValue[K, V]).value, true
+		kv := val.Value.(keyValue[K, V])
+		return kv.key, kv.value, true
 	}
 	return utils.Zero[K](), utils.Zero[V](), false
 }
 
 func (lh *linkedHashmap[K, V]) newest() (K, V, bool) {
 	if val := lh.entryList.Back(); val != nil {
-		return val.Value.(keyValue[K, V]).key, val.Value.(keyValue[K, V]).value, true
+		kv := val.Value.(keyValue[K, V])
+		return kv.key, kv.value, true
 	}
 	return utils.Zero[K](), utils.Zero[V](), false
 }

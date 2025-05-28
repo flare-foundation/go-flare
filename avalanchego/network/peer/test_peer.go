@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package peer
@@ -20,6 +20,7 @@ import (
 	"github.com/ava-labs/avalanchego/snow/validators"
 	"github.com/ava-labs/avalanchego/staking"
 	"github.com/ava-labs/avalanchego/utils/constants"
+	"github.com/ava-labs/avalanchego/utils/crypto/bls"
 	"github.com/ava-labs/avalanchego/utils/ips"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/math/meter"
@@ -62,7 +63,11 @@ func StartTestPeer(
 	}
 
 	tlsConfg := TLSConfig(*tlsCert, nil)
-	clientUpgrader := NewTLSClientUpgrader(tlsConfg)
+	clientUpgrader := NewTLSClientUpgrader(
+		tlsConfg,
+		prometheus.NewCounter(prometheus.CounterOpts{}),
+		version.GetDurangoTime(networkID),
+	)
 
 	peerID, conn, cert, err := clientUpgrader.Upgrade(conn)
 	if err != nil {
@@ -99,8 +104,12 @@ func StartTestPeer(
 		return nil, err
 	}
 
-	signerIP := ips.NewDynamicIPPort(net.IPv6zero, 0)
-	tls := tlsCert.PrivateKey.(crypto.Signer)
+	signerIP := ips.NewDynamicIPPort(net.IPv6zero, 1)
+	tlsKey := tlsCert.PrivateKey.(crypto.Signer)
+	blsKey, err := bls.NewSecretKey()
+	if err != nil {
+		return nil, err
+	}
 
 	peer := Start(
 		&Config{
@@ -112,14 +121,15 @@ func StartTestPeer(
 			Router:               router,
 			VersionCompatibility: version.GetCompatibility(networkID),
 			MySubnets:            set.Set[ids.ID]{},
-			Beacons:              validators.NewSet(),
+			Beacons:              validators.NewManager(),
+			Validators:           validators.NewManager(),
 			NetworkID:            networkID,
 			PingFrequency:        constants.DefaultPingFrequency,
 			PongTimeout:          constants.DefaultPingPongTimeout,
 			MaxClockDifference:   time.Minute,
 			ResourceTracker:      resourceTracker,
 			UptimeCalculator:     uptime.NoOpCalculator,
-			IPSigner:             NewIPSigner(signerIP, tls),
+			IPSigner:             NewIPSigner(signerIP, tlsKey, blsKey),
 		},
 		conn,
 		cert,

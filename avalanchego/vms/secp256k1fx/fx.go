@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package secp256k1fx
@@ -10,9 +10,9 @@ import (
 
 	"github.com/ava-labs/avalanchego/cache"
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
 	"github.com/ava-labs/avalanchego/utils/hashing"
-	"github.com/ava-labs/avalanchego/utils/wrappers"
 	"github.com/ava-labs/avalanchego/vms/components/verify"
 	"github.com/ava-labs/coreth/accounts"
 )
@@ -42,8 +42,9 @@ var (
 
 // Fx describes the secp256k1 feature extension
 type Fx struct {
+	secp256k1.RecoverCache
+
 	VM           VM
-	SECPFactory  secp256k1.Factory
 	bootstrapped bool
 }
 
@@ -55,21 +56,19 @@ func (fx *Fx) Initialize(vmIntf interface{}) error {
 	log := fx.VM.Logger()
 	log.Debug("initializing secp256k1 fx")
 
-	fx.SECPFactory = secp256k1.Factory{
-		Cache: cache.LRU[ids.ID, *secp256k1.PublicKey]{
+	fx.RecoverCache = secp256k1.RecoverCache{
+		LRU: cache.LRU[ids.ID, *secp256k1.PublicKey]{
 			Size: defaultCacheSize,
 		},
 	}
 	c := fx.VM.CodecRegistry()
-	errs := wrappers.Errs{}
-	errs.Add(
+	return utils.Err(
 		c.RegisterType(&TransferInput{}),
 		c.RegisterType(&MintOutput{}),
 		c.RegisterType(&TransferOutput{}),
 		c.RegisterType(&MintOperation{}),
 		c.RegisterType(&Credential{}),
 	)
-	return errs.Err
 }
 
 func (fx *Fx) InitializeVM(vmIntf interface{}) error {
@@ -206,27 +205,27 @@ func (fx *Fx) VerifyCredentials(utx UnsignedTx, in *Input, cred *Credential, out
 		}
 		// Make sure each signature in the signature list is from an owner of
 		// the output being consumed
-		sig := cred.Sigs[i][:]
+		sig := cred.Sigs[i]
+		pk, err := fx.RecoverPublicKeyFromHash(txHash, sig[:])
+		if err != nil {
+			return err
+		}
 		expectedAddress := out.Addrs[index]
 
 		// Try to recover the address from the signature of the transaction hash without a prefix
 		// (Standard Avalanche approach, but unsupported/deprecated by most signing tools)
-		recoveredAddress, err := fx.recoverAddress(txHash, sig)
-		if err != nil {
-			return err
-		}
-		if recoveredAddress == expectedAddress {
+		if expectedAddress == pk.Address() {
 			continue
 		}
 
 		// Try to recover the address from the signature of the prefixed message hash
 		// (with the standard Ethereum prefix, see accounts.TextHash)
 		if isEthVerificationEnabled {
-			recoveredAddress, err = fx.recoverAddress(txHashEth, sig)
+			pk, err := fx.RecoverPublicKeyFromHash(txHashEth, sig[:])
 			if err != nil {
 				return err
 			}
-			if recoveredAddress == expectedAddress {
+			if expectedAddress == pk.Address() {
 				continue
 			}
 		}
@@ -251,12 +250,4 @@ func (*Fx) CreateOutput(amount uint64, ownerIntf interface{}) (interface{}, erro
 		Amt:          amount,
 		OutputOwners: *owner,
 	}, nil
-}
-
-func (fx *Fx) recoverAddress(txHash []byte, sig []byte) (ids.ShortID, error) {
-	pk, err := fx.SECPFactory.RecoverHashPublicKey(txHash, sig)
-	if err != nil {
-		return ids.ShortEmpty, err
-	}
-	return pk.Address(), nil
 }

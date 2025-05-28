@@ -42,14 +42,7 @@ func fundAddressByGenesis(addrs []common.Address) (string, error) {
 		}
 	}
 	genesis.Alloc = funds
-
-	genesis.Config = &params.ChainConfig{
-		ChainID:                     params.AvalancheLocalChainID,
-		ApricotPhase1BlockTimestamp: big.NewInt(0),
-		ApricotPhase2BlockTimestamp: big.NewInt(0),
-		ApricotPhase3BlockTimestamp: big.NewInt(0),
-		ApricotPhase4BlockTimestamp: big.NewInt(0),
-	}
+	genesis.Config = params.TestChainConfig
 
 	bytes, err := json.Marshal(genesis)
 	return string(bytes), err
@@ -59,8 +52,8 @@ func getValidEthTxs(key *ecdsa.PrivateKey, count int, gasPrice *big.Int) []*type
 	res := make([]*types.Transaction, count)
 
 	to := common.Address{}
-	amount := big.NewInt(10000)
-	gasLimit := uint64(100000)
+	amount := big.NewInt(0)
+	gasLimit := uint64(37000)
 
 	for i := 0; i < count; i++ {
 		tx, _ := types.SignTx(

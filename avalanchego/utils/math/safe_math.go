@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package math
@@ -16,24 +16,6 @@ var (
 	ErrOverflow  = errors.New("overflow")
 	ErrUnderflow = errors.New("underflow")
 )
-
-func Max[T constraints.Ordered](max T, nums ...T) T {
-	for _, num := range nums {
-		if num > max {
-			max = num
-		}
-	}
-	return max
-}
-
-func Min[T constraints.Ordered](min T, nums ...T) T {
-	for _, num := range nums {
-		if num < min {
-			min = num
-		}
-	}
-	return min
-}
 
 // Add64 returns:
 // 1) a + b
@@ -74,5 +56,5 @@ func Mul64(a, b uint64) (uint64, error) {
 }
 
 func AbsDiff[T constraints.Unsigned](a, b T) T {
-	return Max(a, b) - Min(a, b)
+	return max(a, b) - min(a, b)
 }
