@@ -50,24 +50,20 @@ jobs:
     - name: Install Cosign
       uses: sigstore/cosign-installer@v3.8.1
 
-    - name: sign container image
+    - name: Sign container image
       shell: bash
       env:
-        COSIGN_KEY: ${{ secrets.COSIGN_KEY }}
-        COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+        COSIGN_EXPERIMENTAL: 1
       run: |
-        cosign sign --yes --key env://COSIGN_KEY "ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }}"
+        cosign sign --yes "ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }}"
 
-        cosign sign --yes --key env://COSIGN_KEY "${{ secrets.DOCKER_HUB_REPO }}:${{ env.IMAGE_TAG }}"
+        cosign sign --yes "${{ secrets.DOCKER_HUB_REPO }}:${{ env.IMAGE_TAG }}"
     
     - name: Verify image signatures
       shell: bash
       env: 
-        COSIGN_PUBLIC_KEY_CONTENT: ${{ secrets.COSIGN_PUBLIC_KEY }}
+        COSIGN_EXPERIMENTAL: 1
       run: |
-        echo "${COSIGN_PUBLIC_KEY_CONTENT}" > ./cosign.pub
-        cosign verify --key ./cosign.pub "ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }}"
+        cosign verify "ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }}"
+        cosign verify "${{ secrets.DOCKER_HUB_REPO }}:${{ env.IMAGE_TAG }}"
 
-        cosign verify --key ./cosign.pub "${{ secrets.DOCKER_HUB_REPO }}:${{ env.IMAGE_TAG }}"
-
-        rm -f ./cosign.pub
