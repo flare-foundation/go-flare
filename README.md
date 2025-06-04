@@ -58,8 +58,15 @@ ghcr.io/flare-foundation/go-flare
 Images are signed using [Cosign](https://github.com/sigstore/cosign) with the GitHub OIDC provider. To verify the image, run this command:
 
 ```bash
-cosign verify ghcr.io/<GITHUB_OWNER>/<REPO_NAME>:<TAG>
-cosign verify <DOCKER_HUB_REPO>:<TAG>
+cosign verify \
+  --certificate-identity-regexp="^https://github\.com/flare-foundation/go-flare/\.github/workflows/build-container\.yml@" \
+  --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+  ghcr.io/flare-foundation/go-flare:<TAG>
+
+cosign verify \
+  --certificate-identity-regexp="^https://github\.com/flare-foundation/go-flare/\.github/workflows/build-container\.yml@" \
+  --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+  docker.io/flarefoundation/go-flare:<TAG>
 ```
 
 ### Container builds in CI
