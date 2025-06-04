@@ -14,7 +14,13 @@ WORKDIR /app/avalanchego/
 
 RUN /app/avalanchego/scripts/build.sh
 
-FROM ubuntu:24.10
+RUN mkdir -p /app/conf/coston /app/conf/C /app/logs /app/db
+
+WORKDIR /entrypoint
+COPY entrypoint/main.go .
+RUN go build -ldflags="-s -w" -o /out/entrypoint main.go
+
+FROM gcr.io/distroless/base AS final
 
 WORKDIR /app
 
@@ -36,13 +42,12 @@ ENV HTTP_HOST=0.0.0.0 \
     EXTRA_ARGUMENTS="" \
     BOOTSTRAP_BEACON_CONNECTION_TIMEOUT="1m"
 
-RUN apt-get update -y && \
-    apt-get install -y curl jq
-
-RUN mkdir -p /app/conf/coston /app/conf/C /app/logs /app/db
+COPY --from=build /app/conf  /app/conf
+COPY --from=build /app/logs  /app/logs
+COPY --from=build /app/db    /app/db
 
 COPY --from=build /app/avalanchego/build /app/build
-COPY entrypoint.sh /app/entrypoint.sh
+COPY --from=build /out/entrypoint /app/entrypoint
 
 EXPOSE ${STAKING_PORT}
 EXPOSE ${HTTP_PORT}
@@ -51,7 +56,4 @@ VOLUME [ "${DB_DIR}" ]
 VOLUME [ "${LOG_DIR}" ]
 VOLUME [ "${CHAIN_CONFIG_DIR}" ]
 
-HEALTHCHECK CMD curl --fail http://localhost:${HTTP_PORT}/ext/health || exit 1
-
-ENTRYPOINT [ "/usr/bin/bash" ]
-CMD [ "/app/entrypoint.sh" ]
+ENTRYPOINT [ "/app/entrypoint" ]
