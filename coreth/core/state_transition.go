@@ -475,10 +475,10 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		st.state.SetNonce(msg.From, st.state.GetNonce(sender.Address())+1)
 		ret, st.gasRemaining, vmerr = st.evm.Call(sender, st.to(), msg.Data, st.gasRemaining, msg.Value)
 		if vmerr == nil && chainID != nil {
-			if isSongbird {
-				handleSongbirdTransitionDbContracts(st, chainID, timestamp, msg, ret)
-			} else {
-				handleFlareTransitionDbContracts(st, chainID, timestamp, msg, ret)
+			if isSongbird { // Songbird, Coston, Local (Songbird)
+				handleSongbirdTransitionDbContracts(st, rules.IsDurango, chainID, timestamp, msg, ret)
+			} else if isFlare { // Flare, Coston2, Local (Flare)
+				handleFlareTransitionDbContracts(st, rules.IsDurango, chainID, timestamp, msg, ret)
 			}
 		}
 	}
@@ -514,8 +514,8 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	}, nil
 }
 
-func handleSongbirdTransitionDbContracts(st *StateTransition, chainID *big.Int, timestamp uint64, msg *Message, ret []byte) {
-	if GetStateConnectorIsActivatedAndCalled(chainID, timestamp, *msg.To) &&
+func handleSongbirdTransitionDbContracts(st *StateTransition, isDurango bool, chainID *big.Int, timestamp uint64, msg *Message, ret []byte) {
+	if GetStateConnectorIsActivatedAndCalled(isDurango, chainID, timestamp, *msg.To) &&
 		len(msg.Data) >= 36 && len(ret) == 32 &&
 		bytes.Equal(msg.Data[0:4], SubmitAttestationSelector(chainID, timestamp)) &&
 		binary.BigEndian.Uint64(ret[24:32]) > 0 {
@@ -525,12 +525,12 @@ func handleSongbirdTransitionDbContracts(st *StateTransition, chainID *big.Int, 
 	}
 }
 
-func handleFlareTransitionDbContracts(st *StateTransition, chainID *big.Int, timestamp uint64, msg *Message, ret []byte) {
+func handleFlareTransitionDbContracts(st *StateTransition, isDurango bool, chainID *big.Int, timestamp uint64, msg *Message, ret []byte) {
 	if st.evm.Context.Coinbase != common.HexToAddress("0x0100000000000000000000000000000000000000") {
 		return
 	}
 
-	if GetStateConnectorIsActivatedAndCalled(chainID, timestamp, *msg.To) &&
+	if GetStateConnectorIsActivatedAndCalled(isDurango, chainID, timestamp, *msg.To) &&
 		len(msg.Data) >= 36 && len(ret) == 32 &&
 		bytes.Equal(msg.Data[0:4], SubmitAttestationSelector(chainID, timestamp)) &&
 		binary.BigEndian.Uint64(ret[24:32]) > 0 {

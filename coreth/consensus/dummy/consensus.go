@@ -126,6 +126,21 @@ func (self *DummyEngine) verifyHeaderGasFields(config *params.ChainConfig, heade
 				if header.GasLimit != params.SgbApricotPhase5GasLimit {
 					return fmt.Errorf("expected gas limit to be %d in ApricotPhase5 but found %d", params.SgbApricotPhase5GasLimit, header.GasLimit)
 				}
+			} else if config.IsApricotPhase1(header.Time) {
+				if header.GasLimit != params.ApricotPhase1GasLimit {
+					return fmt.Errorf("expected gas limit to be %d in ApricotPhase1, but found %d", params.ApricotPhase1GasLimit, header.GasLimit)
+				}
+			} else {
+				// Verify that the gas limit remains within allowed bounds
+				diff := int64(parent.GasLimit) - int64(header.GasLimit)
+				if diff < 0 {
+					diff *= -1
+				}
+				limit := parent.GasLimit / params.GasLimitBoundDivisor
+
+				if uint64(diff) >= limit || header.GasLimit < params.MinGasLimit {
+					return fmt.Errorf("invalid gas limit: have %d, want %d += %d", header.GasLimit, parent.GasLimit, limit)
+				}
 			}
 		} else {
 			if config.IsApricotPhase1(header.Time) {

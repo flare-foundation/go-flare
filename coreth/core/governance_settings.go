@@ -303,9 +303,12 @@ func (st *StateTransition) UpdateInitialAirdropAddress(chainID *big.Int, timesta
 	}
 	initialAirdropAddress := GetInitialAirdropContractAddress(chainID, timestamp)
 	targetAidropAddress := GetTargetAirdropContractAddress(chainID, timestamp)
-	airdropBalance := st.state.GetBalance(initialAirdropAddress)
-	st.state.SubBalance(initialAirdropAddress, airdropBalance)
-	st.state.AddBalance(targetAidropAddress, airdropBalance)
+
+	if initialAirdropAddress != targetAidropAddress {
+		airdropBalance := st.state.GetBalance(initialAirdropAddress)
+		st.state.SubBalance(initialAirdropAddress, airdropBalance)
+		st.state.AddBalance(targetAidropAddress, airdropBalance)
+	}
 	return nil
 }
 
@@ -322,8 +325,11 @@ func (st *StateTransition) UpdateDistributionAddress(chainID *big.Int, timestamp
 	}
 	distributionAddress := GetDistributionContractAddress(chainID, timestamp)
 	targetDistributionAddress := GetTargetDistributionContractAddress(chainID, timestamp)
-	distributionBalance := st.state.GetBalance(distributionAddress)
-	st.state.SubBalance(distributionAddress, distributionBalance)
-	st.state.AddBalance(targetDistributionAddress, distributionBalance)
+
+	if distributionAddress != targetDistributionAddress {
+		distributionBalance := st.state.GetBalance(distributionAddress)
+		st.state.SubBalance(distributionAddress, distributionBalance)
+		st.state.AddBalance(targetDistributionAddress, distributionBalance)
+	}
 	return nil
 }

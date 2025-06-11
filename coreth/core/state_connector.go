@@ -54,8 +54,8 @@ var (
 		AddValue(params.LocalChainID, GetStateConnectorIsActivatedAndCalledLocal)
 )
 
-func GetStateConnectorIsActivatedAndCalled(chainID *big.Int, blockTime uint64, to common.Address) bool {
-	return stateConnectorActivationVariants.GetValue(chainID)(blockTime, to)
+func GetStateConnectorIsActivatedAndCalled(isDurango bool, chainID *big.Int, blockTime uint64, to common.Address) bool {
+	return !isDurango && stateConnectorActivationVariants.GetValue(chainID)(blockTime, to)
 }
 
 func GetStateConnectorIsActivatedAndCalledFlare(blockTime uint64, to common.Address) bool {
