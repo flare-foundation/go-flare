@@ -47,7 +47,7 @@ func TestCompatibility(t *testing.T) {
 	}{
 		{
 			peer: &Application{
-				Name:  LegacyAppName,
+				Name:  GetApplicationPrefix(),
 				Major: 1,
 				Minor: 5,
 				Patch: 0,

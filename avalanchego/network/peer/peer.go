@@ -541,7 +541,7 @@ func (p *peer) writeMessages() {
 
 	myVersion := p.VersionCompatibility.Version()
 	legacyApplication := &version.Application{
-		Name:  version.LegacyAppName,
+		Name:  version.GetApplicationPrefix(),
 		Major: myVersion.Major,
 		Minor: myVersion.Minor,
 		Patch: myVersion.Patch,
