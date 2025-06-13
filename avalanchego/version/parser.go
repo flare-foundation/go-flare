@@ -36,7 +36,7 @@ func Parse(s string) (*Semantic, error) {
 
 // TODO: Remove after v1.11.x is activated
 func ParseLegacyApplication(s string) (*Application, error) {
-	prefix := LegacyAppName + "/"
+	prefix := GetApplicationPrefix() + "/"
 	if !strings.HasPrefix(s, prefix) {
 		return nil, fmt.Errorf("%w: %q", errMissingApplicationPrefix, s)
 	}

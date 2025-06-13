@@ -115,6 +115,10 @@ func GetNextStakerChangeTime(state state.Chain) (time.Time, error) {
 	case hasPendingStaker:
 		return pendingStakerIterator.Value().NextTime, nil
 	default:
+		// Due to no initial stakers in genesis for Songbird networks
+		if state.GetNetworkID() == constants.SongbirdID || state.GetNetworkID() == constants.CostonID || state.GetNetworkID() == constants.LocalID {
+			return songbirdLatestStakingTime, nil
+		}
 		return time.Time{}, database.ErrNotFound
 	}
 }

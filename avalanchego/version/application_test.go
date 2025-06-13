@@ -14,7 +14,7 @@ func TestNewDefaultApplication(t *testing.T) {
 	require := require.New(t)
 
 	v := &Application{
-		Name:  LegacyAppName,
+		Name:  GetApplicationPrefix(),
 		Major: 1,
 		Minor: 2,
 		Patch: 3,

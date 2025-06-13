@@ -760,8 +760,12 @@ func (vm *VM) getForkHeight() (uint64, error) {
 		switch vm.ctx.NetworkID {
 		case constants.MainnetID:
 			return 805732, nil // https://subnets.avax.network/p-chain/block/805732
-		default:
-			return 1, nil // Flare and Songbird started after Apricot Phase 4
+		case constants.SongbirdID:
+			return 9, nil
+		case constants.CostonID:
+			return 6, nil
+		case constants.FlareID, constants.CostwoID:
+			return 1, nil
 		}
 	case mainnetXChainID:
 		return 1, nil // https://subnets.avax.network/x-chain/block/1
