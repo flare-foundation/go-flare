@@ -78,21 +78,19 @@ var (
 	}
 
 	CortinaTimes = map[uint32]time.Time{
-		constants.MainnetID:    time.Date(2023, time.April, 25, 15, 0, 0, 0, time.UTC),
-		constants.FlareID:      time.Date(2025, time.May, 13, 12, 0, 0, 0, time.UTC),
-		constants.CostwoID:     time.Date(2025, time.April, 8, 12, 0, 0, 0, time.UTC),
-		constants.CostonID:     time.Date(2025, time.March, 27, 13, 0, 0, 0, time.UTC),
-		constants.SongbirdID:   time.Date(2025, time.May, 6, 12, 0, 0, 0, time.UTC),
-		constants.LocalFlareID: time.Date(2025, time.May, 15, 13, 0, 0, 0, time.UTC),
+		constants.MainnetID:  time.Date(2023, time.April, 25, 15, 0, 0, 0, time.UTC),
+		constants.FlareID:    time.Date(2025, time.May, 13, 12, 0, 0, 0, time.UTC),
+		constants.CostwoID:   time.Date(2025, time.April, 8, 12, 0, 0, 0, time.UTC),
+		constants.CostonID:   time.Date(2025, time.March, 27, 13, 0, 0, 0, time.UTC),
+		constants.SongbirdID: time.Date(2025, time.May, 6, 12, 0, 0, 0, time.UTC),
 	}
 
 	DurangoTimes = map[uint32]time.Time{
-		constants.MainnetID:    time.Date(2024, time.March, 6, 16, 0, 0, 0, time.UTC),
-		constants.FlareID:      time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
-		constants.CostwoID:     time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
-		constants.LocalFlareID: time.Date(2025, time.May, 15, 14, 0, 0, 0, time.UTC),
-		constants.CostonID:     time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
-		constants.SongbirdID:   time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
-		constants.LocalID:      time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
+		constants.MainnetID:  time.Date(2024, time.March, 6, 16, 0, 0, 0, time.UTC),
+		constants.FlareID:    time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
+		constants.CostwoID:   time.Date(2025, time.June, 24, 12, 0, 0, 0, time.UTC),
+		constants.CostonID:   time.Date(2025, time.July, 1, 12, 0, 0, 0, time.UTC),
+		constants.SongbirdID: time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
+		constants.LocalID:    time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
 	}
 )
