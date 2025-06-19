@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -203,6 +205,7 @@ func main() {
 		"--log-dir", os.Getenv("LOG_DIR"),
 		"--log-level", os.Getenv("LOG_LEVEL"),
 		"--network-id", os.Getenv("NETWORK_ID"),
+		"--http-allowed-hosts", os.Getenv("HTTP_ALLOWED_HOSTS"),
 	}
 	if extra := os.Getenv("EXTRA_ARGUMENTS"); extra != "" {
 		args = append(args, strings.Fields(extra)...)
@@ -218,13 +221,34 @@ func main() {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		cmd.Env = os.Environ()
-		if err := cmd.Run(); err != nil {
-			if exitErr, ok := err.(*exec.ExitError); ok {
-				os.Exit(exitErr.ExitCode())
-			}
+
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+
+		if err := cmd.Start(); err != nil {
 			fmt.Fprintln(os.Stderr, "failed to start avalanchego:", err)
 			os.Exit(1)
 		}
+
+		go func() {
+			sig := <-sigChan // Block until a signal is received
+			fmt.Fprintf(os.Stderr, "Received signal %s, forwarding to avalanchego...\n", sig)
+			if cmd.Process != nil {
+				if err := cmd.Process.Signal(sig); err != nil {
+					fmt.Fprintf(os.Stderr, "Failed to forward signal %s to avalanchego: %v\n", sig, err)
+				}
+			}
+		}()
+
+		if err := cmd.Wait(); err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				fmt.Fprintf(os.Stderr, "avalanchego exited with error: %v (code: %d)\n", err, exitErr.ExitCode())
+				os.Exit(exitErr.ExitCode())
+			}
+			fmt.Fprintln(os.Stderr, "avalanchego process wait error:", err)
+			os.Exit(1)
+		}
+
 		os.Exit(0)
 	}
 }

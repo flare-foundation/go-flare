@@ -11,12 +11,12 @@ See [release notes](./RELEASES-flare.md) for more info.
 
 ## System Requirements
 
-- go version 1.21.8
+- go version 1.22
 - gcc, g++ and jq
 - CPU: Equivalent of 8 AWS vCPU
 - RAM: 16 GiB
 - Storage: 1TB Flare / 3.5TB Songbird
-- OS: Ubuntu 20.04/22.04
+- OS: Ubuntu 22.04/24.04
 
 ## Compilation
 
@@ -75,6 +75,3 @@ CI builds on each:
 
 - push on `main` branch, pushes image tagged as "dev"
 - creation of a tag, pushes images tagged as the tag itself
-
-Builds: \
-two images, `go-flare:<TAG>` one with `leveldb`

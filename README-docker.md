@@ -2,12 +2,16 @@
 
 Docker image for the Flare & Coston2 node implementation found on [github](https://github.com/flare-foundation/go-flare).
 
+## Variants
+Images with `-dless` postfix are build using distroless base and are rootless.  
+Process runs under user `nonroot` with UID `65532`. You should chown your volume mounts to match this UID using `chown -R 65532:65532 /mnt/my/db`.
+
 ## Quickstart
 
 ```sh
 docker run -d \
 	-p 9650-9651:9650-9651 \
-	flarefoundation/flare:latest
+	flarefoundation/go-flare:<version>
 ```
 
 <b>Currently the default network is `costwo` but you can change that by providing a `NETWORK_ID` environment variable (i.e. `NETWORK_ID=flare`).</b>
@@ -53,9 +57,10 @@ These are the environment variables you can edit and their default values:
 | `NETWORK_ID` | `costwo` | The network id. The common ids are `flare \| costwo` |
 | `AUTOCONFIGURE_PUBLIC_IP` | `0` | Set to `1` to autoconfigure `PUBLIC_IP`, skipped if PUBLIC_IP is set |
 | `AUTOCONFIGURE_BOOTSTRAP` | `0` | Set to `1` to autoconfigure `BOOTSTRAP_IPS` and `BOOTSTRAP_IDS` |
-| `AUTOCONFIGURE_BOOTSTRAP_ENDPOINT` | `https://coston2.flare.network/ext/info` | Endpoint used for [bootstrapping](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#bootstrapping) when `AUTOCONFIGURE_BOOTSTRAP` is enabled. Possible values are `https://coston2.flare.network/ext/info` or `https://flare.flare.network/ext/info`. |
+| `AUTOCONFIGURE_BOOTSTRAP_ENDPOINT` | `https://coston2-bootstrap.flare.network/ext/info` | Endpoint used for [bootstrapping](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#bootstrapping) when `AUTOCONFIGURE_BOOTSTRAP` is enabled. Possible values are `https://coston2-bootstrap.flare.network/ext/info`, `https://flare-bootstrap.flare.network/ext/info`, `https://coston-bootstrap.flare.network/ext/info` or `https://songbird-bootstrap.flare.network/ext/info`. |
 | `AUTOCONFIGURE_FALLBACK_ENDPOINTS` | _(empty)_ | Comma-divided fallback bootstrap endpoints, used if `AUTOCONFIGURE_BOOTSTRAP_ENDPOINT` is not valid (not whitelisted / unreachable / etc), tested from first-to-last until one is valid |
 | `BOOTSTRAP_BEACON_CONNECTION_TIMEOUT` | `1m` | Set the duration value (eg. `45s` / `5m` / `1h`) for [--bootstrap-beacon-connection-timeout](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#--bootstrap-beacon-connection-timeout-duration) AvalancheGo flag. | 
+| `HTTP_ALLOWED_HOSTS` | `*` | Blocks RPC calls unless they originate from these hostnames. | 
 | `EXTRA_ARGUMENTS` | | Extra arguments passed to flare binary |
 
 
@@ -73,13 +78,13 @@ The external API configuration is set to only respond to API calls so it offload
   "coreth-admin-api-enabled": false,
   "coreth-admin-api-dir": "",
   "eth-apis": [
-    "public-eth",
-    "public-eth-filter",
+    "eth",
+    "eth-filter",
     "net",
     "web3",
-    "internal-public-eth",
-    "internal-public-blockchain",
-    "internal-public-transaction-pool"
+    "internal-eth",
+    "internal-blockchain",
+    "internal-transaction"
   ],
 }
 ```
@@ -94,22 +99,20 @@ Similarly to the external API configuration, this one also responds to API calls
   "coreth-admin-api-enabled": false,
   "coreth-admin-api-dir": "",
   "eth-apis": [
-    "public-eth",
-    "public-eth-filter",
-    "private-admin",
-    "public-debug",
-    "private-debug",
+    "eth",
+    "eth-filter",
+    "admin",
+    "debug",
     "net",
     "debug-tracer",
     "web3",
-    "internal-public-eth",
-    "internal-public-blockchain",
-    "internal-public-transaction-pool",
-    "internal-public-tx-pool",
-    "internal-public-debug",
-    "internal-private-debug",
-    "internal-public-account",
-    "internal-private-personal"
+    "internal-eth",
+    "internal-blockchain",
+    "internal-transaction",
+    "internal-tx-pool",
+    "internal-debug",
+    "internal-account",
+    "internal-personal"
   ],
 }
 ```
