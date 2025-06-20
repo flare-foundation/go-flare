@@ -64,4 +64,4 @@ exec /app/build/avalanchego \
 	--log-level="$LOG_LEVEL" \
 	--network-id="$NETWORK_ID" \
 	--http-allowed-hosts="$HTTP_ALLOWED_HOSTS" \
-	"$EXTRA_ARGUMENTS"
+	$EXTRA_ARGUMENTS
