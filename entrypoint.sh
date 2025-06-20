@@ -50,17 +50,18 @@ then
 fi
 
 exec /app/build/avalanchego \
-	--http-host=$HTTP_HOST \
-	--http-port=$HTTP_PORT \
-	--staking-port=$STAKING_PORT \
-	--public-ip=$PUBLIC_IP \
-	--db-dir=$DB_DIR \
-	--db-type=$DB_TYPE \
-	--bootstrap-ips=$BOOTSTRAP_IPS \
-	--bootstrap-ids=$BOOTSTRAP_IDS \
-	--bootstrap-beacon-connection-timeout=$BOOTSTRAP_BEACON_CONNECTION_TIMEOUT \
-	--chain-config-dir=$CHAIN_CONFIG_DIR \
-	--log-dir=$LOG_DIR \
-	--log-level=$LOG_LEVEL \
-	--network-id=$NETWORK_ID \
-	$EXTRA_ARGUMENTS
+	--http-host="$HTTP_HOST" \
+	--http-port="$HTTP_PORT" \
+	--staking-port="$STAKING_PORT" \
+	--public-ip="$PUBLIC_IP" \
+	--db-dir="$DB_DIR" \
+	--db-type="$DB_TYPE" \
+	--bootstrap-ips="$BOOTSTRAP_IPS" \
+	--bootstrap-ids="$BOOTSTRAP_IDS" \
+	--bootstrap-beacon-connection-timeout="$BOOTSTRAP_BEACON_CONNECTION_TIMEOUT" \
+	--chain-config-dir="$CHAIN_CONFIG_DIR" \
+	--log-dir="$LOG_DIR" \
+	--log-level="$LOG_LEVEL" \
+	--network-id="$NETWORK_ID" \
+	--http-allowed-hosts="$HTTP_ALLOWED_HOSTS" \
+	"$EXTRA_ARGUMENTS"

@@ -1,47 +1,132 @@
 name: container-images
 
-
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "feature/**" ]
     tags: [ "v*" ]
 
 jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
+  build-and-push-matrix:
+    name: Build & Push Matrix
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
+      id-token: write
+    env:
+      USE_DOCKER_HUB: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         fetch-depth: 0
-    - uses: docker/setup-qemu-action@v1
-    - uses: docker/setup-buildx-action@v1
+    - uses: docker/setup-qemu-action@v3
+    - uses: docker/setup-buildx-action@v3
 
     - run: echo "IMAGE_TAG=dev" >> $GITHUB_ENV
-      if: github.ref_name == 'main'
+      if: github.ref_name == 'main' || startsWith(github.ref_name, 'feature/')
     - run: echo "IMAGE_TAG=${GITHUB_REF##*/}" >> $GITHUB_ENV
       if: startsWith(github.ref, 'refs/tags/v')
 
     - name: Login to ghcr.io
-      uses: docker/login-action@v2
+      uses: docker/login-action@v3
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Login to docker.io
-      uses: docker/login-action@v2
+      if: ${{ env.USE_DOCKER_HUB == 'true' }}
+      uses: docker/login-action@v3
       with:
         username: ${{ secrets.DOCKER_HUB_UID }}
         password: ${{ secrets.DOCKER_HUB_PAT }}
 
-    - name: Build image
-      run: |        
+    - name: Build standard image
+      run: |
+        TAGS="--tag ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }}"
+
+        if [ "${USE_DOCKER_HUB}" = "true" ]; then
+          TAGS="$TAGS --tag ${{ secrets.DOCKER_HUB_REPO }}:${{ env.IMAGE_TAG }}"
+        fi
+
         docker buildx build \
-          --platform linux/amd64,linux/arm64 \
-          --tag ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }} \
-          --tag ${{ secrets.DOCKER_HUB_REPO }}:${{ env.IMAGE_TAG }} \
+          --platform ${{ matrix.platform }} \
+          $TAGS \
           --file ./Dockerfile \
-          --output type=image,push=true .
+          --output type=image,push=true \
+          .
+
+    - name: Build distroless image
+      run: |
+        TAGS="--tag ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }}"
+    
+        if [ "${USE_DOCKER_HUB}" = "true" ]; then
+          TAGS="$TAGS --tag ${{ secrets.DOCKER_HUB_REPO }}:${{ env.IMAGE_TAG }}"
+        fi
+
+        docker buildx build \
+          --platform ${{ matrix.platform }} \
+          $TAGS \
+          --file ./Dockerfile.dless \
+          --output type=image,push=true \
+          .
+
+    - name: Install Cosign
+      uses: sigstore/cosign-installer@v3.8.1
+
+    - name: Sign ghcr images
+      shell: bash
+      env:
+        COSIGN_EXPERIMENTAL: 1
+      run: |
+        cosign sign --yes "ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }}"
+        cosign sign --yes "ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }}-dless"
+    
+    - name: Sign docker hub images
+      if: ${{ env.USE_DOCKER_HUB == 'true' }}
+      shell: bash
+      env:
+        COSIGN_EXPERIMENTAL: 1
+      run: |
+        cosign sign --yes "${{ secrets.DOCKER_HUB_REPO }}:${{ env.IMAGE_TAG }}"
+        cosign sign --yes "${{ secrets.DOCKER_HUB_REPO }}:${{ env.IMAGE_TAG }}-dless"
+
+    - name: Verify ghcr image signatures
+      shell: bash
+      env:
+        COSIGN_EXPERIMENTAL: 1
+      run: |
+        cosign verify \
+          --certificate-identity=https://github.com/${{ github.repository }}/.github/workflows/build-container.yml@${{ github.ref }} \
+          --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+          "ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }}"
+
+        cosign verify \
+          --certificate-identity=https://github.com/${{ github.repository }}/.github/workflows/build-container.yml@${{ github.ref }} \
+          --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+          "ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }}-dless"
+    
+    - name: Verify docker hub image signatures
+      if: ${{ env.USE_DOCKER_HUB == 'true' }}
+      shell: bash
+      env:
+        COSIGN_EXPERIMENTAL: 1
+      run: |
+        cosign verify \
+          --certificate-identity=https://github.com/${{ github.repository }}/.github/workflows/build-container.yml@${{ github.ref }} \
+          --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+          "${{ secrets.DOCKER_HUB_REPO }}:${{ env.IMAGE_TAG }}"
+
+        cosign verify \
+          --certificate-identity=https://github.com/${{ github.repository }}/.github/workflows/build-container.yml@${{ github.ref }} \
+          --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+          "${{ secrets.DOCKER_HUB_REPO }}:${{ env.IMAGE_TAG }}-dless"
