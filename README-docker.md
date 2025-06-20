@@ -1,6 +1,6 @@
-# Flare & Coston2
+# go-flare
 
-Docker image for the Flare & Coston2 node implementation found on [github](https://github.com/flare-foundation/go-flare).
+Docker images for the go-flare node implementation found at [github](https://github.com/flare-foundation/go-flare).
 
 ## Variants
 Images with `-dless` postfix are build using distroless base and are rootless.  
