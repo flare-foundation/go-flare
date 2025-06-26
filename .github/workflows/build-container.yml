@@ -7,23 +7,14 @@ on:
 
 jobs:
   build-and-push-matrix:
-    name: Build & Push Matrix
-    runs-on: ${{ matrix.runner }}
+    name: Build & Push
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
       id-token: write
     env:
       USE_DOCKER_HUB: true
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: linux/amd64
-            runner: ubuntu-24.04
-          - platform: linux/arm64
-            runner: ubuntu-24.04-arm
-
     steps:
     - uses: actions/checkout@v4
       with:
@@ -59,7 +50,7 @@ jobs:
         fi
 
         docker buildx build \
-          --platform ${{ matrix.platform }} \
+          --platform linux/amd64,linux/arm64 \
           $TAGS \
           --file ./Dockerfile \
           --output type=image,push=true \
@@ -74,7 +65,7 @@ jobs:
         fi
 
         docker buildx build \
-          --platform ${{ matrix.platform }} \
+          --platform linux/amd64,linux/arm64 \
           $TAGS \
           --file ./Dockerfile.dless \
           --output type=image,push=true \
