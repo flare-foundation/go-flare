@@ -4,10 +4,25 @@
 package constants
 
 import (
-	"math/big"
-	"time"
-
 	"github.com/ethereum/go-ethereum/common"
+)
+
+// Network IDs: copied from avalanchego/utils/constants/network_ids.go
+// There is an "import cycle" between coreth and avalanchego on Avalanche GitHub repository which lacks
+// Flare and Songbird network ids.
+const (
+	MainnetID uint32 = 1
+	CascadeID uint32 = 2
+	DenaliID  uint32 = 3
+	EverestID uint32 = 4
+
+	UnitTestID   uint32 = 10
+	LocalID      uint32 = 12345
+	FlareID      uint32 = 14
+	CostwoID     uint32 = 114
+	LocalFlareID uint32 = 162
+	SongbirdID   uint32 = 5
+	CostonID     uint32 = 7
 )
 
 var (
@@ -15,6 +30,4 @@ var (
 		1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	}
-
-	NativeAssetCallDeprecationTime = big.NewInt(time.Date(2022, time.September, 16, 15, 0, 0, 0, time.UTC).Unix())
 )

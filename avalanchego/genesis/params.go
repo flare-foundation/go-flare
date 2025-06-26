@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package genesis
@@ -69,8 +69,6 @@ func GetTxFeeConfig(networkID uint32) TxFeeConfig {
 		return FlareParams.TxFeeConfig
 	case constants.CostwoID:
 		return CostwoParams.TxFeeConfig
-	case constants.StagingID:
-		return StagingParams.TxFeeConfig
 	case constants.LocalFlareID:
 		return LocalFlareParams.TxFeeConfig
 	case constants.SongbirdID:
@@ -92,8 +90,6 @@ func GetStakingConfig(networkID uint32) StakingConfig {
 		return FlareParams.StakingConfig
 	case constants.CostwoID:
 		return CostwoParams.StakingConfig
-	case constants.StagingID:
-		return StagingParams.StakingConfig
 	case constants.LocalFlareID:
 		return LocalFlareParams.StakingConfig
 	case constants.SongbirdID:

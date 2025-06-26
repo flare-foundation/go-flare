@@ -27,9 +27,9 @@
 package eth
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"math/big"
 	"time"
 
 	"github.com/ava-labs/coreth/core"
@@ -67,7 +67,8 @@ var noopReleaser = tracers.StateReleaseFunc(func() {})
 //   - preferDisk: this arg can be used by the caller to signal that even though the 'base' is
 //     provided, it would be preferable to start from a fresh state, if we have it
 //     on disk.
-func (eth *Ethereum) StateAtBlock(block *types.Block, reexec uint64, base *state.StateDB, readOnly bool, preferDisk bool) (statedb *state.StateDB, release tracers.StateReleaseFunc, err error) {
+func (eth *Ethereum) StateAtBlock(ctx context.Context, block *types.Block, reexec uint64, base *state.StateDB, readOnly bool, preferDisk bool) (statedb *state.StateDB, release tracers.StateReleaseFunc, err error) {
+	reexec = 0 // Do not support re-executing historical blocks to grab state
 	var (
 		current  *types.Block
 		database state.Database
@@ -122,6 +123,9 @@ func (eth *Ethereum) StateAtBlock(block *types.Block, reexec uint64, base *state
 		}
 		// Database does not have the state for the given block, try to regenerate
 		for i := uint64(0); i < reexec; i++ {
+			if err := ctx.Err(); err != nil {
+				return nil, nil, err
+			}
 			if current.NumberU64() == 0 {
 				return nil, nil, errors.New("genesis state is missing")
 			}
@@ -153,6 +157,9 @@ func (eth *Ethereum) StateAtBlock(block *types.Block, reexec uint64, base *state
 		parent common.Hash
 	)
 	for current.NumberU64() < origin {
+		if err := ctx.Err(); err != nil {
+			return nil, nil, err
+		}
 		// Print progress logs if long enough time elapsed
 		if time.Since(logged) > 8*time.Second && report {
 			log.Info("Regenerating historical state", "block", current.NumberU64()+1, "target", origin, "remaining", origin-current.NumberU64()-1, "elapsed", time.Since(start))
@@ -193,7 +200,7 @@ func (eth *Ethereum) StateAtBlock(block *types.Block, reexec uint64, base *state
 }
 
 // stateAtTransaction returns the execution environment of a certain transaction.
-func (eth *Ethereum) stateAtTransaction(block *types.Block, txIndex int, reexec uint64) (core.Message, vm.BlockContext, *state.StateDB, tracers.StateReleaseFunc, error) {
+func (eth *Ethereum) stateAtTransaction(ctx context.Context, block *types.Block, txIndex int, reexec uint64) (*core.Message, vm.BlockContext, *state.StateDB, tracers.StateReleaseFunc, error) {
 	// Short circuit if it's genesis block.
 	if block.NumberU64() == 0 {
 		return nil, vm.BlockContext{}, nil, nil, errors.New("no transaction in genesis")
@@ -205,7 +212,7 @@ func (eth *Ethereum) stateAtTransaction(block *types.Block, txIndex int, reexec 
 	}
 	// Lookup the statedb of parent block from the live database,
 	// otherwise regenerate it on the flight.
-	statedb, release, err := eth.StateAtBlock(parent, reexec, nil, true, false)
+	statedb, release, err := eth.StateAtNextBlock(ctx, parent, block, reexec, nil, true, false)
 	if err != nil {
 		return nil, vm.BlockContext{}, nil, nil, err
 	}
@@ -213,10 +220,10 @@ func (eth *Ethereum) stateAtTransaction(block *types.Block, txIndex int, reexec 
 		return nil, vm.BlockContext{}, statedb, release, nil
 	}
 	// Recompute transactions up to the target index.
-	signer := types.MakeSigner(eth.blockchain.Config(), block.Number(), new(big.Int).SetUint64(block.Time()))
+	signer := types.MakeSigner(eth.blockchain.Config(), block.Number(), block.Time())
 	for idx, tx := range block.Transactions() {
 		// Assemble the transaction call message and return if the requested offset
-		msg, _ := tx.AsMessage(signer, block.BaseFee())
+		msg, _ := core.TransactionToMessage(tx, signer, block.BaseFee())
 		txContext := core.NewEVMTxContext(msg)
 		context := core.NewEVMBlockContext(block.Header(), eth.blockchain, nil)
 		if idx == txIndex {
@@ -224,7 +231,7 @@ func (eth *Ethereum) stateAtTransaction(block *types.Block, txIndex int, reexec 
 		}
 		// Not yet the searched for transaction, execute on top of the current state
 		vmenv := vm.NewEVM(context, txContext, statedb, eth.blockchain.Config(), vm.Config{})
-		statedb.Prepare(tx.Hash(), idx)
+		statedb.SetTxContext(tx.Hash(), idx)
 		if _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(tx.Gas())); err != nil {
 			return nil, vm.BlockContext{}, nil, nil, fmt.Errorf("transaction %#x failed: %v", tx.Hash(), err)
 		}
@@ -233,4 +240,26 @@ func (eth *Ethereum) stateAtTransaction(block *types.Block, txIndex int, reexec 
 		statedb.Finalise(vmenv.ChainConfig().IsEIP158(block.Number()))
 	}
 	return nil, vm.BlockContext{}, nil, nil, fmt.Errorf("transaction index %d out of range for block %#x", txIndex, block.Hash())
+}
+
+// StateAtNextBlock is a helper function that returns the state at the next block.
+// It wraps StateAtBlock and handles the case where Upgrades are applied to the
+// next block.
+// This is different than using StateAtBlock with [nextBlock] because it will
+// apply the upgrades to the [parent] state before returning it.
+func (eth *Ethereum) StateAtNextBlock(ctx context.Context, parent *types.Block, nextBlock *types.Block, reexec uint64, base *state.StateDB, readOnly bool, preferDisk bool) (*state.StateDB, tracers.StateReleaseFunc, error) {
+	// Get state for [parent]
+	statedb, release, err := eth.StateAtBlock(ctx, parent, reexec, base, readOnly, preferDisk)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Apply upgrades here for the [nextBlock]
+	err = core.ApplyUpgrades(eth.blockchain.Config(), &parent.Header().Time, nextBlock, statedb)
+	if err != nil {
+		release()
+		return nil, nil, err
+	}
+
+	return statedb, release, nil
 }

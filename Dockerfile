@@ -1,4 +1,4 @@
-FROM golang:1.21 AS build
+FROM golang:1.22 AS build
 
 RUN apt-get update -y && \
     apt-get install -y rsync
@@ -14,7 +14,7 @@ WORKDIR /app/avalanchego/
 
 RUN /app/avalanchego/scripts/build.sh
 
-FROM ubuntu:24.10
+FROM ubuntu:24.04
 
 WORKDIR /app
 
@@ -32,9 +32,10 @@ ENV HTTP_HOST=0.0.0.0 \
     NETWORK_ID=costwo \
     AUTOCONFIGURE_PUBLIC_IP=1 \
     AUTOCONFIGURE_BOOTSTRAP=1 \
-    AUTOCONFIGURE_BOOTSTRAP_ENDPOINT=https://coston2.flare.network/ext/info \
+    AUTOCONFIGURE_BOOTSTRAP_ENDPOINT=https://coston2-bootstrap.flare.network/ext/info \
     EXTRA_ARGUMENTS="" \
-    BOOTSTRAP_BEACON_CONNECTION_TIMEOUT="1m"
+    BOOTSTRAP_BEACON_CONNECTION_TIMEOUT="1m" \
+    HTTP_ALLOWED_HOSTS="*"
 
 RUN apt-get update -y && \
     apt-get install -y curl jq

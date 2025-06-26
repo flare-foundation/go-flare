@@ -2,6 +2,18 @@
 
 Here are listed specific changes to the code for the Flare and Songbird networks. For a comprehensive list of general changes, see [here](./avalanchego/RELEASES.md) for the AvalancheGo project and [here](./coreth/RELEASES.md) for the Coreth project.
 
+## v1.11.0
+
+The changes go into effect
+ * June 24, 2025 at 12 PM UTC for the Coston2 network,
+ * July 1, 2025 at 12 PM UTC for the Coston network,
+ * July 22, 2025 at 12 PM UTC for the Songbird network,
+ * August 5, 2025 at 12 PM UTC for the Flare network.
+
+### Note:
+
+- Avalanche added in v1.10.3 a new config `--http-allowed-hosts` with a default value of `localhost`. Set `--http-allowed-hosts="*"` to allow RPC calls for all hosts.
+
 ## v1.10.0
 
 The changes go into effect on May 6, 2025 at 12 PM UTC for the Songbird network and on May 13, 2025 at 12 PM UTC for the Flare network.

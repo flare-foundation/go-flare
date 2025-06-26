@@ -8,7 +8,7 @@ on:
     tags:
 
 env:
-  go_version: 1.21.8
+  go_version: 1.22.12
 
 jobs:
   build:
@@ -24,7 +24,6 @@ jobs:
       with:
         go-version: ${{ env.go_version }}
 
-
     - run: echo "IMAGE_TAG=dev" >> $GITHUB_ENV
       if: ${{ github.ref_name }} == 'main'
     - run: echo "IMAGE_TAG=${GITHUB_REF##*/}" >> $GITHUB_ENV
@@ -33,6 +32,8 @@ jobs:
     - run: sudo apt-get update -y && sudo apt-get install -y rsync
     - name: build
       id: build
+      env:
+        GOPATH: ${{ github.workspace }}/go              
       run: |
         cd avalanchego
         ./scripts/build.sh

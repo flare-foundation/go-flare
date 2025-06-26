@@ -42,12 +42,6 @@ import (
 )
 
 const (
-	errcodeTimeout          = -32002
-	errcodeResponseTooLarge = -32003
-)
-
-const (
-	errMsgTimeout          = "request timed out"
 	errMsgResponseTooLarge = "response too large"
 	errMsgBatchTooLarge    = "batch too large"
 )
@@ -185,7 +179,7 @@ func (b *batchCallBuffer) write(ctx context.Context, conn jsonWriter) {
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
 
-	b.doWrite(ctx, conn)
+	b.doWrite(ctx, conn, false)
 }
 
 // respondWithError sends the responses added so far. For the remaining unanswered call
@@ -199,18 +193,33 @@ func (b *batchCallBuffer) respondWithError(ctx context.Context, conn jsonWriter,
 			b.resp = append(b.resp, msg.errorResponse(err))
 		}
 	}
-	b.doWrite(ctx, conn)
+	b.doWrite(ctx, conn, true)
+}
+
+// timeout sends the responses added so far. For the remaining unanswered call
+// messages, it sends a timeout error response.
+func (b *batchCallBuffer) timeout(ctx context.Context, conn jsonWriter) {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	for _, msg := range b.calls {
+		if !msg.isNotification() {
+			resp := msg.errorResponse(&internalServerError{errcodeTimeout, errMsgTimeout})
+			b.resp = append(b.resp, resp)
+		}
+	}
+	b.doWrite(ctx, conn, true)
 }
 
 // doWrite actually writes the response.
 // This assumes b.mutex is held.
-func (b *batchCallBuffer) doWrite(ctx context.Context, conn jsonWriter) {
+func (b *batchCallBuffer) doWrite(ctx context.Context, conn jsonWriter, isErrorResponse bool) {
 	if b.wrote {
 		return
 	}
 	b.wrote = true // can only write once
 	if len(b.resp) > 0 {
-		conn.writeJSONSkipDeadline(ctx, b.resp, true)
+		conn.writeJSONSkipDeadline(ctx, b.resp, isErrorResponse, true)
 	}
 }
 
@@ -231,7 +240,8 @@ func (h *handler) handleBatch(msgs []*jsonrpcMessage) {
 	// Emit error response for empty batches:
 	if len(msgs) == 0 {
 		h.startCallProc(func(cp *callProc) {
-			h.conn.writeJSONSkipDeadline(cp.ctx, errorMessage(&invalidRequestError{"empty batch"}), h.deadlineContext > 0)
+			resp := errorMessage(&invalidRequestError{"empty batch"})
+			h.conn.writeJSONSkipDeadline(cp.ctx, resp, true, h.deadlineContext > 0)
 		})
 		return
 	}
@@ -271,8 +281,7 @@ func (h *handler) handleBatch(msgs []*jsonrpcMessage) {
 		if timeout, ok := ContextRequestTimeout(cp.ctx); ok {
 			timer = time.AfterFunc(timeout, func() {
 				cancel()
-				err := &internalServerError{errcodeTimeout, errMsgTimeout}
-				callBuffer.respondWithError(cp.ctx, h.conn, err)
+				callBuffer.timeout(cp.ctx, h.conn)
 			})
 		}
 
@@ -288,6 +297,7 @@ func (h *handler) handleBatch(msgs []*jsonrpcMessage) {
 			}
 			resp := h.handleCallMsg(cp, msg)
 			callBuffer.pushResponse(resp)
+
 			if resp != nil && batchResponseMaxSize != 0 {
 				responseBytes += len(resp.Result)
 				if responseBytes > batchResponseMaxSize {
@@ -300,7 +310,6 @@ func (h *handler) handleBatch(msgs []*jsonrpcMessage) {
 		if timer != nil {
 			timer.Stop()
 		}
-
 		h.addSubscriptions(cp.notifiers)
 		callBuffer.write(cp.ctx, h.conn)
 		for _, n := range cp.notifiers {
@@ -320,7 +329,7 @@ func (h *handler) respondWithBatchTooLarge(cp *callProc, batch []*jsonrpcMessage
 			break
 		}
 	}
-	h.conn.writeJSONSkipDeadline(cp.ctx, []*jsonrpcMessage{resp}, h.deadlineContext > 0)
+	h.conn.writeJSONSkipDeadline(cp.ctx, []*jsonrpcMessage{resp}, true, h.deadlineContext > 0)
 }
 
 // handleMsg handles a single message.
@@ -329,10 +338,36 @@ func (h *handler) handleMsg(msg *jsonrpcMessage) {
 		return
 	}
 	h.startCallProc(func(cp *callProc) {
+		var (
+			responded sync.Once
+			timer     *time.Timer
+			cancel    context.CancelFunc
+		)
+		cp.ctx, cancel = context.WithCancel(cp.ctx)
+		defer cancel()
+
+		// Cancel the request context after timeout and send an error response. Since the
+		// running method might not return immediately on timeout, we must wait for the
+		// timeout concurrently with processing the request.
+		if timeout, ok := ContextRequestTimeout(cp.ctx); ok {
+			timer = time.AfterFunc(timeout, func() {
+				cancel()
+				responded.Do(func() {
+					resp := msg.errorResponse(&internalServerError{errcodeTimeout, errMsgTimeout})
+					h.conn.writeJSONSkipDeadline(cp.ctx, resp, true, h.deadlineContext > 0)
+				})
+			})
+		}
+
 		answer := h.handleCallMsg(cp, msg)
+		if timer != nil {
+			timer.Stop()
+		}
 		h.addSubscriptions(cp.notifiers)
 		if answer != nil {
-			h.conn.writeJSONSkipDeadline(cp.ctx, answer, h.deadlineContext > 0)
+			responded.Do(func() {
+				h.conn.writeJSONSkipDeadline(cp.ctx, answer, false, h.deadlineContext > 0)
+			})
 		}
 		for _, n := range cp.notifiers {
 			n.activate()
@@ -565,7 +600,7 @@ func (h *handler) handleCallMsg(ctx *callProc, msg *jsonrpcMessage) *jsonrpcMess
 			if resp.Error.Data != nil {
 				ctx = append(ctx, "errdata", resp.Error.Data)
 			}
-			h.log.Warn("Served "+msg.Method, ctx...)
+			h.log.Info("Served "+msg.Method, ctx...)
 		} else {
 			h.log.Debug("Served "+msg.Method, ctx...)
 		}
@@ -597,7 +632,6 @@ func (h *handler) handleCall(cp *callProc, msg *jsonrpcMessage) *jsonrpcMessage 
 	}
 	start := time.Now()
 	answer := h.runMethod(cp.ctx, msg, callb, args)
-
 	// Collect the statistics for RPC calls if metrics is enabled.
 	// We only care about pure rpc call. Filter out subscription.
 	if callb != h.unsubscribeCb {

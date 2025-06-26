@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package peer
@@ -7,15 +7,17 @@ import (
 	"crypto"
 	"sync"
 
+	"github.com/ava-labs/avalanchego/utils/crypto/bls"
 	"github.com/ava-labs/avalanchego/utils/ips"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 )
 
 // IPSigner will return a signedIP for the current value of our dynamic IP.
 type IPSigner struct {
-	ip     ips.DynamicIPPort
-	clock  mockable.Clock
-	signer crypto.Signer
+	ip        ips.DynamicIPPort
+	clock     mockable.Clock
+	tlsSigner crypto.Signer
+	blsSigner *bls.SecretKey
 
 	// Must be held while accessing [signedIP]
 	signedIPLock sync.RWMutex
@@ -26,11 +28,13 @@ type IPSigner struct {
 
 func NewIPSigner(
 	ip ips.DynamicIPPort,
-	signer crypto.Signer,
+	tlsSigner crypto.Signer,
+	blsSigner *bls.SecretKey,
 ) *IPSigner {
 	return &IPSigner{
-		ip:     ip,
-		signer: signer,
+		ip:        ip,
+		tlsSigner: tlsSigner,
+		blsSigner: blsSigner,
 	}
 }
 
@@ -67,7 +71,7 @@ func (s *IPSigner) GetSignedIP() (*SignedIP, error) {
 		IPPort:    ip,
 		Timestamp: s.clock.Unix(),
 	}
-	signedIP, err := unsignedIP.Sign(s.signer)
+	signedIP, err := unsignedIP.Sign(s.tlsSigner, s.blsSigner)
 	if err != nil {
 		return nil, err
 	}

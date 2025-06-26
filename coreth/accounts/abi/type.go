@@ -164,6 +164,9 @@ func NewType(t string, internalType string, components []ArgumentMarshaling) (ty
 		if varSize == 0 {
 			typ.T = BytesTy
 		} else {
+			if varSize > 32 {
+				return Type{}, fmt.Errorf("unsupported arg type: %s", t)
+			}
 			typ.T = FixedBytesTy
 			typ.Size = varSize
 		}
@@ -186,9 +189,7 @@ func NewType(t string, internalType string, components []ArgumentMarshaling) (ty
 				return Type{}, errors.New("abi: purely anonymous or underscored field is not supported")
 			}
 			fieldName := ResolveNameConflict(name, func(s string) bool { return used[s] })
-			if err != nil {
-				return Type{}, err
-			}
+
 			used[fieldName] = true
 			if !isValidFieldName(fieldName) {
 				return Type{}, fmt.Errorf("field %d has invalid name", idx)

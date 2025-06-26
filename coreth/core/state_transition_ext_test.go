@@ -11,11 +11,11 @@ import (
 	"github.com/ava-labs/coreth/core/types"
 	"github.com/ava-labs/coreth/core/vm"
 	"github.com/ava-labs/coreth/eth/tracers/logger"
-	"github.com/ava-labs/coreth/ethdb"
 	"github.com/ava-labs/coreth/params"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethdb"
 )
 
 // Test prioritized contract (Submitter) being partially refunded when fee is high
@@ -27,7 +27,7 @@ func TestStateTransitionPrioritizedContract(t *testing.T) {
 		from := crypto.PubkeyToAddress(key.PublicKey)
 		gas := uint64(3000000)
 		to := prioritisedSubmitterContractAddress
-		daemon := common.HexToAddress(GetDaemonContractAddr(new(big.Int)))
+		daemon := common.HexToAddress(GetDaemonContractAddr(0))
 		signer := types.LatestSignerForChainID(config.ChainID)
 		tx, err := types.SignNewTx(key, signer,
 			&types.LegacyTx{
@@ -48,7 +48,7 @@ func TestStateTransitionPrioritizedContract(t *testing.T) {
 			Transfer:    Transfer,
 			Coinbase:    common.HexToAddress("0x0100000000000000000000000000000000000000"),
 			BlockNumber: big.NewInt(5),
-			Time:        big.NewInt(time.Date(2024, time.May, 1, 0, 0, 0, 0, time.UTC).Unix()), // Time after setting Submitter contract address on all chains
+			Time:        uint64(time.Date(2024, time.May, 1, 0, 0, 0, 0, time.UTC).Unix()), // Time after setting Submitter contract address on all chains
 			Difficulty:  big.NewInt(0xffffffff),
 			GasLimit:    gas,
 			BaseFee:     big.NewInt(8),
@@ -77,21 +77,22 @@ func TestStateTransitionPrioritizedContract(t *testing.T) {
 		tracer := logger.NewStructLogger(&logger.Config{
 			Debug: false,
 		})
-		cfg := vm.Config{Debug: true, Tracer: tracer}
+		cfg := vm.Config{Tracer: tracer}
 		evm := vm.NewEVM(context, txContext, statedb, config, cfg)
-		msg, err := tx.AsMessage(signer, nil)
+
+		msg, err := TransactionToMessage(tx, signer, nil)
 		if err != nil {
 			t.Fatalf("failed to prepare transaction for tracing: %v", err)
 		}
 
 		st := NewStateTransition(evm, msg, new(GasPool).AddGas(tx.Gas()))
 
-		balanceBefore := st.state.GetBalance(st.msg.From())
+		balanceBefore := st.state.GetBalance(st.msg.From)
 		_, err = st.TransitionDb()
 		if err != nil {
 			t.Fatal(err)
 		}
-		balanceAfter := st.state.GetBalance(st.msg.From())
+		balanceAfter := st.state.GetBalance(st.msg.From)
 
 		// max fee (funds above which are returned) depends on the chain used
 		_, limit, _, _, _ := stateTransitionVariants.GetValue(config.ChainID)(st)
@@ -112,7 +113,7 @@ func TestStateTransitionDaemon(t *testing.T) {
 		key, _ := crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
 		from := crypto.PubkeyToAddress(key.PublicKey)
 		gas := uint64(3000000)
-		daemon := common.HexToAddress(GetDaemonContractAddr(new(big.Int)))
+		daemon := common.HexToAddress(GetDaemonContractAddr(0))
 		to := common.HexToAddress("0x7e22C4A78675ae3Be11Fb389Da9b9fb15996bb6a")
 		signer := types.LatestSignerForChainID(config.ChainID)
 		tx, err := types.SignNewTx(key, signer,
@@ -134,7 +135,7 @@ func TestStateTransitionDaemon(t *testing.T) {
 			Transfer:    Transfer,
 			Coinbase:    common.HexToAddress("0x0100000000000000000000000000000000000000"),
 			BlockNumber: big.NewInt(5),
-			Time:        big.NewInt(time.Date(2024, time.May, 1, 0, 0, 0, 0, time.UTC).Unix()),
+			Time:        uint64(time.Date(2024, time.May, 1, 0, 0, 0, 0, time.UTC).Unix()),
 			Difficulty:  big.NewInt(0xffffffff),
 			GasLimit:    gas,
 			BaseFee:     big.NewInt(8),
@@ -163,9 +164,9 @@ func TestStateTransitionDaemon(t *testing.T) {
 		tracer := logger.NewStructLogger(&logger.Config{
 			Debug: false,
 		})
-		cfg := vm.Config{Debug: true, Tracer: tracer}
+		cfg := vm.Config{Tracer: tracer}
 		evm := vm.NewEVM(context, txContext, statedb, config, cfg)
-		msg, err := tx.AsMessage(signer, nil)
+		msg, err := TransactionToMessage(tx, signer, nil)
 		if err != nil {
 			t.Fatalf("failed to prepare transaction for tracing: %v", err)
 		}
@@ -201,9 +202,15 @@ func makePreState(db ethdb.Database, accounts GenesisAlloc, snapshotter bool) (*
 	// Commit and re-open to start with a clean state.
 	root, _ := statedb.Commit(false, false)
 
+	snapConfig := snapshot.Config{
+		CacheSize:  64,
+		AsyncBuild: false,
+		NoBuild:    false,
+		SkipVerify: true,
+	}
 	var snaps *snapshot.Tree
 	if snapshotter {
-		snaps, _ = snapshot.New(db, sdb.TrieDB(), 1, common.Hash{}, root, false, true, false)
+		snaps, _ = snapshot.New(snapConfig, sdb.DiskDB(), sdb.TrieDB(), common.Hash{}, root)
 	}
 	statedb, _ = state.New(root, sdb, snaps)
 	return snaps, statedb

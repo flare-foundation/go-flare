@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 
-# Set up the versions to be used
-coreth_version=${CORETH_VERSION:-'v0.12.0'}
+# Ignore warnings about variables appearing unused since this file is not the consumer of the variables it defines.
+# shellcheck disable=SC2034
+
+set -euo pipefail
+
 # Don't export them as they're used in the context of other calls
-avalanche_version=${AVALANCHE_VERSION:-'v1.9.16'}
+avalanche_version=${AVALANCHE_VERSION:-'e248179ae75918581fec77ba09fd1ca939bb1844'}

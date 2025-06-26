@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package x
@@ -6,7 +6,7 @@ package x
 import (
 	"time"
 
-	"github.com/ava-labs/avalanchego/vms/avm/blocks"
+	"github.com/ava-labs/avalanchego/vms/avm/block"
 	"github.com/ava-labs/avalanchego/vms/avm/fxs"
 	"github.com/ava-labs/avalanchego/vms/nftfx"
 	"github.com/ava-labs/avalanchego/vms/propertyfx"
@@ -20,11 +20,12 @@ const (
 )
 
 // Parser to support serialization and deserialization
-var Parser blocks.Parser
+var Parser block.Parser
 
 func init() {
 	var err error
-	Parser, err = blocks.NewParser(
+	Parser, err = block.NewParser(
+		time.Time{},
 		time.Time{},
 		[]fxs.Fx{
 			&secp256k1fx.Fx{},

@@ -22,7 +22,7 @@ type MockEVMCallerData struct {
 	addBalanceCalls       int
 	revertToSnapshotCalls int
 	lastSnapshotValue     int
-	blockTime             big.Int
+	blockTime             uint64
 	gasLimit              uint64
 	mintRequestReturn     big.Int
 	lastAddBalanceAddr    common.Address
@@ -47,8 +47,8 @@ func defaultRevertToSnapshot(e *MockEVMCallerData, snapshot int) {
 	e.lastSnapshotValue = snapshot
 }
 
-func defaultGetBlockTime(e *MockEVMCallerData) *big.Int {
-	return &e.blockTime
+func defaultGetBlockTime(e *MockEVMCallerData) uint64 {
+	return e.blockTime
 }
 
 func defaultGetGasLimit(e *MockEVMCallerData) uint64 {
@@ -74,7 +74,7 @@ func (e *DefaultEVMMock) DaemonRevertToSnapshot(snapshot int) {
 	defaultRevertToSnapshot(&e.mockEVMCallerData, snapshot)
 }
 
-func (e *DefaultEVMMock) GetBlockTime() *big.Int {
+func (e *DefaultEVMMock) GetBlockTime() uint64 {
 	return defaultGetBlockTime(&e.mockEVMCallerData)
 }
 
@@ -93,7 +93,7 @@ func (e *DefaultEVMMock) AddBalance(addr common.Address, amount *big.Int) {
 func TestDaemonShouldReturnMintRequest(t *testing.T) {
 	mintRequestReturn, _ := new(big.Int).SetString("60000000000000000000000000", 10)
 	mockEVMCallerData := &MockEVMCallerData{
-		blockTime:         *big.NewInt(0),
+		blockTime:         0,
 		gasLimit:          0,
 		mintRequestReturn: *mintRequestReturn,
 	}
@@ -115,7 +115,7 @@ func TestDaemonShouldNotLetMintRequestOverflow(t *testing.T) {
 	mintRequestReturn.SetBytes(buffer)
 
 	mockEVMCallerData := &MockEVMCallerData{
-		blockTime:         *big.NewInt(0),
+		blockTime:         0,
 		gasLimit:          0,
 		mintRequestReturn: mintRequestReturn,
 	}
@@ -154,7 +154,7 @@ func (e *BadMintReturnSizeEVMMock) DaemonRevertToSnapshot(snapshot int) {
 	defaultRevertToSnapshot(&e.mockEVMCallerData, snapshot)
 }
 
-func (e *BadMintReturnSizeEVMMock) GetBlockTime() *big.Int {
+func (e *BadMintReturnSizeEVMMock) GetBlockTime() uint64 {
 	return defaultGetBlockTime(&e.mockEVMCallerData)
 }
 
@@ -177,7 +177,7 @@ func TestDaemonValidatesMintRequestReturnValueSize(t *testing.T) {
 	mintRequestReturn.SetBytes(buffer)
 
 	mockEVMCallerData := &MockEVMCallerData{
-		blockTime:         *big.NewInt(0),
+		blockTime:         0,
 		gasLimit:          0,
 		mintRequestReturn: mintRequestReturn,
 	}
@@ -213,7 +213,7 @@ func (e *BadDaemonCallEVMMock) DaemonRevertToSnapshot(snapshot int) {
 	defaultRevertToSnapshot(&e.mockEVMCallerData, snapshot)
 }
 
-func (e *BadDaemonCallEVMMock) GetBlockTime() *big.Int {
+func (e *BadDaemonCallEVMMock) GetBlockTime() uint64 {
 	return defaultGetBlockTime(&e.mockEVMCallerData)
 }
 
@@ -308,7 +308,7 @@ func (e *ReturnNilMintRequestEVMMock) DaemonRevertToSnapshot(snapshot int) {
 	defaultRevertToSnapshot(&e.mockEVMCallerData, snapshot)
 }
 
-func (e *ReturnNilMintRequestEVMMock) GetBlockTime() *big.Int {
+func (e *ReturnNilMintRequestEVMMock) GetBlockTime() uint64 {
 	return defaultGetBlockTime(&e.mockEVMCallerData)
 }
 
@@ -345,7 +345,7 @@ func TestDaemonHandlesNilMintRequest(t *testing.T) {
 func TestDaemonShouldNotMintMoreThanMax(t *testing.T) {
 	mintRequest, _ := new(big.Int).SetString("60000000000000000000000001", 10)
 	mockEVMCallerData := &MockEVMCallerData{
-		blockTime:         *big.NewInt(0),
+		blockTime:         0,
 		gasLimit:          0,
 		mintRequestReturn: *big.NewInt(0),
 	}
@@ -359,7 +359,7 @@ func TestDaemonShouldNotMintMoreThanMax(t *testing.T) {
 		if err, ok := err.(*ErrMaxMintExceeded); !ok {
 			want := &ErrMaxMintExceeded{
 				mintRequest: mintRequest,
-				mintMax:     GetMaximumMintRequest(params.FlareChainID, big.NewInt(0)),
+				mintMax:     GetMaximumMintRequest(params.FlareChainID, 0),
 			}
 			t.Errorf("got '%s' want '%s'", err.Error(), want.Error())
 		}
@@ -371,7 +371,7 @@ func TestDaemonShouldNotMintMoreThanMax(t *testing.T) {
 func TestDaemonShouldNotMintNegative(t *testing.T) {
 	mintRequest := big.NewInt(-1)
 	mockEVMCallerData := &MockEVMCallerData{
-		blockTime:         *big.NewInt(0),
+		blockTime:         0,
 		gasLimit:          0,
 		mintRequestReturn: *big.NewInt(0),
 	}
@@ -395,7 +395,7 @@ func TestDaemonShouldMint(t *testing.T) {
 	// Assemble
 	mintRequest, _ := new(big.Int).SetString("60000000000000000000000000", 10)
 	mockEVMCallerData := &MockEVMCallerData{
-		blockTime:         *big.NewInt(0),
+		blockTime:         0,
 		gasLimit:          0,
 		mintRequestReturn: *big.NewInt(0),
 	}
@@ -411,8 +411,8 @@ func TestDaemonShouldMint(t *testing.T) {
 		if defaultEVMMock.mockEVMCallerData.addBalanceCalls != 1 {
 			t.Errorf("AddBalance not called as expected")
 		}
-		if defaultEVMMock.mockEVMCallerData.lastAddBalanceAddr.String() != GetDaemonContractAddr(big.NewInt(0)) {
-			t.Errorf("wanted addr %s; got addr %s", GetDaemonContractAddr(big.NewInt(0)), defaultEVMMock.mockEVMCallerData.lastAddBalanceAddr)
+		if defaultEVMMock.mockEVMCallerData.lastAddBalanceAddr.String() != GetDaemonContractAddr(0) {
+			t.Errorf("wanted addr %s; got addr %s", GetDaemonContractAddr(0), defaultEVMMock.mockEVMCallerData.lastAddBalanceAddr)
 		}
 		if defaultEVMMock.mockEVMCallerData.lastAddBalanceAmount.Cmp(mintRequest) != 0 {
 			t.Errorf("wanted amount %s; got amount %s", mintRequest.Text(10), defaultEVMMock.mockEVMCallerData.lastAddBalanceAmount.Text(10))
@@ -426,7 +426,7 @@ func TestDaemonShouldNotErrorMintingZero(t *testing.T) {
 	// Assemble
 	mintRequest := big.NewInt(0)
 	mockEVMCallerData := &MockEVMCallerData{
-		blockTime:         *big.NewInt(0),
+		blockTime:         0,
 		gasLimit:          0,
 		mintRequestReturn: *big.NewInt(0),
 	}
@@ -450,7 +450,7 @@ func TestDaemonShouldNotErrorMintingZero(t *testing.T) {
 func TestDaemonFiredAndMinted(t *testing.T) {
 	mintRequestReturn, _ := new(big.Int).SetString("60000000000000000000000000", 10)
 	mockEVMCallerData := &MockEVMCallerData{
-		blockTime:         *big.NewInt(0),
+		blockTime:         0,
 		gasLimit:          0,
 		mintRequestReturn: *mintRequestReturn,
 	}
@@ -474,7 +474,7 @@ func TestDaemonFiredAndMinted(t *testing.T) {
 func TestDaemonShouldNotMintMoreThanLimit(t *testing.T) {
 	mintRequestReturn, _ := new(big.Int).SetString("60000000000000000000000001", 10)
 	mockEVMCallerData := &MockEVMCallerData{
-		blockTime:         *big.NewInt(0),
+		blockTime:         0,
 		gasLimit:          0,
 		mintRequestReturn: *mintRequestReturn,
 	}
@@ -497,9 +497,9 @@ func TestDaemonShouldNotMintMoreThanLimit(t *testing.T) {
 
 func TestPrioritisedContract(t *testing.T) {
 	address := common.HexToAddress("0x123456789aBCdEF123456789aBCdef123456789A")
-	preForkTime := big.NewInt(time.Date(2024, time.March, 20, 12, 0, 0, 0, time.UTC).Unix())
-	postForkTime := big.NewInt(time.Date(2024, time.March, 27, 12, 0, 0, 0, time.UTC).Unix())
-	postPrefixForkTime := big.NewInt(time.Date(2024, time.October, 11, 0, 0, 0, 0, time.UTC).Unix())
+	preForkTime := uint64(time.Date(2024, time.March, 20, 12, 0, 0, 0, time.UTC).Unix())
+	postForkTime := uint64(time.Date(2024, time.March, 27, 12, 0, 0, 0, time.UTC).Unix())
+	postPrefixForkTime := uint64(time.Date(2024, time.October, 11, 0, 0, 0, 0, time.UTC).Unix())
 	initialGas := uint64(0)
 	ret0 := [32]byte{}
 	ret1 := [32]byte{}

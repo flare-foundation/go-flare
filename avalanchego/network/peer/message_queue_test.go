@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2023, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package peer
@@ -20,7 +20,7 @@ func TestMessageQueue(t *testing.T) {
 
 	expectFail := false
 	q := NewBlockingMessageQueue(
-		SendFailedFunc(func(msg message.OutboundMessage) {
+		SendFailedFunc(func(message.OutboundMessage) {
 			require.True(expectFail)
 		}),
 		logging.NoLog{},
@@ -35,7 +35,8 @@ func TestMessageQueue(t *testing.T) {
 	for i := 0; i < numToSend; i++ {
 		testID := ids.GenerateTestID()
 		testID2 := ids.GenerateTestID()
-		m, err := mc.Pong(uint32(i),
+		m, err := mc.Ping(
+			uint32(i),
 			[]*p2p.SubnetUptime{
 				{SubnetId: testID[:], Uptime: uint32(i)},
 				{SubnetId: testID2[:], Uptime: uint32(i)},
