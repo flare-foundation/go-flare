@@ -67,10 +67,10 @@ jobs:
 
     - name: Build distroless image
       run: |
-        TAGS="--tag ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }}"
+        TAGS="--tag ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }}-dless"
     
         if [ "${USE_DOCKER_HUB}" = "true" ]; then
-          TAGS="$TAGS --tag ${{ secrets.DOCKER_HUB_REPO }}:${{ env.IMAGE_TAG }}"
+          TAGS="$TAGS --tag ${{ secrets.DOCKER_HUB_REPO }}:${{ env.IMAGE_TAG }}-dless"
         fi
 
         docker buildx build \
