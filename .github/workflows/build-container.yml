@@ -6,7 +6,7 @@ on:
     tags: [ "v*" ]
 
 jobs:
-  build-and-push-matrix:
+  build-and-push:
     name: Build & Push
     runs-on: ubuntu-latest
     permissions:
@@ -42,6 +42,8 @@ jobs:
         password: ${{ secrets.DOCKER_HUB_PAT }}
 
     - name: Build standard image
+      env:
+        USE_DOCKER_HUB: ${{ env.USE_DOCKER_HUB }}
       run: |
         TAGS="--tag ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }}"
 
@@ -63,6 +65,8 @@ jobs:
         echo "IMAGE_DIGEST=$DIG" >> $GITHUB_ENV
 
     - name: Build distroless image
+      env:
+        USE_DOCKER_HUB: ${{ env.USE_DOCKER_HUB }}
       run: |
         TAGS="--tag ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }}-dless"
     
