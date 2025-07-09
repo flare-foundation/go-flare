@@ -153,7 +153,6 @@ var (
 		constants.CostwoID:   time.Date(2025, time.June, 24, 12, 0, 0, 0, time.UTC),
 		constants.CostonID:   time.Date(2025, time.July, 1, 12, 0, 0, 0, time.UTC),
 		constants.SongbirdID: time.Date(2025, time.July, 22, 12, 0, 0, 0, time.UTC),
-		constants.LocalID:    time.Date(10000, time.December, 1, 0, 0, 0, 0, time.UTC),
 	}
 )
 
