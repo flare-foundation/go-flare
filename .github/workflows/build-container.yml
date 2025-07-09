@@ -6,7 +6,7 @@ on:
     tags: [ "v*" ]
 
 jobs:
-  build-and-push-matrix:
+  build-and-push:
     name: Build & Push
     runs-on: ubuntu-latest
     permissions:
@@ -42,6 +42,8 @@ jobs:
         password: ${{ secrets.DOCKER_HUB_PAT }}
 
     - name: Build standard image
+      env:
+        USE_DOCKER_HUB: ${{ env.USE_DOCKER_HUB }}
       run: |
         TAGS="--tag ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }}"
 
@@ -54,9 +56,17 @@ jobs:
           $TAGS \
           --file ./Dockerfile \
           --output type=image,push=true \
+          --iidfile std.digest \
           .
 
+    - name: Export standard image digest  
+      run: |
+        DIG=$(cat std.digest)
+        echo "IMAGE_DIGEST=$DIG" >> $GITHUB_ENV
+
     - name: Build distroless image
+      env:
+        USE_DOCKER_HUB: ${{ env.USE_DOCKER_HUB }}
       run: |
         TAGS="--tag ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }}-dless"
     
@@ -69,4 +79,62 @@ jobs:
           $TAGS \
           --file ./Dockerfile.dless \
           --output type=image,push=true \
+          --iidfile dless.digest \
           .
+
+    - name: Export distroless image digest
+      run: |
+        DIG=$(cat dless.digest)
+        echo "DLESS_IMAGE_DIGEST=$DIG" >> $GITHUB_ENV
+
+
+    - name: Install Cosign
+      uses: sigstore/cosign-installer@v3.8.1
+
+    - name: Sign ghcr images
+      shell: bash
+      env:
+        COSIGN_EXPERIMENTAL: 1
+      run: |
+          cosign sign --yes ghcr.io/${{ github.repository }}@${{ env.IMAGE_DIGEST }}
+          cosign sign --yes ghcr.io/${{ github.repository }}@${{ env.DLESS_IMAGE_DIGEST }}
+    
+    - name: Sign docker hub images
+      if: ${{ env.USE_DOCKER_HUB == 'true' }}
+      shell: bash
+      env:
+        COSIGN_EXPERIMENTAL: 1
+      run: |
+          cosign sign --yes ${{ secrets.DOCKER_HUB_REPO }}@${{ env.IMAGE_DIGEST }}
+          cosign sign --yes ${{ secrets.DOCKER_HUB_REPO }}@${{ env.DLESS_IMAGE_DIGEST }}
+
+    - name: Verify ghcr image signatures
+      shell: bash
+      env:
+        COSIGN_EXPERIMENTAL: 1
+      run: |
+        cosign verify \
+          --certificate-identity=https://github.com/${{ github.repository }}/.github/workflows/build-container.yml@${{ github.ref }} \
+          --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+          "ghcr.io/${{ github.repository }}@${{ env.IMAGE_DIGEST }}"
+
+        cosign verify \
+          --certificate-identity=https://github.com/${{ github.repository }}/.github/workflows/build-container.yml@${{ github.ref }} \
+          --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+          "ghcr.io/${{ github.repository }}@${{ env.DLESS_IMAGE_DIGEST }}"
+    
+    - name: Verify docker hub image signatures
+      if: ${{ env.USE_DOCKER_HUB == 'true' }}
+      shell: bash
+      env:
+        COSIGN_EXPERIMENTAL: 1
+      run: |
+        cosign verify \
+          --certificate-identity=https://github.com/${{ github.repository }}/.github/workflows/build-container.yml@${{ github.ref }} \
+          --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+          "${{ secrets.DOCKER_HUB_REPO }}@${{ env.IMAGE_DIGEST }}"
+
+        cosign verify \
+          --certificate-identity=https://github.com/${{ github.repository }}/.github/workflows/build-container.yml@${{ github.ref }} \
+          --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+          "${{ secrets.DOCKER_HUB_REPO }}@${{ env.DLESS_IMAGE_DIGEST }}"       
