@@ -4,21 +4,21 @@ import { runTest } from './runner';
 
 async function CtoPExport(amountFLR: number) {
     const ctx = await localFlareContext();
-    const baseFee = await ctx.evmapi.getBaseFee();
+    const fee = 1; // in FLR
     const txCount = await ctx.provider.getTransactionCount(ctx.addressC);
 
     // Create and issue a C to P export transaction
     console.log(`Creating C to P export transaction for ${amountFLR} FLR...`);
 
-    const exportTx = evm.newExportTxFromBaseFee(
+    const exportTx = evm.newExportTx(
         ctx.context,
-        baseFee / BigInt(1e9),
         BigInt(amountFLR * 1e9),
         ctx.context.pBlockchainID,
         utils.hexToBuffer(ctx.addressC),
         [utils.bech32ToBytes(ctx.addressP)],
+        BigInt(fee * 1e9),
         BigInt(txCount),
-    );
+    )
 
     await issueCChainTx(ctx.evmapi, exportTx, ctx.privateKey);
 
