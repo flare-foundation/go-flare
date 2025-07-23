@@ -4,7 +4,7 @@ import { runTest } from './runner';
 
 async function PtoCExport(amountFLR: number) {
     const ctx = await localFlareContext();
-    const baseFee = await ctx.evmapi.getBaseFee();
+    const fee = 1; // in FLR
 
     // Create and issue a P to C export transaction
     console.log(`Creating P to C export transaction for ${amountFLR} FLR...`);
@@ -33,13 +33,13 @@ async function PtoCExport(amountFLR: number) {
         addresses: ['C-' + ctx.addressP.slice(2)],
     });
 
-    const importTx = evm.newImportTxFromBaseFee(
+    const importTx = evm.newImportTx(
         ctx.context,
         utils.hexToBuffer(ctx.addressC),
         [utils.bech32ToBytes(ctx.addressP)],
         utxosc,
         ctx.context.pBlockchainID,
-        baseFee / BigInt(1e9),
+        BigInt(fee * 1e9),
     );
 
     await issueCChainTx(ctx.evmapi, importTx, ctx.privateKey);

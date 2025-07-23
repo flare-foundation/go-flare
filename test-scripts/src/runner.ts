@@ -1,6 +1,6 @@
 import { CChainBalance, formatDecimal, PChainBalance } from "./utils";
 
-async function runWithBalanches(func: () => Promise<void>) {
+async function runWithBalances(func: () => Promise<void>) {
     // Log the current balances before calling the function
     let cBalanceFLR = await CChainBalance();
     let pBalanceFLR = await PChainBalance();
@@ -20,7 +20,7 @@ async function runWithBalanches(func: () => Promise<void>) {
 
 export async function runTest(func: () => Promise<void>) {
     try {
-        await runWithBalanches(func);
+        await runWithBalances(func);
         console.log('Script completed successfully');
     } catch (error) {
         console.error('Script failed:', error);

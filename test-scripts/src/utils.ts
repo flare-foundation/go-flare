@@ -1,4 +1,4 @@
-import { evm, pvm, Context, addTxSignatures, UnsignedTx, utils} from '@flarenetwork/flarejs';
+import { evm, pvm, Context, addTxSignatures, UnsignedTx, utils } from '@flarenetwork/flarejs';
 import { JsonRpcProvider } from 'ethers'
 
 export const LocalURL = 'http://localhost:9650';
@@ -68,7 +68,7 @@ export async function issuePChainTx(pvmapi: pvm.PVMApi, tx: UnsignedTx, privateK
 
     const exportResponse = await pvmapi.issueSignedTx(tx.getSignedTx());
     const txID = exportResponse.txID;
-    console.log(`Issued transaction with ID: ${txID}`);    
+    console.log(`Issued transaction with ID: ${txID}`);
 
     console.log(`Waiting for transaction ${txID} to be processed...`);
     let txStatus;
@@ -88,11 +88,11 @@ export async function issueCChainTx(evmapi: evm.EVMApi, tx: UnsignedTx, privateK
     await addTxSignatures({
         unsignedTx: tx,
         privateKeys: [utils.hexToBuffer(privateKey)],
-    });    
+    });
 
     const exportResponse = await evmapi.issueSignedTx(tx.getSignedTx());
     const txID = exportResponse.txID;
-    console.log(`Issued transaction with ID: ${txID}`);    
+    console.log(`Issued transaction with ID: ${txID}`);
 
     console.log(`Waiting for transaction ${txID} to be processed...`);
     let txStatus;
