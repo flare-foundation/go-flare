@@ -29,8 +29,6 @@ func TestInvalidBlock(t *testing.T) {
 	require := require.New(t)
 
 	parser, err := NewParser(
-		time.Time{},
-		time.Time{},
 		[]fxs.Fx{
 			&secp256k1fx.Fx{},
 		},
@@ -46,8 +44,6 @@ func TestStandardBlocks(t *testing.T) {
 	require := require.New(t)
 
 	parser, err := NewParser(
-		time.Time{},
-		time.Time{},
 		[]fxs.Fx{
 			&secp256k1fx.Fx{},
 		},

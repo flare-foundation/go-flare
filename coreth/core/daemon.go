@@ -13,6 +13,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/holiman/uint256"
 
 	"github.com/ava-labs/coreth/core/vm"
 	"github.com/ava-labs/coreth/params"
@@ -130,17 +131,13 @@ type ErrDaemonDataEmpty struct{}
 func (e *ErrDaemonDataEmpty) Error() string { return "return data from daemon empty" }
 
 type ErrMaxMintExceeded struct {
-	mintMax     *big.Int
-	mintRequest *big.Int
+	mintMax     *uint256.Int
+	mintRequest *uint256.Int
 }
 
 func (e *ErrMaxMintExceeded) Error() string {
-	return fmt.Sprintf("mint request of %s exceeded max of %s", e.mintRequest.Text(10), e.mintMax.Text(10))
+	return fmt.Sprintf("mint request of %s exceeded max of %s", e.mintRequest.String(), e.mintMax.String())
 }
-
-type ErrMintNegative struct{}
-
-func (e *ErrMintNegative) Error() string { return "mint request cannot be negative" }
 
 // Define interface for dependencies
 type EVMCaller interface {
@@ -149,7 +146,7 @@ type EVMCaller interface {
 	DaemonRevertToSnapshot(snapshot int)
 	GetBlockTime() uint64
 	GetGasLimit() uint64
-	AddBalance(addr common.Address, amount *big.Int)
+	AddBalance(addr common.Address, amount *uint256.Int)
 }
 
 func GetDaemonGasMultiplier(blockTime uint64) uint64 {
@@ -198,19 +195,19 @@ func IsPrioritisedContractCall(chainID *big.Int, blockTime uint64, to *common.Ad
 	}
 }
 
-func GetMaximumMintRequest(chainID *big.Int, blockTime uint64) *big.Int {
+func GetMaximumMintRequest(chainID *big.Int, blockTime uint64) *uint256.Int {
+	maxRequest := new(uint256.Int)
 	switch {
 	case chainID.Cmp(params.FlareChainID) == 0 || chainID.Cmp(params.CostwoChainID) == 0 || chainID.Cmp(params.LocalFlareChainID) == 0:
-		maxRequest, _ := new(big.Int).SetString("60000000000000000000000000", 10)
-		return maxRequest
+		maxRequest.SetFromDecimal("60000000000000000000000000") // we ignore error, the number fits into uint256
 	default: // Songbird, Coston
-		maxRequest, _ := new(big.Int).SetString("50000000000000000000000000", 10)
-		return maxRequest
+		maxRequest.SetFromDecimal("50000000000000000000000000") // we ignore error, the number fits into uint256
 	}
+	return maxRequest
 }
 
-func daemon(evm EVMCaller) (int, *big.Int, error) {
-	bigZero := big.NewInt(0)
+func daemon(evm EVMCaller) (int, *uint256.Int, error) {
+	bigZero := uint256.NewInt(0)
 	// Get the contract to call
 	daemonContract := common.HexToAddress(GetDaemonContractAddr(evm.GetBlockTime()))
 
@@ -226,7 +223,7 @@ func daemon(evm EVMCaller) (int, *big.Int, error) {
 		if len(daemonRet) == 32 {
 			// Convert to big int
 			// Mint request cannot be less than 0 as SetBytes treats value as unsigned
-			mintRequest := new(big.Int).SetBytes(daemonRet)
+			mintRequest := new(uint256.Int).SetBytes32(daemonRet)
 			// return the mint request
 			return daemonSnapshot, mintRequest, nil
 		} else {
@@ -242,10 +239,10 @@ func daemon(evm EVMCaller) (int, *big.Int, error) {
 	}
 }
 
-func mint(evm EVMCaller, mintRequest *big.Int) error {
+func mint(evm EVMCaller, mintRequest *uint256.Int) error {
 	// If the mint request is greater than zero and less than max
 	max := GetMaximumMintRequest(evm.GetChainID(), evm.GetBlockTime())
-	if mintRequest.Cmp(big.NewInt(0)) > 0 &&
+	if mintRequest.Cmp(uint256.NewInt(0)) > 0 &&
 		mintRequest.Cmp(max) <= 0 {
 		// Mint the amount asked for on to the daemon contract
 		evm.AddBalance(common.HexToAddress(GetDaemonContractAddr(evm.GetBlockTime())), mintRequest)
@@ -255,11 +252,7 @@ func mint(evm EVMCaller, mintRequest *big.Int) error {
 			mintRequest: mintRequest,
 			mintMax:     max,
 		}
-	} else if mintRequest.Cmp(big.NewInt(0)) < 0 {
-		// Cannot mint negatives
-		return &ErrMintNegative{}
-	}
-	// No error
+	} // If the mint request is zero, we do nothing
 	return nil
 }
 

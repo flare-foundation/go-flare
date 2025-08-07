@@ -28,7 +28,6 @@ package tracers
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -91,7 +90,7 @@ type Backend interface {
 	BlockByHash(ctx context.Context, hash common.Hash) (*types.Block, error)
 	BlockByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Block, error)
 	BadBlocks() ([]*types.Block, []*core.BadBlockReason)
-	GetTransaction(ctx context.Context, txHash common.Hash) (*types.Transaction, common.Hash, uint64, uint64, error)
+	GetTransaction(ctx context.Context, txHash common.Hash) (bool, *types.Transaction, common.Hash, uint64, uint64, error)
 	RPCGasCap() uint64
 	ChainConfig() *params.ChainConfig
 	Engine() consensus.Engine
@@ -193,6 +192,7 @@ type TraceCallConfig struct {
 	TraceConfig
 	StateOverrides *ethapi.StateOverride
 	BlockOverrides *ethapi.BlockOverrides
+	TxIndex        *hexutil.Uint
 }
 
 // StdTraceConfig holds extra parameters to standard-json trace functions.
@@ -401,8 +401,8 @@ func (api *API) traceChain(start, end *types.Block, config *TraceConfig, closed 
 			// if the relevant state is available in disk.
 			var preferDisk bool
 			if statedb != nil {
-				s1, s2 := statedb.Database().TrieDB().Size()
-				preferDisk = s1+s2 > defaultTracechainMemLimit
+				s1, s2, s3 := statedb.Database().TrieDB().Size()
+				preferDisk = s1+s2+s3 > defaultTracechainMemLimit
 			}
 			statedb, release, err = api.backend.StateAtNextBlock(ctx, block, next, reexec, statedb, false, preferDisk)
 			if err != nil {
@@ -485,7 +485,7 @@ func (api *API) TraceBlockByHash(ctx context.Context, hash common.Hash, config *
 // and returns them as a JSON object.
 func (api *baseAPI) TraceBlock(ctx context.Context, blob hexutil.Bytes, config *TraceConfig) ([]*txTraceResult, error) {
 	block := new(types.Block)
-	if err := rlp.Decode(bytes.NewReader(blob), block); err != nil {
+	if err := rlp.DecodeBytes(blob, block); err != nil {
 		return nil, fmt.Errorf("could not decode block: %v", err)
 	}
 	return api.traceBlock(ctx, block, config)
@@ -874,12 +874,12 @@ func containsTx(block *types.Block, hash common.Hash) bool {
 // TraceTransaction returns the structured logs created during the execution of EVM
 // and returns them as a JSON object.
 func (api *API) TraceTransaction(ctx context.Context, hash common.Hash, config *TraceConfig) (interface{}, error) {
-	tx, blockHash, blockNumber, index, err := api.backend.GetTransaction(ctx, hash)
+	found, _, blockHash, blockNumber, index, err := api.backend.GetTransaction(ctx, hash)
 	if err != nil {
-		return nil, err
+		return nil, ethapi.NewTxIndexingError()
 	}
 	// Only mined txes are supported
-	if tx == nil {
+	if !found {
 		return nil, errTxNotFound
 	}
 	// It shouldn't happen in practice.
@@ -912,11 +912,17 @@ func (api *API) TraceTransaction(ctx context.Context, hash common.Hash, config *
 // TraceCall lets you trace a given eth_call. It collects the structured logs
 // created during the execution of EVM if the given transaction was added on
 // top of the provided block and returns them as a JSON object.
+// If no transaction index is specified, the trace will be conducted on the state
+// after executing the specified block. However, if a transaction index is provided,
+// the trace will be conducted on the state after executing the specified transaction
+// within the specified block.
 func (api *API) TraceCall(ctx context.Context, args ethapi.TransactionArgs, blockNrOrHash rpc.BlockNumberOrHash, config *TraceCallConfig) (interface{}, error) {
 	// Try to retrieve the specified block
 	var (
-		err   error
-		block *types.Block
+		err     error
+		block   *types.Block
+		statedb *state.StateDB
+		release StateReleaseFunc
 	)
 	if hash, ok := blockNrOrHash.Hash(); ok {
 		block, err = api.blockByHash(ctx, hash)
@@ -941,7 +947,12 @@ func (api *API) TraceCall(ctx context.Context, args ethapi.TransactionArgs, bloc
 	if config != nil && config.Reexec != nil {
 		reexec = *config.Reexec
 	}
-	statedb, release, err := api.backend.StateAtBlock(ctx, block, reexec, nil, true, false)
+
+	if config != nil && config.TxIndex != nil {
+		_, _, statedb, release, err = api.backend.StateAtTransaction(ctx, block, int(*config.TxIndex), reexec)
+	} else {
+		statedb, release, err = api.backend.StateAtBlock(ctx, block, reexec, nil, true, false)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -964,7 +975,7 @@ func (api *API) TraceCall(ctx context.Context, args ethapi.TransactionArgs, bloc
 		}
 	}
 	// Execute the trace
-	msg, err := args.ToMessage(api.backend.RPCGasCap(), block.BaseFee())
+	msg, err := args.ToMessage(api.backend.RPCGasCap(), vmctx.BaseFee)
 	if err != nil {
 		return nil, err
 	}
@@ -1090,8 +1101,16 @@ func overrideConfig(original *params.ChainConfig, override *params.ChainConfig) 
 		copy.DurangoBlockTimestamp = timestamp
 		canon = false
 	}
+	if timestamp := override.EtnaTimestamp; timestamp != nil {
+		copy.EtnaTimestamp = timestamp
+		canon = false
+	}
 	if timestamp := override.CancunTime; timestamp != nil {
 		copy.CancunTime = timestamp
+		canon = false
+	}
+	if timestamp := override.VerkleTime; timestamp != nil {
+		copy.VerkleTime = timestamp
 		canon = false
 	}
 

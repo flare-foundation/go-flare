@@ -17,7 +17,6 @@ import (
 	"github.com/ava-labs/avalanchego/utils/metric"
 	"github.com/ava-labs/avalanchego/utils/units"
 	"github.com/ava-labs/avalanchego/utils/wrappers"
-	"github.com/ava-labs/avalanchego/version"
 	"github.com/ava-labs/avalanchego/vms/proposervm/block"
 )
 
@@ -30,8 +29,8 @@ var (
 )
 
 type BlockState interface {
-	GetBlock(blkID ids.ID) (block.Block, choices.Status, error)
-	PutBlock(blk block.Block, status choices.Status) error
+	GetBlock(blkID ids.ID) (block.Block, error)
+	PutBlock(blk block.Block) error
 	DeleteBlock(blkID ids.ID) error
 }
 
@@ -83,51 +82,47 @@ func NewMeteredBlockState(db database.Database, namespace string, metrics promet
 	}, err
 }
 
-func (s *blockState) GetBlock(blkID ids.ID) (block.Block, choices.Status, error) {
+func (s *blockState) GetBlock(blkID ids.ID) (block.Block, error) {
 	if blk, found := s.blkCache.Get(blkID); found {
 		if blk == nil {
-			return nil, choices.Unknown, database.ErrNotFound
+			return nil, database.ErrNotFound
 		}
-		return blk.block, blk.Status, nil
+		return blk.block, nil
 	}
 
 	blkWrapperBytes, err := s.db.Get(blkID[:])
 	if err == database.ErrNotFound {
 		s.blkCache.Put(blkID, nil)
-		return nil, choices.Unknown, database.ErrNotFound
+		return nil, database.ErrNotFound
 	}
 	if err != nil {
-		return nil, choices.Unknown, err
+		return nil, err
 	}
 
 	blkWrapper := blockWrapper{}
 	parsedVersion, err := Codec.Unmarshal(blkWrapperBytes, &blkWrapper)
 	if err != nil {
-		return nil, choices.Unknown, err
+		return nil, err
 	}
 	if parsedVersion != CodecVersion {
-		return nil, choices.Unknown, errBlockWrongVersion
+		return nil, errBlockWrongVersion
 	}
 
 	// The key was in the database
-	//
-	// Invariant: Blocks stored on disk were previously accepted by this node.
-	// Because the durango activation relaxes TLS cert parsing rules, we assume
-	// it is always activated here.
-	blk, err := block.Parse(blkWrapper.Block, version.DefaultUpgradeTime)
+	blk, err := block.ParseWithoutVerification(blkWrapper.Block)
 	if err != nil {
-		return nil, choices.Unknown, err
+		return nil, err
 	}
 	blkWrapper.block = blk
 
 	s.blkCache.Put(blkID, &blkWrapper)
-	return blk, blkWrapper.Status, nil
+	return blk, nil
 }
 
-func (s *blockState) PutBlock(blk block.Block, status choices.Status) error {
+func (s *blockState) PutBlock(blk block.Block) error {
 	blkWrapper := blockWrapper{
 		Block:  blk.Bytes(),
-		Status: status,
+		Status: choices.Accepted,
 		block:  blk,
 	}
 

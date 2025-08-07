@@ -10,6 +10,7 @@ import (
 
 	"github.com/ava-labs/avalanchego/utils/units"
 	"github.com/ava-labs/avalanchego/vms/platformvm/reward"
+	txfee "github.com/ava-labs/avalanchego/vms/platformvm/txs/fee"
 )
 
 var (
@@ -19,10 +20,18 @@ var (
 	// FlareParams are the params used for the flare mainnet
 	FlareParams = Params{
 		TxFeeConfig: TxFeeConfig{
-			TxFee:                 units.MilliAvax,
-			CreateAssetTxFee:      units.MilliAvax,
-			CreateSubnetTxFee:     100 * units.MegaAvax,
-			CreateBlockchainTxFee: 100 * units.MegaAvax,
+			CreateAssetTxFee: units.MilliAvax,
+			StaticFeeConfig: txfee.StaticConfig{
+				TxFee:                 units.MilliAvax,
+				CreateSubnetTxFee:     100 * units.MegaAvax,
+				CreateBlockchainTxFee: 100 * units.MegaAvax,
+
+				TransformSubnetTxFee:          1 * units.Avax,
+				AddPrimaryNetworkValidatorFee: 0,
+				AddPrimaryNetworkDelegatorFee: 0,
+				AddSubnetValidatorFee:         units.MilliAvax,
+				AddSubnetDelegatorFee:         units.MilliAvax,
+			},
 		},
 		StakingConfig: StakingConfig{
 			UptimeRequirement: .8, // 80%

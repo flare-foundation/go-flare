@@ -216,7 +216,7 @@ func (tx *Tx) BlockFeeContribution(fixedFee bool, avaxAssetID ids.ID, baseFee *b
 
 	// Calculate the amount of AVAX that has been burned above the required fee denominated
 	// in C-Chain native 18 decimal places
-	blockFeeContribution := new(big.Int).Mul(new(big.Int).SetUint64(excessBurned), x2cRate)
+	blockFeeContribution := new(big.Int).Mul(new(big.Int).SetUint64(excessBurned), x2cRate.ToBig())
 	return blockFeeContribution, new(big.Int).SetUint64(gasUsed), nil
 }
 
@@ -254,8 +254,8 @@ func CalculateDynamicFee(cost uint64, baseFee *big.Int) (uint64, error) {
 	}
 	bigCost := new(big.Int).SetUint64(cost)
 	fee := new(big.Int).Mul(bigCost, baseFee)
-	feeToRoundUp := new(big.Int).Add(fee, x2cRateMinus1)
-	feeInNAVAX := new(big.Int).Div(feeToRoundUp, x2cRate)
+	feeToRoundUp := new(big.Int).Add(fee, x2cRateMinus1.ToBig())
+	feeInNAVAX := new(big.Int).Div(feeToRoundUp, x2cRate.ToBig())
 	if !feeInNAVAX.IsUint64() {
 		// the fee is more than can fit in a uint64
 		return 0, errFeeOverflow
@@ -287,4 +287,15 @@ func mergeAtomicOps(txs []*Tx) (map[ids.ID]*atomic.Requests, error) {
 		mergeAtomicOpsToMap(output, chainID, txRequests)
 	}
 	return output, nil
+}
+
+// mergeAtomicOps merges atomic ops for [chainID] represented by [requests]
+// to the [output] map provided.
+func mergeAtomicOpsToMap(output map[ids.ID]*atomic.Requests, chainID ids.ID, requests *atomic.Requests) {
+	if request, exists := output[chainID]; exists {
+		request.PutRequests = append(request.PutRequests, requests.PutRequests...)
+		request.RemoveRequests = append(request.RemoveRequests, requests.RemoveRequests...)
+	} else {
+		output[chainID] = requests
+	}
 }

@@ -4,14 +4,13 @@
 package txs
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"reflect"
-	"time"
 
 	"github.com/ava-labs/avalanchego/codec"
 	"github.com/ava-labs/avalanchego/codec/linearcodec"
-	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 	"github.com/ava-labs/avalanchego/vms/avm/fxs"
@@ -40,10 +39,8 @@ type parser struct {
 	gc  linearcodec.Codec
 }
 
-func NewParser(cortinaTime time.Time, durangoTime time.Time, fxs []fxs.Fx) (Parser, error) {
+func NewParser(fxs []fxs.Fx) (Parser, error) {
 	return NewCustomParser(
-		cortinaTime,
-		durangoTime,
 		make(map[reflect.Type]int),
 		&mockable.Clock{},
 		logging.NoLog{},
@@ -52,20 +49,18 @@ func NewParser(cortinaTime time.Time, durangoTime time.Time, fxs []fxs.Fx) (Pars
 }
 
 func NewCustomParser(
-	cortinaTime time.Time,
-	durangoTime time.Time,
 	typeToFxIndex map[reflect.Type]int,
 	clock *mockable.Clock,
 	log logging.Logger,
 	fxs []fxs.Fx,
 ) (Parser, error) {
-	gc := linearcodec.NewDefault(time.Time{})
-	c := linearcodec.NewDefault(durangoTime)
+	gc := linearcodec.NewDefault()
+	c := linearcodec.NewDefault()
 
 	gcm := codec.NewManager(math.MaxInt32)
 	cm := codec.NewDefaultManager()
 
-	err := utils.Err(
+	err := errors.Join(
 		c.RegisterType(&BaseTx{}),
 		c.RegisterType(&CreateAssetTx{}),
 		c.RegisterType(&OperationTx{}),
@@ -88,7 +83,6 @@ func NewCustomParser(
 		typeToFxIndex: typeToFxIndex,
 		clock:         clock,
 		log:           log,
-		cortinaTime:   cortinaTime,
 	}
 	for i, fx := range fxs {
 		vm.codecRegistry = &codecRegistry{

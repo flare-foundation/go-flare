@@ -27,13 +27,11 @@
 package params
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
-	"time"
 
-	"github.com/ava-labs/avalanchego/snow"
-	"github.com/ava-labs/coreth/constants"
 	"github.com/ava-labs/coreth/precompile/modules"
 	"github.com/ava-labs/coreth/precompile/precompileconfig"
 	"github.com/ava-labs/coreth/utils"
@@ -61,425 +59,470 @@ var (
 )
 
 var (
-	// AvalancheMainnetChainConfig is the configuration for Avalanche Main Network
-	AvalancheMainnetChainConfig = getChainConfig(constants.MainnetID, AvalancheMainnetChainID)
+	// // AvalancheMainnetChainConfig is the configuration for Avalanche Main Network
+	// AvalancheMainnetChainConfig = getChainConfig(constants.MainnetID, AvalancheMainnetChainID)
 
-	// AvalancheLocalChainConfig is the configuration for the Avalanche Local Network
-	AvalancheLocalChainConfig = getChainConfig(constants.LocalID, AvalancheLocalChainID)
+	// // AvalancheLocalChainConfig is the configuration for the Avalanche Local Network
+	// AvalancheLocalChainConfig = getChainConfig(constants.LocalID, AvalancheLocalChainID)
 
-	// Configuration for Flare main, test (Costwo) and local networks
-	FlareChainConfig      = getChainConfig(constants.FlareID, FlareChainID)
-	CostwoChainConfig     = getChainConfig(constants.CostwoID, CostwoChainID)
-	LocalFlareChainConfig = getChainConfig(constants.LocalFlareID, LocalFlareChainID)
+	// // Configuration for Flare main, test (Costwo) and local networks
+	// FlareChainConfig      = getChainConfig(constants.FlareID, FlareChainID)
+	// CostwoChainConfig     = getChainConfig(constants.CostwoID, CostwoChainID)
+	// LocalFlareChainConfig = getChainConfig(constants.LocalFlareID, LocalFlareChainID)
 
-	// Configuration for Songbird main, test (Coston) and local networks
-	SongbirdChainConfig = getChainConfig(constants.SongbirdID, SongbirdChainID)
-	CostonChainConfig   = getChainConfig(constants.CostonID, CostonChainID)
-	LocalChainConfig    = getChainConfig(constants.LocalID, LocalChainID)
+	// // Configuration for Songbird main, test (Coston) and local networks
+	// SongbirdChainConfig = getChainConfig(constants.SongbirdID, SongbirdChainID)
+	// CostonChainConfig   = getChainConfig(constants.CostonID, CostonChainID)
+	// LocalChainConfig    = getChainConfig(constants.LocalID, LocalChainID)
 
 	TestChainConfig = &ChainConfig{
-		AvalancheContext:                AvalancheContext{utils.TestSnowContext()},
-		ChainID:                         big.NewInt(1),
-		HomesteadBlock:                  big.NewInt(0),
-		DAOForkBlock:                    nil,
-		DAOForkSupport:                  false,
-		EIP150Block:                     big.NewInt(0),
-		EIP155Block:                     big.NewInt(0),
-		EIP158Block:                     big.NewInt(0),
-		ByzantiumBlock:                  big.NewInt(0),
-		ConstantinopleBlock:             big.NewInt(0),
-		PetersburgBlock:                 big.NewInt(0),
-		IstanbulBlock:                   big.NewInt(0),
-		MuirGlacierBlock:                big.NewInt(0),
-		ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
-		ApricotPhase6BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhasePost6BlockTimestamp: utils.NewUint64(0),
-		BanffBlockTimestamp:             utils.NewUint64(0),
-		CortinaBlockTimestamp:           utils.NewUint64(0),
-		DurangoBlockTimestamp:           utils.NewUint64(0),
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             big.NewInt(1),
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
+			ApricotPhase6BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePost6BlockTimestamp: utils.NewUint64(0),
+			BanffBlockTimestamp:             utils.NewUint64(0),
+			CortinaBlockTimestamp:           utils.NewUint64(0),
+			DurangoBlockTimestamp:           utils.NewUint64(0),
+			EtnaTimestamp:                   utils.NewUint64(0),
+		},
 	}
 
 	TestLaunchConfig = &ChainConfig{
-		AvalancheContext:                AvalancheContext{utils.TestSnowContext()},
-		ChainID:                         big.NewInt(1),
-		HomesteadBlock:                  big.NewInt(0),
-		DAOForkBlock:                    nil,
-		DAOForkSupport:                  false,
-		EIP150Block:                     big.NewInt(0),
-		EIP155Block:                     big.NewInt(0),
-		EIP158Block:                     big.NewInt(0),
-		ByzantiumBlock:                  big.NewInt(0),
-		ConstantinopleBlock:             big.NewInt(0),
-		PetersburgBlock:                 big.NewInt(0),
-		IstanbulBlock:                   big.NewInt(0),
-		MuirGlacierBlock:                big.NewInt(0),
-		ApricotPhase1BlockTimestamp:     nil,
-		ApricotPhase2BlockTimestamp:     nil,
-		ApricotPhase3BlockTimestamp:     nil,
-		ApricotPhase4BlockTimestamp:     nil,
-		ApricotPhase5BlockTimestamp:     nil,
-		ApricotPhasePre6BlockTimestamp:  nil,
-		ApricotPhase6BlockTimestamp:     nil,
-		ApricotPhasePost6BlockTimestamp: nil,
-		BanffBlockTimestamp:             nil,
-		CortinaBlockTimestamp:           nil,
-		DurangoBlockTimestamp:           nil,
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             big.NewInt(1),
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     nil,
+			ApricotPhase2BlockTimestamp:     nil,
+			ApricotPhase3BlockTimestamp:     nil,
+			ApricotPhase4BlockTimestamp:     nil,
+			ApricotPhase5BlockTimestamp:     nil,
+			ApricotPhasePre6BlockTimestamp:  nil,
+			ApricotPhase6BlockTimestamp:     nil,
+			ApricotPhasePost6BlockTimestamp: nil,
+			BanffBlockTimestamp:             nil,
+			CortinaBlockTimestamp:           nil,
+			DurangoBlockTimestamp:           nil,
+			EtnaTimestamp:                   nil,
+		},
 	}
 
 	TestApricotPhase1Config = &ChainConfig{
-		AvalancheContext:                AvalancheContext{utils.TestSnowContext()},
-		ChainID:                         big.NewInt(1),
-		HomesteadBlock:                  big.NewInt(0),
-		DAOForkBlock:                    nil,
-		DAOForkSupport:                  false,
-		EIP150Block:                     big.NewInt(0),
-		EIP155Block:                     big.NewInt(0),
-		EIP158Block:                     big.NewInt(0),
-		ByzantiumBlock:                  big.NewInt(0),
-		ConstantinopleBlock:             big.NewInt(0),
-		PetersburgBlock:                 big.NewInt(0),
-		IstanbulBlock:                   big.NewInt(0),
-		MuirGlacierBlock:                big.NewInt(0),
-		ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase2BlockTimestamp:     nil,
-		ApricotPhase3BlockTimestamp:     nil,
-		ApricotPhase4BlockTimestamp:     nil,
-		ApricotPhase5BlockTimestamp:     nil,
-		ApricotPhasePre6BlockTimestamp:  nil,
-		ApricotPhase6BlockTimestamp:     nil,
-		ApricotPhasePost6BlockTimestamp: nil,
-		BanffBlockTimestamp:             nil,
-		CortinaBlockTimestamp:           nil,
-		DurangoBlockTimestamp:           nil,
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             big.NewInt(1),
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     nil,
+			ApricotPhase3BlockTimestamp:     nil,
+			ApricotPhase4BlockTimestamp:     nil,
+			ApricotPhase5BlockTimestamp:     nil,
+			ApricotPhasePre6BlockTimestamp:  nil,
+			ApricotPhase6BlockTimestamp:     nil,
+			ApricotPhasePost6BlockTimestamp: nil,
+			BanffBlockTimestamp:             nil,
+			CortinaBlockTimestamp:           nil,
+			DurangoBlockTimestamp:           nil,
+			EtnaTimestamp:                   nil,
+		},
 	}
 
 	TestApricotPhase2Config = &ChainConfig{
-		AvalancheContext:                AvalancheContext{utils.TestSnowContext()},
-		ChainID:                         big.NewInt(1),
-		HomesteadBlock:                  big.NewInt(0),
-		DAOForkBlock:                    nil,
-		DAOForkSupport:                  false,
-		EIP150Block:                     big.NewInt(0),
-		EIP155Block:                     big.NewInt(0),
-		EIP158Block:                     big.NewInt(0),
-		ByzantiumBlock:                  big.NewInt(0),
-		ConstantinopleBlock:             big.NewInt(0),
-		PetersburgBlock:                 big.NewInt(0),
-		IstanbulBlock:                   big.NewInt(0),
-		MuirGlacierBlock:                big.NewInt(0),
-		ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase3BlockTimestamp:     nil,
-		ApricotPhase4BlockTimestamp:     nil,
-		ApricotPhase5BlockTimestamp:     nil,
-		ApricotPhasePre6BlockTimestamp:  nil,
-		ApricotPhase6BlockTimestamp:     nil,
-		ApricotPhasePost6BlockTimestamp: nil,
-		BanffBlockTimestamp:             nil,
-		CortinaBlockTimestamp:           nil,
-		DurangoBlockTimestamp:           nil,
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             big.NewInt(1),
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     nil,
+			ApricotPhase4BlockTimestamp:     nil,
+			ApricotPhase5BlockTimestamp:     nil,
+			ApricotPhasePre6BlockTimestamp:  nil,
+			ApricotPhase6BlockTimestamp:     nil,
+			ApricotPhasePost6BlockTimestamp: nil,
+			BanffBlockTimestamp:             nil,
+			CortinaBlockTimestamp:           nil,
+			DurangoBlockTimestamp:           nil,
+			EtnaTimestamp:                   nil,
+		},
 	}
 
 	TestApricotPhase3Config = &ChainConfig{
-		AvalancheContext:                AvalancheContext{utils.TestSnowContext()},
-		ChainID:                         big.NewInt(1),
-		HomesteadBlock:                  big.NewInt(0),
-		DAOForkBlock:                    nil,
-		DAOForkSupport:                  false,
-		EIP150Block:                     big.NewInt(0),
-		EIP155Block:                     big.NewInt(0),
-		EIP158Block:                     big.NewInt(0),
-		ByzantiumBlock:                  big.NewInt(0),
-		ConstantinopleBlock:             big.NewInt(0),
-		PetersburgBlock:                 big.NewInt(0),
-		IstanbulBlock:                   big.NewInt(0),
-		MuirGlacierBlock:                big.NewInt(0),
-		ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase4BlockTimestamp:     nil,
-		ApricotPhase5BlockTimestamp:     nil,
-		ApricotPhasePre6BlockTimestamp:  nil,
-		ApricotPhase6BlockTimestamp:     nil,
-		ApricotPhasePost6BlockTimestamp: nil,
-		BanffBlockTimestamp:             nil,
-		CortinaBlockTimestamp:           nil,
-		DurangoBlockTimestamp:           nil,
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             big.NewInt(1),
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase4BlockTimestamp:     nil,
+			ApricotPhase5BlockTimestamp:     nil,
+			ApricotPhasePre6BlockTimestamp:  nil,
+			ApricotPhase6BlockTimestamp:     nil,
+			ApricotPhasePost6BlockTimestamp: nil,
+			BanffBlockTimestamp:             nil,
+			CortinaBlockTimestamp:           nil,
+			DurangoBlockTimestamp:           nil,
+			EtnaTimestamp:                   nil,
+		},
 	}
 
 	TestApricotPhase4Config = &ChainConfig{
-		AvalancheContext:                AvalancheContext{utils.TestSnowContext()},
-		ChainID:                         big.NewInt(1),
-		HomesteadBlock:                  big.NewInt(0),
-		DAOForkBlock:                    nil,
-		DAOForkSupport:                  false,
-		EIP150Block:                     big.NewInt(0),
-		EIP155Block:                     big.NewInt(0),
-		EIP158Block:                     big.NewInt(0),
-		ByzantiumBlock:                  big.NewInt(0),
-		ConstantinopleBlock:             big.NewInt(0),
-		PetersburgBlock:                 big.NewInt(0),
-		IstanbulBlock:                   big.NewInt(0),
-		MuirGlacierBlock:                big.NewInt(0),
-		ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase5BlockTimestamp:     nil,
-		ApricotPhasePre6BlockTimestamp:  nil,
-		ApricotPhase6BlockTimestamp:     nil,
-		ApricotPhasePost6BlockTimestamp: nil,
-		BanffBlockTimestamp:             nil,
-		CortinaBlockTimestamp:           nil,
-		DurangoBlockTimestamp:           nil,
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             big.NewInt(1),
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase5BlockTimestamp:     nil,
+			ApricotPhasePre6BlockTimestamp:  nil,
+			ApricotPhase6BlockTimestamp:     nil,
+			ApricotPhasePost6BlockTimestamp: nil,
+			BanffBlockTimestamp:             nil,
+			CortinaBlockTimestamp:           nil,
+			DurangoBlockTimestamp:           nil,
+			EtnaTimestamp:                   nil,
+		},
 	}
 
 	TestApricotPhase5Config = &ChainConfig{
-		AvalancheContext:                AvalancheContext{utils.TestSnowContext()},
-		ChainID:                         big.NewInt(1),
-		HomesteadBlock:                  big.NewInt(0),
-		DAOForkBlock:                    nil,
-		DAOForkSupport:                  false,
-		EIP150Block:                     big.NewInt(0),
-		EIP155Block:                     big.NewInt(0),
-		EIP158Block:                     big.NewInt(0),
-		ByzantiumBlock:                  big.NewInt(0),
-		ConstantinopleBlock:             big.NewInt(0),
-		PetersburgBlock:                 big.NewInt(0),
-		IstanbulBlock:                   big.NewInt(0),
-		MuirGlacierBlock:                big.NewInt(0),
-		ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhasePre6BlockTimestamp:  nil,
-		ApricotPhase6BlockTimestamp:     nil,
-		ApricotPhasePost6BlockTimestamp: nil,
-		BanffBlockTimestamp:             nil,
-		CortinaBlockTimestamp:           nil,
-		DurangoBlockTimestamp:           nil,
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             big.NewInt(1),
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePre6BlockTimestamp:  nil,
+			ApricotPhase6BlockTimestamp:     nil,
+			ApricotPhasePost6BlockTimestamp: nil,
+			BanffBlockTimestamp:             nil,
+			CortinaBlockTimestamp:           nil,
+			DurangoBlockTimestamp:           nil,
+			EtnaTimestamp:                   nil,
+		},
 	}
 
 	TestApricotPhasePre6Config = &ChainConfig{
-		AvalancheContext:                AvalancheContext{utils.TestSnowContext()},
-		ChainID:                         big.NewInt(1),
-		HomesteadBlock:                  big.NewInt(0),
-		DAOForkBlock:                    nil,
-		DAOForkSupport:                  false,
-		EIP150Block:                     big.NewInt(0),
-		EIP155Block:                     big.NewInt(0),
-		EIP158Block:                     big.NewInt(0),
-		ByzantiumBlock:                  big.NewInt(0),
-		ConstantinopleBlock:             big.NewInt(0),
-		PetersburgBlock:                 big.NewInt(0),
-		IstanbulBlock:                   big.NewInt(0),
-		MuirGlacierBlock:                big.NewInt(0),
-		ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
-		ApricotPhase6BlockTimestamp:     nil,
-		ApricotPhasePost6BlockTimestamp: nil,
-		BanffBlockTimestamp:             nil,
-		CortinaBlockTimestamp:           nil,
-		DurangoBlockTimestamp:           nil,
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             big.NewInt(1),
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
+			ApricotPhase6BlockTimestamp:     nil,
+			ApricotPhasePost6BlockTimestamp: nil,
+			BanffBlockTimestamp:             nil,
+			CortinaBlockTimestamp:           nil,
+			DurangoBlockTimestamp:           nil,
+			EtnaTimestamp:                   nil,
+		},
 	}
 
 	TestApricotPhase6Config = &ChainConfig{
-		AvalancheContext:                AvalancheContext{utils.TestSnowContext()},
-		ChainID:                         big.NewInt(1),
-		HomesteadBlock:                  big.NewInt(0),
-		DAOForkBlock:                    nil,
-		DAOForkSupport:                  false,
-		EIP150Block:                     big.NewInt(0),
-		EIP155Block:                     big.NewInt(0),
-		EIP158Block:                     big.NewInt(0),
-		ByzantiumBlock:                  big.NewInt(0),
-		ConstantinopleBlock:             big.NewInt(0),
-		PetersburgBlock:                 big.NewInt(0),
-		IstanbulBlock:                   big.NewInt(0),
-		MuirGlacierBlock:                big.NewInt(0),
-		ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
-		ApricotPhase6BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhasePost6BlockTimestamp: nil,
-		BanffBlockTimestamp:             nil,
-		CortinaBlockTimestamp:           nil,
-		DurangoBlockTimestamp:           nil,
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             big.NewInt(1),
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
+			ApricotPhase6BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePost6BlockTimestamp: nil,
+			BanffBlockTimestamp:             nil,
+			CortinaBlockTimestamp:           nil,
+			DurangoBlockTimestamp:           nil,
+			EtnaTimestamp:                   nil,
+		},
 	}
 
 	TestApricotPhasePost6Config = &ChainConfig{
-		AvalancheContext:                AvalancheContext{utils.TestSnowContext()},
-		ChainID:                         big.NewInt(1),
-		HomesteadBlock:                  big.NewInt(0),
-		DAOForkBlock:                    nil,
-		DAOForkSupport:                  false,
-		EIP150Block:                     big.NewInt(0),
-		EIP155Block:                     big.NewInt(0),
-		EIP158Block:                     big.NewInt(0),
-		ByzantiumBlock:                  big.NewInt(0),
-		ConstantinopleBlock:             big.NewInt(0),
-		PetersburgBlock:                 big.NewInt(0),
-		IstanbulBlock:                   big.NewInt(0),
-		MuirGlacierBlock:                big.NewInt(0),
-		ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
-		ApricotPhase6BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhasePost6BlockTimestamp: utils.NewUint64(0),
-		BanffBlockTimestamp:             nil,
-		CortinaBlockTimestamp:           nil,
-		DurangoBlockTimestamp:           nil,
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             big.NewInt(1),
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
+			ApricotPhase6BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePost6BlockTimestamp: utils.NewUint64(0),
+			BanffBlockTimestamp:             nil,
+			CortinaBlockTimestamp:           nil,
+			DurangoBlockTimestamp:           nil,
+			EtnaTimestamp:                   nil,
+		},
 	}
 
 	TestBanffChainConfig = &ChainConfig{
-		AvalancheContext:                AvalancheContext{utils.TestSnowContext()},
-		ChainID:                         big.NewInt(1),
-		HomesteadBlock:                  big.NewInt(0),
-		DAOForkBlock:                    nil,
-		DAOForkSupport:                  false,
-		EIP150Block:                     big.NewInt(0),
-		EIP155Block:                     big.NewInt(0),
-		EIP158Block:                     big.NewInt(0),
-		ByzantiumBlock:                  big.NewInt(0),
-		ConstantinopleBlock:             big.NewInt(0),
-		PetersburgBlock:                 big.NewInt(0),
-		IstanbulBlock:                   big.NewInt(0),
-		MuirGlacierBlock:                big.NewInt(0),
-		ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
-		ApricotPhase6BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhasePost6BlockTimestamp: utils.NewUint64(0),
-		BanffBlockTimestamp:             utils.NewUint64(0),
-		CortinaBlockTimestamp:           nil,
-		DurangoBlockTimestamp:           nil,
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             big.NewInt(1),
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
+			ApricotPhase6BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePost6BlockTimestamp: utils.NewUint64(0),
+			BanffBlockTimestamp:             utils.NewUint64(0),
+			CortinaBlockTimestamp:           nil,
+			DurangoBlockTimestamp:           nil,
+			EtnaTimestamp:                   nil,
+		},
 	}
 
 	TestCortinaChainConfig = &ChainConfig{
-		AvalancheContext:                AvalancheContext{utils.TestSnowContext()},
-		ChainID:                         big.NewInt(1),
-		HomesteadBlock:                  big.NewInt(0),
-		DAOForkBlock:                    nil,
-		DAOForkSupport:                  false,
-		EIP150Block:                     big.NewInt(0),
-		EIP155Block:                     big.NewInt(0),
-		EIP158Block:                     big.NewInt(0),
-		ByzantiumBlock:                  big.NewInt(0),
-		ConstantinopleBlock:             big.NewInt(0),
-		PetersburgBlock:                 big.NewInt(0),
-		IstanbulBlock:                   big.NewInt(0),
-		MuirGlacierBlock:                big.NewInt(0),
-		ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
-		ApricotPhase6BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhasePost6BlockTimestamp: utils.NewUint64(0),
-		BanffBlockTimestamp:             utils.NewUint64(0),
-		CortinaBlockTimestamp:           utils.NewUint64(0),
-		DurangoBlockTimestamp:           nil,
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             big.NewInt(1),
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
+			ApricotPhase6BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePost6BlockTimestamp: utils.NewUint64(0),
+			BanffBlockTimestamp:             utils.NewUint64(0),
+			CortinaBlockTimestamp:           utils.NewUint64(0),
+			DurangoBlockTimestamp:           nil,
+			EtnaTimestamp:                   nil,
+		},
 	}
 
 	TestDurangoChainConfig = &ChainConfig{
-		AvalancheContext:                AvalancheContext{utils.TestSnowContext()},
-		ChainID:                         big.NewInt(1),
-		HomesteadBlock:                  big.NewInt(0),
-		DAOForkBlock:                    nil,
-		DAOForkSupport:                  false,
-		EIP150Block:                     big.NewInt(0),
-		EIP155Block:                     big.NewInt(0),
-		EIP158Block:                     big.NewInt(0),
-		ByzantiumBlock:                  big.NewInt(0),
-		ConstantinopleBlock:             big.NewInt(0),
-		PetersburgBlock:                 big.NewInt(0),
-		IstanbulBlock:                   big.NewInt(0),
-		MuirGlacierBlock:                big.NewInt(0),
-		ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
-		ApricotPhase6BlockTimestamp:     utils.NewUint64(0),
-		ApricotPhasePost6BlockTimestamp: utils.NewUint64(0),
-		BanffBlockTimestamp:             utils.NewUint64(0),
-		CortinaBlockTimestamp:           utils.NewUint64(0),
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             big.NewInt(1),
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		ShanghaiTime:        utils.NewUint64(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
+			ApricotPhase6BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePost6BlockTimestamp: utils.NewUint64(0),
+			BanffBlockTimestamp:             utils.NewUint64(0),
+			CortinaBlockTimestamp:           utils.NewUint64(0),
+			DurangoBlockTimestamp:           utils.NewUint64(0),
+			EtnaTimestamp:                   nil,
+		},
 	}
 
-	TestRules = TestChainConfig.AvalancheRules(new(big.Int), 0)
+	TestEtnaChainConfig = &ChainConfig{
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             big.NewInt(1),
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		ShanghaiTime:        utils.NewUint64(0),
+		CancunTime:          utils.NewUint64(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
+			ApricotPhase6BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePost6BlockTimestamp: utils.NewUint64(0),
+			BanffBlockTimestamp:             utils.NewUint64(0),
+			CortinaBlockTimestamp:           utils.NewUint64(0),
+			DurangoBlockTimestamp:           utils.NewUint64(0),
+			EtnaTimestamp:                   utils.NewUint64(0),
+		},
+	}
+
+	TestRules = TestChainConfig.Rules(new(big.Int), 0)
 )
-
-func getChainConfig(networkID uint32, chainID *big.Int) *ChainConfig {
-	return &ChainConfig{
-		ChainID:                         chainID,
-		HomesteadBlock:                  big.NewInt(0),
-		DAOForkBlock:                    big.NewInt(0),
-		DAOForkSupport:                  true,
-		EIP150Block:                     big.NewInt(0),
-		EIP155Block:                     big.NewInt(0),
-		EIP158Block:                     big.NewInt(0),
-		ByzantiumBlock:                  big.NewInt(0),
-		ConstantinopleBlock:             big.NewInt(0),
-		PetersburgBlock:                 big.NewInt(0),
-		IstanbulBlock:                   big.NewInt(0),
-		MuirGlacierBlock:                big.NewInt(0),
-		ApricotPhase1BlockTimestamp:     getUpgradeTime(networkID, ApricotPhase1Times),
-		ApricotPhase2BlockTimestamp:     getUpgradeTime(networkID, ApricotPhase2Times),
-		ApricotPhase3BlockTimestamp:     getUpgradeTime(networkID, ApricotPhase3Times),
-		ApricotPhase4BlockTimestamp:     getUpgradeTime(networkID, ApricotPhase4Times),
-		ApricotPhase5BlockTimestamp:     getUpgradeTime(networkID, ApricotPhase5Times),
-		SongbirdTransitionTimestamp:     getUpgradeTime(networkID, SongbirdTransitionTimes),
-		ApricotPhasePre6BlockTimestamp:  getUpgradeTime(networkID, ApricotPhasePre6Times),
-		ApricotPhase6BlockTimestamp:     getUpgradeTime(networkID, ApricotPhase6Times),
-		ApricotPhasePost6BlockTimestamp: getUpgradeTime(networkID, ApricotPhasePost6Times),
-		BanffBlockTimestamp:             getUpgradeTime(networkID, BanffTimes),
-		CortinaBlockTimestamp:           getUpgradeTime(networkID, CortinaTimes),
-		DurangoBlockTimestamp:           getUpgradeTime(networkID, DurangoTimes),
-	}
-}
-
-func getUpgradeTime(networkID uint32, upgradeTimes map[uint32]time.Time) *uint64 {
-	if upgradeTime, ok := upgradeTimes[networkID]; ok {
-		return utils.TimeToNewUint64(upgradeTime)
-	}
-	// If the upgrade time isn't specified, default being enabled in the
-	// genesis.
-	return utils.NewUint64(0)
-}
-
-// UpgradeConfig includes the following configs that may be specified in upgradeBytes:
-// - Timestamps that enable avalanche network upgrades,
-// - Enabling or disabling precompiles as network upgrades.
-type UpgradeConfig struct {
-	// Config for enabling and disabling precompiles as network upgrades.
-	PrecompileUpgrades []PrecompileUpgrade `json:"precompileUpgrades,omitempty"`
-}
-
-// AvalancheContext provides Avalanche specific context directly into the EVM.
-type AvalancheContext struct {
-	SnowCtx *snow.Context
-}
 
 // ChainConfig is the core config which determines the blockchain settings.
 //
@@ -487,8 +530,6 @@ type AvalancheContext struct {
 // that any network, identified by its genesis block, can have its own
 // set of configuration options.
 type ChainConfig struct {
-	AvalancheContext `json:"-"` // Avalanche specific context set during VM initialization. Not serialized.
-
 	ChainID *big.Int `json:"chainId"` // chainId identifies the current chain and is used for replay protection
 
 	HomesteadBlock *big.Int `json:"homesteadBlock,omitempty"` // Homestead switch block (nil = no fork, 0 = already homestead)
@@ -506,36 +547,18 @@ type ChainConfig struct {
 	PetersburgBlock     *big.Int `json:"petersburgBlock,omitempty"`     // Petersburg switch block (nil = same as Constantinople)
 	IstanbulBlock       *big.Int `json:"istanbulBlock,omitempty"`       // Istanbul switch block (nil = no fork, 0 = already on istanbul)
 	MuirGlacierBlock    *big.Int `json:"muirGlacierBlock,omitempty"`    // Eip-2384 (bomb delay) switch block (nil = no fork, 0 = already activated)
+	BerlinBlock         *big.Int `json:"berlinBlock,omitempty"`         // Berlin switch block (nil = no fork, 0 = already on berlin)
+	LondonBlock         *big.Int `json:"londonBlock,omitempty"`         // London switch block (nil = no fork, 0 = already on london)
 
-	// Avalanche Network Upgrades
-	ApricotPhase1BlockTimestamp *uint64 `json:"apricotPhase1BlockTimestamp,omitempty"` // Apricot Phase 1 Block Timestamp (nil = no fork, 0 = already activated)
-	// Apricot Phase 2 Block Timestamp (nil = no fork, 0 = already activated)
-	// Apricot Phase 2 includes a modified version of the Berlin Hard Fork from Ethereum
-	ApricotPhase2BlockTimestamp *uint64 `json:"apricotPhase2BlockTimestamp,omitempty"`
-	// Apricot Phase 3 introduces dynamic fees and a modified version of the London Hard Fork from Ethereum (nil = no fork, 0 = already activated)
-	ApricotPhase3BlockTimestamp *uint64 `json:"apricotPhase3BlockTimestamp,omitempty"`
-	// Apricot Phase 4 introduces the notion of a block fee to the dynamic fee algorithm (nil = no fork, 0 = already activated)
-	ApricotPhase4BlockTimestamp *uint64 `json:"apricotPhase4BlockTimestamp,omitempty"`
-	// Apricot Phase 5 introduces a batch of atomic transactions with a maximum atomic gas limit per block. (nil = no fork, 0 = already activated)
-	ApricotPhase5BlockTimestamp *uint64 `json:"apricotPhase5BlockTimestamp,omitempty"`
-	// When export/import transactions will be allowed on songbird code (Songbird, Coston, Local)
-	SongbirdTransitionTimestamp *uint64 `json:"songbirdTransitionTimestamp,omitempty"`
-	// Apricot Phase Pre-6 deprecates the NativeAssetCall precompile (soft). (nil = no fork, 0 = already activated)
-	ApricotPhasePre6BlockTimestamp *uint64 `json:"apricotPhasePre6BlockTimestamp,omitempty"`
-	// Apricot Phase 6 deprecates the NativeAssetBalance and NativeAssetCall precompiles. (nil = no fork, 0 = already activated)
-	ApricotPhase6BlockTimestamp *uint64 `json:"apricotPhase6BlockTimestamp,omitempty"`
-	// Apricot Phase Post-6 deprecates the NativeAssetCall precompile (soft). (nil = no fork, 0 = already activated)
-	ApricotPhasePost6BlockTimestamp *uint64 `json:"apricotPhasePost6BlockTimestamp,omitempty"`
-	// Banff restricts import/export transactions to AVAX. (nil = no fork, 0 = already activated)
-	BanffBlockTimestamp *uint64 `json:"banffBlockTimestamp,omitempty"`
-	// Cortina increases the block gas limit to 15M. (nil = no fork, 0 = already activated)
-	CortinaBlockTimestamp *uint64 `json:"cortinaBlockTimestamp,omitempty"`
-	// Durango activates the Shanghai Execution Spec Upgrade from Ethereum (https://github.com/ethereum/execution-specs/blob/master/network-upgrades/mainnet-upgrades/shanghai.md#included-eips)
-	// and Avalanche Warp Messaging. (nil = no fork, 0 = already activated)
-	// Note: EIP-4895 is excluded since withdrawals are not relevant to the Avalanche C-Chain or Subnets running the EVM.
-	DurangoBlockTimestamp *uint64 `json:"durangoBlockTimestamp,omitempty"`
-	// Cancun activates the Cancun upgrade from Ethereum. (nil = no fork, 0 = already activated)
-	CancunTime *uint64 `json:"cancunTime,omitempty"`
+	// Fork scheduling was switched from blocks to timestamps here
+
+	ShanghaiTime *uint64 `json:"shanghaiTime,omitempty"` // Shanghai switch time (nil = no fork, 0 = already on shanghai)
+	CancunTime   *uint64 `json:"cancunTime,omitempty"`   // Cancun switch time (nil = no fork, 0 = already activated)
+	VerkleTime   *uint64 `json:"verkleTime,omitempty"`   // Verkle switch time (nil = no fork, 0 = already on verkle)
+
+	NetworkUpgrades // Config for timestamps that enable network upgrades. Skip encoding/decoding directly into ChainConfig.
+
+	AvalancheContext `json:"-"` // Avalanche specific context set during VM initialization. Not serialized.
 
 	UpgradeConfig `json:"-"` // Config specified in upgradeBytes (avalanche network upgrades or enable/disabling precompiles). Skip encoding/decoding directly into ChainConfig.
 }
@@ -550,7 +573,7 @@ func (c *ChainConfig) Description() string {
 	// Create a list of forks with a short description of them. Forks that only
 	// makes sense for mainnet should be optional at printing to avoid bloating
 	// the output for testnets and private networks.
-	banner += "Hard Forks:\n"
+	banner += "Hard Forks (block based):\n"
 	banner += fmt.Sprintf(" - Homestead:                   #%-8v (https://github.com/ethereum/execution-specs/blob/master/network-upgrades/mainnet-upgrades/homestead.md)\n", c.HomesteadBlock)
 	if c.DAOForkBlock != nil {
 		banner += fmt.Sprintf(" - DAO Fork:                    #%-8v (https://github.com/ethereum/execution-specs/blob/master/network-upgrades/mainnet-upgrades/dao-fork.md)\n", c.DAOForkBlock)
@@ -565,19 +588,21 @@ func (c *ChainConfig) Description() string {
 	if c.MuirGlacierBlock != nil {
 		banner += fmt.Sprintf(" - Muir Glacier:                #%-8v (https://github.com/ethereum/execution-specs/blob/master/network-upgrades/mainnet-upgrades/muir-glacier.md)\n", c.MuirGlacierBlock)
 	}
-	banner += fmt.Sprintf(" - Apricot Phase 1 Timestamp:        @%-10v (https://github.com/ava-labs/avalanchego/releases/tag/v1.3.0)\n", ptrToString(c.ApricotPhase1BlockTimestamp))
-	banner += fmt.Sprintf(" - Apricot Phase 2 Timestamp:        @%-10v (https://github.com/ava-labs/avalanchego/releases/tag/v1.4.0)\n", ptrToString(c.ApricotPhase2BlockTimestamp))
-	banner += fmt.Sprintf(" - Apricot Phase 3 Timestamp:        @%-10v (https://github.com/ava-labs/avalanchego/releases/tag/v1.5.0)\n", ptrToString(c.ApricotPhase3BlockTimestamp))
-	banner += fmt.Sprintf(" - Apricot Phase 4 Timestamp:        @%-10v (https://github.com/ava-labs/avalanchego/releases/tag/v1.6.0)\n", ptrToString(c.ApricotPhase4BlockTimestamp))
-	banner += fmt.Sprintf(" - Apricot Phase 5 Timestamp:        @%-10v (https://github.com/ava-labs/avalanchego/releases/tag/v1.7.0)\n", ptrToString(c.ApricotPhase5BlockTimestamp))
-	banner += fmt.Sprintf(" - Songbird Transition Timestamp:    %-8v\n", c.SongbirdTransitionTimestamp)
-	banner += fmt.Sprintf(" - Apricot Phase P6 Timestamp        @%-10v (https://github.com/ava-labs/avalanchego/releases/tag/v1.8.0)\n", ptrToString(c.ApricotPhasePre6BlockTimestamp))
-	banner += fmt.Sprintf(" - Apricot Phase 6 Timestamp:        @%-10v (https://github.com/ava-labs/avalanchego/releases/tag/v1.8.0)\n", ptrToString(c.ApricotPhase6BlockTimestamp))
-	banner += fmt.Sprintf(" - Apricot Phase Post-6 Timestamp:   @%-10v (https://github.com/ava-labs/avalanchego/releases/tag/v1.8.0\n", ptrToString(c.ApricotPhasePost6BlockTimestamp))
-	banner += fmt.Sprintf(" - Banff Timestamp:                  @%-10v (https://github.com/ava-labs/avalanchego/releases/tag/v1.9.0)\n", ptrToString(c.BanffBlockTimestamp))
-	banner += fmt.Sprintf(" - Cortina Timestamp:                @%-10v (https://github.com/ava-labs/avalanchego/releases/tag/v1.10.0)\n", ptrToString(c.CortinaBlockTimestamp))
-	banner += fmt.Sprintf(" - Durango Timestamp:                @%-10v (https://github.com/ava-labs/avalanchego/releases/tag/v1.11.0)\n", ptrToString(c.DurangoBlockTimestamp))
-	banner += fmt.Sprintf(" - Cancun Timestamp:                 @%-10v (https://github.com/ava-labs/avalanchego/releases/tag/v1.12.0)\n", ptrToString(c.CancunTime))
+
+	banner += "Hard forks (timestamp based):\n"
+	banner += fmt.Sprintf(" - Cancun Timestamp:              @%-10v (https://github.com/ethereum/execution-specs/blob/master/network-upgrades/mainnet-upgrades/cancun.md)\n", ptrToString(c.CancunTime))
+	banner += fmt.Sprintf(" - Verkle Timestamp:              @%-10v", ptrToString(c.VerkleTime))
+	banner += "\n"
+
+	banner += "Avalanche Upgrades (timestamp based):\n"
+	banner += c.NetworkUpgrades.Description()
+	banner += "\n"
+
+	upgradeConfigBytes, err := json.Marshal(c.UpgradeConfig)
+	if err != nil {
+		upgradeConfigBytes = []byte("cannot marshal UpgradeConfig")
+	}
+	banner += fmt.Sprintf("Upgrade Config: %s", string(upgradeConfigBytes))
 	banner += "\n"
 	return banner
 }
@@ -589,149 +614,79 @@ func (c *ChainConfig) IsSongbirdCode() bool {
 
 // IsHomestead returns whether num is either equal to the homestead block or greater.
 func (c *ChainConfig) IsHomestead(num *big.Int) bool {
-	return utils.IsBlockForked(c.HomesteadBlock, num)
+	return isBlockForked(c.HomesteadBlock, num)
 }
 
 // IsDAOFork returns whether num is either equal to the DAO fork block or greater.
 func (c *ChainConfig) IsDAOFork(num *big.Int) bool {
-	return utils.IsBlockForked(c.DAOForkBlock, num)
+	return isBlockForked(c.DAOForkBlock, num)
 }
 
 // IsEIP150 returns whether num is either equal to the EIP150 fork block or greater.
 func (c *ChainConfig) IsEIP150(num *big.Int) bool {
-	return utils.IsBlockForked(c.EIP150Block, num)
+	return isBlockForked(c.EIP150Block, num)
 }
 
 // IsEIP155 returns whether num is either equal to the EIP155 fork block or greater.
 func (c *ChainConfig) IsEIP155(num *big.Int) bool {
-	return utils.IsBlockForked(c.EIP155Block, num)
+	return isBlockForked(c.EIP155Block, num)
 }
 
 // IsEIP158 returns whether num is either equal to the EIP158 fork block or greater.
 func (c *ChainConfig) IsEIP158(num *big.Int) bool {
-	return utils.IsBlockForked(c.EIP158Block, num)
+	return isBlockForked(c.EIP158Block, num)
 }
 
 // IsByzantium returns whether num is either equal to the Byzantium fork block or greater.
 func (c *ChainConfig) IsByzantium(num *big.Int) bool {
-	return utils.IsBlockForked(c.ByzantiumBlock, num)
+	return isBlockForked(c.ByzantiumBlock, num)
 }
 
 // IsConstantinople returns whether num is either equal to the Constantinople fork block or greater.
 func (c *ChainConfig) IsConstantinople(num *big.Int) bool {
-	return utils.IsBlockForked(c.ConstantinopleBlock, num)
+	return isBlockForked(c.ConstantinopleBlock, num)
 }
 
 // IsMuirGlacier returns whether num is either equal to the Muir Glacier (EIP-2384) fork block or greater.
 func (c *ChainConfig) IsMuirGlacier(num *big.Int) bool {
-	return utils.IsBlockForked(c.MuirGlacierBlock, num)
+	return isBlockForked(c.MuirGlacierBlock, num)
 }
 
 // IsPetersburg returns whether num is either
 // - equal to or greater than the PetersburgBlock fork block,
 // - OR is nil, and Constantinople is active
 func (c *ChainConfig) IsPetersburg(num *big.Int) bool {
-	return utils.IsBlockForked(c.PetersburgBlock, num) || c.PetersburgBlock == nil && utils.IsBlockForked(c.ConstantinopleBlock, num)
+	return isBlockForked(c.PetersburgBlock, num) || c.PetersburgBlock == nil && isBlockForked(c.ConstantinopleBlock, num)
 }
 
 // IsIstanbul returns whether num is either equal to the Istanbul fork block or greater.
 func (c *ChainConfig) IsIstanbul(num *big.Int) bool {
-	return utils.IsBlockForked(c.IstanbulBlock, num)
+	return isBlockForked(c.IstanbulBlock, num)
 }
 
-// Avalanche Upgrades:
-
-// IsApricotPhase1 returns whether [time] represents a block
-// with a timestamp after the Apricot Phase 1 upgrade time.
-func (c *ChainConfig) IsApricotPhase1(time uint64) bool {
-	return utils.IsTimestampForked(c.ApricotPhase1BlockTimestamp, time)
+// IsBerlin returns whether num is either equal to the Berlin fork block or greater.
+func (c *ChainConfig) IsBerlin(num *big.Int) bool {
+	return isBlockForked(c.BerlinBlock, num)
 }
 
-// IsApricotPhase2 returns whether [time] represents a block
-// with a timestamp after the Apricot Phase 2 upgrade time.
-func (c *ChainConfig) IsApricotPhase2(time uint64) bool {
-	return utils.IsTimestampForked(c.ApricotPhase2BlockTimestamp, time)
+// IsLondon returns whether num is either equal to the London fork block or greater.
+func (c *ChainConfig) IsLondon(num *big.Int) bool {
+	return isBlockForked(c.LondonBlock, num)
 }
 
-// IsApricotPhase3 returns whether [time] represents a block
-// with a timestamp after the Apricot Phase 3 upgrade time.
-func (c *ChainConfig) IsApricotPhase3(time uint64) bool {
-	return utils.IsTimestampForked(c.ApricotPhase3BlockTimestamp, time)
+// IsShanghai returns whether time is either equal to the Shanghai fork time or greater.
+func (c *ChainConfig) IsShanghai(num *big.Int, time uint64) bool {
+	return c.IsLondon(num) && isTimestampForked(c.ShanghaiTime, time)
 }
 
-// IsApricotPhase4 returns whether [time] represents a block
-// with a timestamp after the Apricot Phase 4 upgrade time.
-func (c *ChainConfig) IsApricotPhase4(time uint64) bool {
-	return utils.IsTimestampForked(c.ApricotPhase4BlockTimestamp, time)
+// IsCancun returns whether num is either equal to the Cancun fork time or greater.
+func (c *ChainConfig) IsCancun(num *big.Int, time uint64) bool {
+	return c.IsLondon(num) && isTimestampForked(c.CancunTime, time)
 }
 
-// IsApricotPhase5 returns whether [time] represents a block
-// with a timestamp after the Apricot Phase 5 upgrade time.
-func (c *ChainConfig) IsApricotPhase5(time uint64) bool {
-	return utils.IsTimestampForked(c.ApricotPhase5BlockTimestamp, time)
-}
-
-// IsApricotPhasePre6 returns whether [time] represents a block
-// with a timestamp after the Apricot Phase Pre 6 upgrade time.
-func (c *ChainConfig) IsApricotPhasePre6(time uint64) bool {
-	return utils.IsTimestampForked(c.ApricotPhasePre6BlockTimestamp, time)
-}
-
-// IsApricotPhase6 returns whether [time] represents a block
-// with a timestamp after the Apricot Phase 6 upgrade time.
-func (c *ChainConfig) IsApricotPhase6(time uint64) bool {
-	return utils.IsTimestampForked(c.ApricotPhase6BlockTimestamp, time)
-}
-
-// IsApricotPhasePost6 returns whether [time] represents a block
-// with a timestamp after the Apricot Phase 6 Post upgrade time.
-func (c *ChainConfig) IsApricotPhasePost6(time uint64) bool {
-	return utils.IsTimestampForked(c.ApricotPhasePost6BlockTimestamp, time)
-}
-
-// IsSongbirdTransition returns whether [blockTimestamp] represents a block
-// with a timestamp after the Songbird code transition time.
-func (c *ChainConfig) IsSongbirdTransition(time uint64) bool {
-	return utils.IsTimestampForked(c.SongbirdTransitionTimestamp, time)
-}
-
-// IsBanff returns whether [time] represents a block
-// with a timestamp after the Banff upgrade time.
-func (c *ChainConfig) IsBanff(time uint64) bool {
-	return utils.IsTimestampForked(c.BanffBlockTimestamp, time)
-}
-
-// IsCortina returns whether [time] represents a block
-// with a timestamp after the Cortina upgrade time.
-func (c *ChainConfig) IsCortina(time uint64) bool {
-	return utils.IsTimestampForked(c.CortinaBlockTimestamp, time)
-}
-
-// IsDurango returns whether [time] represents a block
-// with a timestamp after the Durango upgrade time.
-func (c *ChainConfig) IsDurango(time uint64) bool {
-	return utils.IsTimestampForked(c.DurangoBlockTimestamp, time)
-}
-
-// IsCancun returns whether [time] represents a block
-// with a timestamp after the Cancun upgrade time.
-func (c *ChainConfig) IsCancun(time uint64) bool {
-	return utils.IsTimestampForked(c.CancunTime, time)
-}
-
-func (r *Rules) PredicatersExist() bool {
-	return len(r.Predicaters) > 0
-}
-
-func (r *Rules) PredicaterExists(addr common.Address) bool {
-	_, PredicaterExists := r.Predicaters[addr]
-	return PredicaterExists
-}
-
-// IsPrecompileEnabled returns whether precompile with [address] is enabled at [timestamp].
-func (c *ChainConfig) IsPrecompileEnabled(address common.Address, timestamp uint64) bool {
-	config := c.getActivePrecompileConfig(address, timestamp)
-	return config != nil && !config.IsDisabled()
+// IsVerkle returns whether num is either equal to the Verkle fork time or greater.
+func (c *ChainConfig) IsVerkle(num *big.Int, time uint64) bool {
+	return c.IsLondon(num) && isTimestampForked(c.VerkleTime, time)
 }
 
 // CheckCompatible checks whether scheduled fork transitions have been imported
@@ -759,27 +714,17 @@ func (c *ChainConfig) CheckCompatible(newcfg *ChainConfig, height uint64, time u
 	return lasterr
 }
 
-// Verify verifies chain config and returns error
-func (c *ChainConfig) Verify() error {
-	// Verify the precompile upgrades are internally consistent given the existing chainConfig.
-	if err := c.verifyPrecompileUpgrades(); err != nil {
-		return fmt.Errorf("invalid precompile upgrades: %w", err)
-	}
-
-	return nil
+type fork struct {
+	name      string
+	block     *big.Int // some go-ethereum forks use block numbers
+	timestamp *uint64  // Avalanche forks use timestamps
+	optional  bool     // if true, the fork may be nil and next fork is still allowed
 }
 
 // CheckConfigForkOrder checks that we don't "skip" any forks, geth isn't pluggable enough
 // to guarantee that forks can be implemented in a different order than on official networks
 func (c *ChainConfig) CheckConfigForkOrder() error {
-	type fork struct {
-		name      string
-		block     *big.Int // some go-ethereum forks use block numbers
-		timestamp *uint64  // Avalanche forks use timestamps
-		optional  bool     // if true, the fork may be nil and next fork is still allowed
-	}
-	var lastFork fork
-	for _, cur := range []fork{
+	ethForks := []fork{
 		{name: "homesteadBlock", block: c.HomesteadBlock},
 		{name: "daoForkBlock", block: c.DAOForkBlock, optional: true},
 		{name: "eip150Block", block: c.EIP150Block},
@@ -790,160 +735,156 @@ func (c *ChainConfig) CheckConfigForkOrder() error {
 		{name: "petersburgBlock", block: c.PetersburgBlock},
 		{name: "istanbulBlock", block: c.IstanbulBlock},
 		{name: "muirGlacierBlock", block: c.MuirGlacierBlock, optional: true},
-	} {
-		if cur.block != nil && common.Big0.Cmp(cur.block) != 0 {
-			return errNonGenesisForkByHeight
-		}
-		if lastFork.name != "" {
-			// Next one must be higher number
-			if lastFork.block == nil && cur.block != nil {
-				return fmt.Errorf("unsupported fork ordering: %v not enabled, but %v enabled at %v",
-					lastFork.name, cur.name, cur.block)
-			}
-			if lastFork.block != nil && cur.block != nil {
-				if lastFork.block.Cmp(cur.block) > 0 {
-					return fmt.Errorf("unsupported fork ordering: %v enabled at %v, but %v enabled at %v",
-						lastFork.name, lastFork.block, cur.name, cur.block)
-				}
-			}
-		}
-		// If it was optional and not set, then ignore it
-		if !cur.optional || cur.block != nil {
-			lastFork = cur
-		}
+		{name: "berlinBlock", block: c.BerlinBlock},
+		{name: "londonBlock", block: c.LondonBlock},
+		{name: "shanghaiTime", timestamp: c.ShanghaiTime},
+		{name: "cancunTime", timestamp: c.CancunTime, optional: true},
+		{name: "verkleTime", timestamp: c.VerkleTime, optional: true},
 	}
 
-	// Note: ApricotPhase1 and ApricotPhase2 override the rules set by block number
-	// hard forks. In Avalanche, hard forks must take place via block timestamps instead
-	// of block numbers since blocks are produced asynchronously. Therefore, we do not
-	// check that the block timestamps for Apricot Phase1 and Phase2 in the same way as for
-	// the block number forks since it would not be a meaningful comparison.
-	// Instead, we check only that Apricot Phases are enabled in order.
-	lastFork = fork{}
-	for _, cur := range []fork{
-		{name: "apricotPhase1BlockTimestamp", timestamp: c.ApricotPhase1BlockTimestamp},
-		{name: "apricotPhase2BlockTimestamp", timestamp: c.ApricotPhase2BlockTimestamp},
-		{name: "apricotPhase3BlockTimestamp", timestamp: c.ApricotPhase3BlockTimestamp},
-		{name: "apricotPhase4BlockTimestamp", timestamp: c.ApricotPhase4BlockTimestamp},
-		{name: "apricotPhase5BlockTimestamp", timestamp: c.ApricotPhase5BlockTimestamp},
-		{name: "apricotPhasePre6BlockTimestamp", timestamp: c.ApricotPhasePre6BlockTimestamp},
-		{name: "apricotPhase6BlockTimestamp", timestamp: c.ApricotPhase6BlockTimestamp},
-		{name: "apricotPhasePost6BlockTimestamp", timestamp: c.ApricotPhasePost6BlockTimestamp},
-		{name: "banffBlockTimestamp", timestamp: c.BanffBlockTimestamp},
-		{name: "cortinaBlockTimestamp", timestamp: c.CortinaBlockTimestamp},
-		{name: "durangoBlockTimestamp", timestamp: c.DurangoBlockTimestamp},
-		{name: "cancunTime", timestamp: c.CancunTime},
-	} {
-		if lastFork.name != "" {
-			// Next one must be higher number
-			if lastFork.timestamp == nil && cur.timestamp != nil {
-				return fmt.Errorf("unsupported fork ordering: %v not enabled, but %v enabled at %v",
-					lastFork.name, cur.name, cur.timestamp)
-			}
-			if lastFork.timestamp != nil && cur.timestamp != nil {
-				if *lastFork.timestamp > *cur.timestamp {
-					return fmt.Errorf("unsupported fork ordering: %v enabled at %v, but %v enabled at %v",
-						lastFork.name, lastFork.timestamp, cur.name, cur.timestamp)
-				}
-			}
-		}
-		// If it was optional and not set, then ignore it
-		if !cur.optional || cur.timestamp != nil {
-			lastFork = cur
-		}
+	// Check that forks are enabled in order
+	if err := checkForks(ethForks, true); err != nil {
+		return err
 	}
-	// TODO(aaronbuchwald) check that avalanche block timestamps are at least possible with the other rule set changes
-	// additional change: require that block number hard forks are either 0 or nil since they should not
-	// be enabled at a specific block number.
+
+	// Note: In Avalanche, hard forks must take place via block timestamps instead
+	// of block numbers since blocks are produced asynchronously. Therefore, we do not
+	// check that the block timestamps in the same way as for
+	// the block number forks since it would not be a meaningful comparison.
+	// Instead, we check only that Phases are enabled in order.
+	// Note: we do not add the optional stateful precompile configs in here because they are optional
+	// and independent, such that the ordering they are enabled does not impact the correctness of the
+	// chain config.
+	if err := checkForks(c.forkOrder(), false); err != nil {
+		return err
+	}
 
 	return nil
 }
 
-func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, height *big.Int, time uint64) *ConfigCompatError {
-	if isForkBlockIncompatible(c.HomesteadBlock, newcfg.HomesteadBlock, height) {
+// checkForks checks that forks are enabled in order and returns an error if not
+// [blockFork] is true if the fork is a block number fork, false if it is a timestamp fork
+func checkForks(forks []fork, blockFork bool) error {
+	lastFork := fork{}
+	for _, cur := range forks {
+		if lastFork.name != "" {
+			switch {
+			// Non-optional forks must all be present in the chain config up to the last defined fork
+			case lastFork.block == nil && lastFork.timestamp == nil && (cur.block != nil || cur.timestamp != nil):
+				if cur.block != nil {
+					return fmt.Errorf("unsupported fork ordering: %v not enabled, but %v enabled at block %v",
+						lastFork.name, cur.name, cur.block)
+				} else {
+					return fmt.Errorf("unsupported fork ordering: %v not enabled, but %v enabled at timestamp %v",
+						lastFork.name, cur.name, cur.timestamp)
+				}
+
+			// Fork (whether defined by block or timestamp) must follow the fork definition sequence
+			case (lastFork.block != nil && cur.block != nil) || (lastFork.timestamp != nil && cur.timestamp != nil):
+				if lastFork.block != nil && lastFork.block.Cmp(cur.block) > 0 {
+					return fmt.Errorf("unsupported fork ordering: %v enabled at block %v, but %v enabled at block %v",
+						lastFork.name, lastFork.block, cur.name, cur.block)
+				} else if lastFork.timestamp != nil && *lastFork.timestamp > *cur.timestamp {
+					return fmt.Errorf("unsupported fork ordering: %v enabled at timestamp %v, but %v enabled at timestamp %v",
+						lastFork.name, lastFork.timestamp, cur.name, cur.timestamp)
+				}
+
+				// Timestamp based forks can follow block based ones, but not the other way around
+				if lastFork.timestamp != nil && cur.block != nil {
+					return fmt.Errorf("unsupported fork ordering: %v used timestamp ordering, but %v reverted to block ordering",
+						lastFork.name, cur.name)
+				}
+			}
+		}
+		// If it was optional and not set, then ignore it
+		if !cur.optional || (cur.block != nil || cur.timestamp != nil) {
+			lastFork = cur
+		}
+	}
+	return nil
+}
+
+// checkCompatible confirms that [newcfg] is backwards compatible with [c] to upgrade with the given head block height and timestamp.
+// This confirms that all Ethereum and Avalanche upgrades are backwards compatible as well as that the precompile config is backwards
+// compatible.
+func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, headNumber *big.Int, headTimestamp uint64) *ConfigCompatError {
+	if isForkBlockIncompatible(c.HomesteadBlock, newcfg.HomesteadBlock, headNumber) {
 		return newBlockCompatError("Homestead fork block", c.HomesteadBlock, newcfg.HomesteadBlock)
 	}
-	if isForkBlockIncompatible(c.DAOForkBlock, newcfg.DAOForkBlock, height) {
+	if isForkBlockIncompatible(c.DAOForkBlock, newcfg.DAOForkBlock, headNumber) {
 		return newBlockCompatError("DAO fork block", c.DAOForkBlock, newcfg.DAOForkBlock)
 	}
-	if c.IsDAOFork(height) && c.DAOForkSupport != newcfg.DAOForkSupport {
+	if c.IsDAOFork(headNumber) && c.DAOForkSupport != newcfg.DAOForkSupport {
 		return newBlockCompatError("DAO fork support flag", c.DAOForkBlock, newcfg.DAOForkBlock)
 	}
-	if isForkBlockIncompatible(c.EIP150Block, newcfg.EIP150Block, height) {
+	if isForkBlockIncompatible(c.EIP150Block, newcfg.EIP150Block, headNumber) {
 		return newBlockCompatError("EIP150 fork block", c.EIP150Block, newcfg.EIP150Block)
 	}
-	if isForkBlockIncompatible(c.EIP155Block, newcfg.EIP155Block, height) {
+	if isForkBlockIncompatible(c.EIP155Block, newcfg.EIP155Block, headNumber) {
 		return newBlockCompatError("EIP155 fork block", c.EIP155Block, newcfg.EIP155Block)
 	}
-	if isForkBlockIncompatible(c.EIP158Block, newcfg.EIP158Block, height) {
+	if isForkBlockIncompatible(c.EIP158Block, newcfg.EIP158Block, headNumber) {
 		return newBlockCompatError("EIP158 fork block", c.EIP158Block, newcfg.EIP158Block)
 	}
-	if c.IsEIP158(height) && !configBlockEqual(c.ChainID, newcfg.ChainID) {
+	if c.IsEIP158(headNumber) && !configBlockEqual(c.ChainID, newcfg.ChainID) {
 		return newBlockCompatError("EIP158 chain ID", c.EIP158Block, newcfg.EIP158Block)
 	}
-	if isForkBlockIncompatible(c.ByzantiumBlock, newcfg.ByzantiumBlock, height) {
+	if isForkBlockIncompatible(c.ByzantiumBlock, newcfg.ByzantiumBlock, headNumber) {
 		return newBlockCompatError("Byzantium fork block", c.ByzantiumBlock, newcfg.ByzantiumBlock)
 	}
-	if isForkBlockIncompatible(c.ConstantinopleBlock, newcfg.ConstantinopleBlock, height) {
+	if isForkBlockIncompatible(c.ConstantinopleBlock, newcfg.ConstantinopleBlock, headNumber) {
 		return newBlockCompatError("Constantinople fork block", c.ConstantinopleBlock, newcfg.ConstantinopleBlock)
 	}
-	if isForkBlockIncompatible(c.PetersburgBlock, newcfg.PetersburgBlock, height) {
+	if isForkBlockIncompatible(c.PetersburgBlock, newcfg.PetersburgBlock, headNumber) {
 		// the only case where we allow Petersburg to be set in the past is if it is equal to Constantinople
 		// mainly to satisfy fork ordering requirements which state that Petersburg fork be set if Constantinople fork is set
-		if isForkBlockIncompatible(c.ConstantinopleBlock, newcfg.PetersburgBlock, height) {
+		if isForkBlockIncompatible(c.ConstantinopleBlock, newcfg.PetersburgBlock, headNumber) {
 			return newBlockCompatError("Petersburg fork block", c.PetersburgBlock, newcfg.PetersburgBlock)
 		}
 	}
-	if isForkBlockIncompatible(c.IstanbulBlock, newcfg.IstanbulBlock, height) {
+	if isForkBlockIncompatible(c.IstanbulBlock, newcfg.IstanbulBlock, headNumber) {
 		return newBlockCompatError("Istanbul fork block", c.IstanbulBlock, newcfg.IstanbulBlock)
 	}
-	if isForkBlockIncompatible(c.MuirGlacierBlock, newcfg.MuirGlacierBlock, height) {
+	if isForkBlockIncompatible(c.MuirGlacierBlock, newcfg.MuirGlacierBlock, headNumber) {
 		return newBlockCompatError("Muir Glacier fork block", c.MuirGlacierBlock, newcfg.MuirGlacierBlock)
 	}
-	if isForkTimestampIncompatible(c.ApricotPhase1BlockTimestamp, newcfg.ApricotPhase1BlockTimestamp, time) {
-		return newTimestampCompatError("ApricotPhase1 fork block timestamp", c.ApricotPhase1BlockTimestamp, newcfg.ApricotPhase1BlockTimestamp)
+	if isForkBlockIncompatible(c.BerlinBlock, newcfg.BerlinBlock, headNumber) {
+		return newBlockCompatError("Berlin fork block", c.BerlinBlock, newcfg.BerlinBlock)
 	}
-	if isForkTimestampIncompatible(c.ApricotPhase2BlockTimestamp, newcfg.ApricotPhase2BlockTimestamp, time) {
-		return newTimestampCompatError("ApricotPhase2 fork block timestamp", c.ApricotPhase2BlockTimestamp, newcfg.ApricotPhase2BlockTimestamp)
+	if isForkBlockIncompatible(c.LondonBlock, newcfg.LondonBlock, headNumber) {
+		return newBlockCompatError("London fork block", c.LondonBlock, newcfg.LondonBlock)
 	}
-	if isForkTimestampIncompatible(c.ApricotPhase3BlockTimestamp, newcfg.ApricotPhase3BlockTimestamp, time) {
-		return newTimestampCompatError("ApricotPhase3 fork block timestamp", c.ApricotPhase3BlockTimestamp, newcfg.ApricotPhase3BlockTimestamp)
+	if isForkTimestampIncompatible(c.ShanghaiTime, newcfg.ShanghaiTime, headTimestamp) {
+		return newTimestampCompatError("Shanghai fork timestamp", c.ShanghaiTime, newcfg.ShanghaiTime)
 	}
-	if isForkTimestampIncompatible(c.ApricotPhase4BlockTimestamp, newcfg.ApricotPhase4BlockTimestamp, time) {
-		return newTimestampCompatError("ApricotPhase4 fork block timestamp", c.ApricotPhase4BlockTimestamp, newcfg.ApricotPhase4BlockTimestamp)
+	if isForkTimestampIncompatible(c.CancunTime, newcfg.CancunTime, headTimestamp) {
+		return newTimestampCompatError("Cancun fork timestamp", c.CancunTime, newcfg.CancunTime)
 	}
-	if isForkTimestampIncompatible(c.ApricotPhase5BlockTimestamp, newcfg.ApricotPhase5BlockTimestamp, time) {
-		return newTimestampCompatError("ApricotPhase5 fork block timestamp", c.ApricotPhase5BlockTimestamp, newcfg.ApricotPhase5BlockTimestamp)
-	}
-	if isForkTimestampIncompatible(c.ApricotPhasePre6BlockTimestamp, newcfg.ApricotPhasePre6BlockTimestamp, time) {
-		return newTimestampCompatError("ApricotPhasePre6 fork block timestamp", c.ApricotPhasePre6BlockTimestamp, newcfg.ApricotPhasePre6BlockTimestamp)
-	}
-	if isForkTimestampIncompatible(c.ApricotPhase6BlockTimestamp, newcfg.ApricotPhase6BlockTimestamp, time) {
-		return newTimestampCompatError("ApricotPhase6 fork block timestamp", c.ApricotPhase6BlockTimestamp, newcfg.ApricotPhase6BlockTimestamp)
-	}
-	if isForkTimestampIncompatible(c.ApricotPhasePost6BlockTimestamp, newcfg.ApricotPhasePost6BlockTimestamp, time) {
-		return newTimestampCompatError("ApricotPhasePost6 fork block timestamp", c.ApricotPhasePost6BlockTimestamp, newcfg.ApricotPhasePost6BlockTimestamp)
-	}
-	if isForkTimestampIncompatible(c.BanffBlockTimestamp, newcfg.BanffBlockTimestamp, time) {
-		return newTimestampCompatError("Banff fork block timestamp", c.BanffBlockTimestamp, newcfg.BanffBlockTimestamp)
-	}
-	if isForkTimestampIncompatible(c.CortinaBlockTimestamp, newcfg.CortinaBlockTimestamp, time) {
-		return newTimestampCompatError("Cortina fork block timestamp", c.CortinaBlockTimestamp, newcfg.CortinaBlockTimestamp)
-	}
-	if isForkTimestampIncompatible(c.DurangoBlockTimestamp, newcfg.DurangoBlockTimestamp, time) {
-		return newTimestampCompatError("Durango fork block timestamp", c.DurangoBlockTimestamp, newcfg.DurangoBlockTimestamp)
-	}
-	if isForkTimestampIncompatible(c.CancunTime, newcfg.CancunTime, time) {
-		return newTimestampCompatError("Cancun fork block timestamp", c.CancunTime, newcfg.CancunTime)
+	if isForkTimestampIncompatible(c.VerkleTime, newcfg.VerkleTime, headTimestamp) {
+		return newTimestampCompatError("Verkle fork timestamp", c.VerkleTime, newcfg.VerkleTime)
 	}
 
+	// Check avalanche network upgrades
+	if err := c.CheckNetworkUpgradesCompatible(&newcfg.NetworkUpgrades, headTimestamp); err != nil {
+		return err
+	}
 	return nil
 }
 
-// isForkBlockIncompatible returns true if a fork scheduled at s1 cannot be rescheduled to
-// block s2 because head is already past the fork.
+// isForkBlockIncompatible returns true if a fork scheduled at block s1 cannot be
+// rescheduled to block s2 because head is already past the fork.
 func isForkBlockIncompatible(s1, s2, head *big.Int) bool {
-	return (utils.IsBlockForked(s1, head) || utils.IsBlockForked(s2, head)) && !configBlockEqual(s1, s2)
+	return (isBlockForked(s1, head) || isBlockForked(s2, head)) && !configBlockEqual(s1, s2)
+}
+
+// isBlockForked returns whether a fork scheduled at block s is active at the
+// given head block. Whilst this method is the same as isTimestampForked, they
+// are explicitly separate for clearer reading.
+func isBlockForked(s, head *big.Int) bool {
+	if s == nil || head == nil {
+		return false
+	}
+	return s.Cmp(head) <= 0
 }
 
 func configBlockEqual(x, y *big.Int) bool {
@@ -959,7 +900,17 @@ func configBlockEqual(x, y *big.Int) bool {
 // isForkTimestampIncompatible returns true if a fork scheduled at timestamp s1
 // cannot be rescheduled to timestamp s2 because head is already past the fork.
 func isForkTimestampIncompatible(s1, s2 *uint64, head uint64) bool {
-	return (utils.IsTimestampForked(s1, head) || utils.IsTimestampForked(s2, head)) && !configTimestampEqual(s1, s2)
+	return (isTimestampForked(s1, head) || isTimestampForked(s2, head)) && !configTimestampEqual(s1, s2)
+}
+
+// isTimestampForked returns whether a fork scheduled at timestamp s is active
+// at the given head timestamp. Whilst this method is the same as isBlockForked,
+// they are explicitly separate for clearer reading.
+func isTimestampForked(s *uint64, head uint64) bool {
+	if s == nil {
+		return false
+	}
+	return *s <= head
 }
 
 func configTimestampEqual(x, y *uint64) bool {
@@ -1041,11 +992,11 @@ func (err *ConfigCompatError) Error() string {
 	return fmt.Sprintf("mismatching %s in database (have timestamp %s, want timestamp %s, rewindto timestamp %d)", err.What, ptrToString(err.StoredTime), ptrToString(err.NewTime), err.RewindToTime)
 }
 
-func ptrToString(val *uint64) string {
-	if val == nil {
-		return "nil"
-	}
-	return fmt.Sprintf("%d", *val)
+type EthRules struct {
+	IsHomestead, IsEIP150, IsEIP155, IsEIP158               bool
+	IsByzantium, IsConstantinople, IsPetersburg, IsIstanbul bool
+	IsCancun                                                bool
+	IsVerkle                                                bool
 }
 
 // Rules wraps ChainConfig and is merely syntactic sugar or can be used for functions
@@ -1054,17 +1005,13 @@ func ptrToString(val *uint64) string {
 // Rules is a one time interface meaning that it shouldn't be used in between transition
 // phases.
 type Rules struct {
-	ChainID                                                 *big.Int
-	IsHomestead, IsEIP150, IsEIP155, IsEIP158               bool
-	IsByzantium, IsConstantinople, IsPetersburg, IsIstanbul bool
-	IsCancun                                                bool
+	ChainID *big.Int
+
+	// Rules for Ethereum releases
+	EthRules
 
 	// Rules for Avalanche releases
-	IsApricotPhase1, IsApricotPhase2, IsApricotPhase3, IsApricotPhase4, IsApricotPhase5 bool
-	IsApricotPhasePre6, IsApricotPhase6, IsApricotPhasePost6                            bool
-	IsBanff                                                                             bool
-	IsCortina                                                                           bool
-	IsDurango                                                                           bool
+	AvalancheRules
 
 	// Songbird (coston, local)
 	IsSongbirdCode       bool
@@ -1083,12 +1030,6 @@ type Rules struct {
 	AccepterPrecompiles map[common.Address]precompileconfig.Accepter
 }
 
-// IsPrecompileEnabled returns true if the precompile at [addr] is enabled for this rule set.
-func (r *Rules) IsPrecompileEnabled(addr common.Address) bool {
-	_, ok := r.ActivePrecompiles[addr]
-	return ok
-}
-
 // Rules ensures c's ChainID is not nil.
 func (c *ChainConfig) rules(num *big.Int, timestamp uint64) Rules {
 	chainID := c.ChainID
@@ -1096,37 +1037,27 @@ func (c *ChainConfig) rules(num *big.Int, timestamp uint64) Rules {
 		chainID = new(big.Int)
 	}
 	return Rules{
-		ChainID:          new(big.Int).Set(chainID),
-		IsHomestead:      c.IsHomestead(num),
-		IsEIP150:         c.IsEIP150(num),
-		IsEIP155:         c.IsEIP155(num),
-		IsEIP158:         c.IsEIP158(num),
-		IsByzantium:      c.IsByzantium(num),
-		IsConstantinople: c.IsConstantinople(num),
-		IsPetersburg:     c.IsPetersburg(num),
-		IsIstanbul:       c.IsIstanbul(num),
-		IsSongbirdCode:   c.IsSongbirdCode(),
-		IsCancun:         c.IsCancun(timestamp),
+		ChainID: new(big.Int).Set(chainID),
+		EthRules: EthRules{
+			IsHomestead:      c.IsHomestead(num),
+			IsEIP150:         c.IsEIP150(num),
+			IsEIP155:         c.IsEIP155(num),
+			IsEIP158:         c.IsEIP158(num),
+			IsByzantium:      c.IsByzantium(num),
+			IsConstantinople: c.IsConstantinople(num),
+			IsPetersburg:     c.IsPetersburg(num),
+			IsIstanbul:       c.IsIstanbul(num),
+			IsCancun:         c.IsCancun(num, timestamp),
+		},
 	}
 }
 
-// AvalancheRules returns the Avalanche modified rules to support Avalanche
+// Rules returns the Avalanche modified rules to support Avalanche
 // network upgrades
-func (c *ChainConfig) AvalancheRules(blockNum *big.Int, timestamp uint64) Rules {
+func (c *ChainConfig) Rules(blockNum *big.Int, timestamp uint64) Rules {
 	rules := c.rules(blockNum, timestamp)
 
-	rules.IsApricotPhase1 = c.IsApricotPhase1(timestamp)
-	rules.IsApricotPhase2 = c.IsApricotPhase2(timestamp)
-	rules.IsApricotPhase3 = c.IsApricotPhase3(timestamp)
-	rules.IsApricotPhase4 = c.IsApricotPhase4(timestamp)
-	rules.IsApricotPhase5 = c.IsApricotPhase5(timestamp)
-	rules.IsApricotPhasePre6 = c.IsApricotPhasePre6(timestamp)
-	rules.IsApricotPhase6 = c.IsApricotPhase6(timestamp)
-	rules.IsApricotPhasePost6 = c.IsApricotPhasePost6(timestamp)
-	rules.IsSongbirdTransition = c.IsSongbirdTransition(timestamp)
-	rules.IsBanff = c.IsBanff(timestamp)
-	rules.IsCortina = c.IsCortina(timestamp)
-	rules.IsDurango = c.IsDurango(timestamp)
+	rules.AvalancheRules = c.GetAvalancheRules(timestamp)
 
 	// Initialize the stateful precompiles that should be enabled at [blockTimestamp].
 	rules.ActivePrecompiles = make(map[common.Address]precompileconfig.Config)

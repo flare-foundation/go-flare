@@ -24,13 +24,16 @@ import (
 	"github.com/ava-labs/avalanchego/wallet/chain/p"
 	"github.com/ava-labs/avalanchego/wallet/chain/x"
 
+	pbuilder "github.com/ava-labs/avalanchego/wallet/chain/p/builder"
+	xbuilder "github.com/ava-labs/avalanchego/wallet/chain/x/builder"
 	walletcommon "github.com/ava-labs/avalanchego/wallet/subnet/primary/common"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 )
 
 const (
-	MainnetAPIURI = "https://api.avax.network"
-	LocalAPIURI   = "http://localhost:9650"
+	FlareAPIURI  = "https://flare-api.flare.network"
+	CostwoAPIURI = "https://coston2-api.flare.network"
+	LocalAPIURI  = "http://localhost:9650"
 
 	fetchLimit = 1024
 )
@@ -56,11 +59,11 @@ type UTXOClient interface {
 
 type AVAXState struct {
 	PClient platformvm.Client
-	PCTX    p.Context
+	PCTX    *pbuilder.Context
 	XClient avm.Client
-	XCTX    x.Context
+	XCTX    *xbuilder.Context
 	CClient evm.Client
-	CCTX    c.Context
+	CCTX    *c.Context
 	UTXOs   walletcommon.UTXOs
 }
 
@@ -77,7 +80,7 @@ func FetchState(
 	xClient := avm.NewClient(uri, "X")
 	cClient := evm.NewCChainClient(uri)
 
-	pCTX, err := p.NewContextFromClients(ctx, infoClient, xClient)
+	pCTX, err := p.NewContextFromClients(ctx, infoClient, xClient, pClient)
 	if err != nil {
 		return nil, err
 	}
@@ -105,12 +108,12 @@ func FetchState(
 			codec:  txs.Codec,
 		},
 		{
-			id:     xCTX.BlockchainID(),
+			id:     xCTX.BlockchainID,
 			client: xClient,
-			codec:  x.Parser.Codec(),
+			codec:  xbuilder.Parser.Codec(),
 		},
 		{
-			id:     cCTX.BlockchainID(),
+			id:     cCTX.BlockchainID,
 			client: cClient,
 			codec:  evm.Codec,
 		},

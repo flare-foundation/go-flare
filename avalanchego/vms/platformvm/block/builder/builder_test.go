@@ -14,9 +14,10 @@ import (
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/consensus/snowman"
+	"github.com/ava-labs/avalanchego/upgrade/upgradetest"
 	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/crypto/bls"
-	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
+	"github.com/ava-labs/avalanchego/utils/iterator"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 	"github.com/ava-labs/avalanchego/utils/units"
 	"github.com/ava-labs/avalanchego/vms/platformvm/block"
@@ -24,6 +25,7 @@ import (
 	"github.com/ava-labs/avalanchego/vms/platformvm/signer"
 	"github.com/ava-labs/avalanchego/vms/platformvm/state"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
+	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 
 	blockexecutor "github.com/ava-labs/avalanchego/vms/platformvm/block/executor"
 	txexecutor "github.com/ava-labs/avalanchego/vms/platformvm/txs/executor"
@@ -32,28 +34,31 @@ import (
 func TestBuildBlockBasic(t *testing.T) {
 	require := require.New(t)
 
-	env := newEnvironment(t, latestFork)
+	env := newEnvironment(t, upgradetest.Latest)
 	env.ctx.Lock.Lock()
 	defer env.ctx.Lock.Unlock()
 
+	subnetID := testSubnet1.ID()
+	wallet := newWallet(t, env, walletConfig{
+		subnetIDs: []ids.ID{subnetID},
+	})
+
 	// Create a valid transaction
-	tx, err := env.txBuilder.NewCreateChainTx(
-		testSubnet1.ID(),
+	tx, err := wallet.IssueCreateChainTx(
+		subnetID,
 		nil,
 		constants.AVMID,
 		nil,
 		"chain name",
-		[]*secp256k1.PrivateKey{testSubnet1ControlKeys[0], testSubnet1ControlKeys[1]},
-		ids.ShortEmpty,
-		nil,
 	)
 	require.NoError(err)
-	txID := tx.ID()
 
 	// Issue the transaction
 	env.ctx.Lock.Unlock()
-	require.NoError(env.network.IssueTx(context.Background(), tx))
+	require.NoError(env.network.IssueTxFromRPC(tx))
 	env.ctx.Lock.Lock()
+
+	txID := tx.ID()
 	_, ok := env.mempool.Get(txID)
 	require.True(ok)
 
@@ -75,7 +80,7 @@ func TestBuildBlockBasic(t *testing.T) {
 func TestBuildBlockDoesNotBuildWithEmptyMempool(t *testing.T) {
 	require := require.New(t)
 
-	env := newEnvironment(t, latestFork)
+	env := newEnvironment(t, upgradetest.Latest)
 	env.ctx.Lock.Lock()
 	defer env.ctx.Lock.Unlock()
 
@@ -92,9 +97,11 @@ func TestBuildBlockDoesNotBuildWithEmptyMempool(t *testing.T) {
 func TestBuildBlockShouldReward(t *testing.T) {
 	require := require.New(t)
 
-	env := newEnvironment(t, latestFork)
+	env := newEnvironment(t, upgradetest.Latest)
 	env.ctx.Lock.Lock()
 	defer env.ctx.Lock.Unlock()
+
+	wallet := newWallet(t, env, walletConfig{})
 
 	var (
 		now    = env.backend.Clk.Time()
@@ -108,26 +115,36 @@ func TestBuildBlockShouldReward(t *testing.T) {
 	sk, err := bls.NewSecretKey()
 	require.NoError(err)
 
+	rewardOwners := &secp256k1fx.OutputOwners{
+		Threshold: 1,
+		Addrs:     []ids.ShortID{ids.GenerateTestShortID()},
+	}
+
 	// Create a valid [AddPermissionlessValidatorTx]
-	tx, err := env.txBuilder.NewAddPermissionlessValidatorTx(
-		defaultValidatorStake,
-		uint64(validatorStartTime.Unix()),
-		uint64(validatorEndTime.Unix()),
-		nodeID,
+	tx, err := wallet.IssueAddPermissionlessValidatorTx(
+		&txs.SubnetValidator{
+			Validator: txs.Validator{
+				NodeID: nodeID,
+				Start:  uint64(validatorStartTime.Unix()),
+				End:    uint64(validatorEndTime.Unix()),
+				Wght:   defaultValidatorStake,
+			},
+			Subnet: constants.PrimaryNetworkID,
+		},
 		signer.NewProofOfPossession(sk),
-		preFundedKeys[0].PublicKey().Address(),
+		env.ctx.AVAXAssetID,
+		rewardOwners,
+		rewardOwners,
 		reward.PercentDenominator,
-		[]*secp256k1.PrivateKey{preFundedKeys[0]},
-		preFundedKeys[0].PublicKey().Address(),
-		nil,
 	)
 	require.NoError(err)
-	txID := tx.ID()
 
 	// Issue the transaction
 	env.ctx.Lock.Unlock()
-	require.NoError(env.network.IssueTx(context.Background(), tx))
+	require.NoError(env.network.IssueTxFromRPC(tx))
 	env.ctx.Lock.Lock()
+
+	txID := tx.ID()
 	_, ok := env.mempool.Get(txID)
 	require.True(ok)
 
@@ -194,7 +211,7 @@ func TestBuildBlockShouldReward(t *testing.T) {
 func TestBuildBlockAdvanceTime(t *testing.T) {
 	require := require.New(t)
 
-	env := newEnvironment(t, latestFork)
+	env := newEnvironment(t, upgradetest.Latest)
 	env.ctx.Lock.Lock()
 	defer env.ctx.Lock.Unlock()
 
@@ -204,10 +221,10 @@ func TestBuildBlockAdvanceTime(t *testing.T) {
 	)
 
 	// Add a staker to [env.state]
-	env.state.PutCurrentValidator(&state.Staker{
+	require.NoError(env.state.PutCurrentValidator(&state.Staker{
 		NextTime: nextTime,
 		Priority: txs.PrimaryNetworkValidatorCurrentPriority,
-	})
+	}))
 
 	// Advance wall clock to [nextTime]
 	env.backend.Clk.Set(nextTime)
@@ -227,28 +244,31 @@ func TestBuildBlockAdvanceTime(t *testing.T) {
 func TestBuildBlockForceAdvanceTime(t *testing.T) {
 	require := require.New(t)
 
-	env := newEnvironment(t, latestFork)
+	env := newEnvironment(t, upgradetest.Latest)
 	env.ctx.Lock.Lock()
 	defer env.ctx.Lock.Unlock()
 
+	subnetID := testSubnet1.ID()
+	wallet := newWallet(t, env, walletConfig{
+		subnetIDs: []ids.ID{subnetID},
+	})
+
 	// Create a valid transaction
-	tx, err := env.txBuilder.NewCreateChainTx(
-		testSubnet1.ID(),
+	tx, err := wallet.IssueCreateChainTx(
+		subnetID,
 		nil,
 		constants.AVMID,
 		nil,
 		"chain name",
-		[]*secp256k1.PrivateKey{testSubnet1ControlKeys[0], testSubnet1ControlKeys[1]},
-		ids.ShortEmpty,
-		nil,
 	)
 	require.NoError(err)
-	txID := tx.ID()
 
 	// Issue the transaction
 	env.ctx.Lock.Unlock()
-	require.NoError(env.network.IssueTx(context.Background(), tx))
+	require.NoError(env.network.IssueTxFromRPC(tx))
 	env.ctx.Lock.Lock()
+
+	txID := tx.ID()
 	_, ok := env.mempool.Get(txID)
 	require.True(ok)
 
@@ -258,10 +278,10 @@ func TestBuildBlockForceAdvanceTime(t *testing.T) {
 	)
 
 	// Add a staker to [env.state]
-	env.state.PutCurrentValidator(&state.Staker{
+	require.NoError(env.state.PutCurrentValidator(&state.Staker{
 		NextTime: nextTime,
 		Priority: txs.PrimaryNetworkValidatorCurrentPriority,
-	})
+	}))
 
 	// Advance wall clock to [nextTime] + [txexecutor.SyncBound]
 	env.backend.Clk.Set(nextTime.Add(txexecutor.SyncBound))
@@ -279,122 +299,18 @@ func TestBuildBlockForceAdvanceTime(t *testing.T) {
 	require.Equal(nextTime.Unix(), standardBlk.Timestamp().Unix())
 }
 
-func TestBuildBlockDropExpiredStakerTxs(t *testing.T) {
-	require := require.New(t)
-
-	env := newEnvironment(t, latestFork)
-	env.ctx.Lock.Lock()
-	defer env.ctx.Lock.Unlock()
-
-	// The [StartTime] in a staker tx is only validated pre-Durango.
-	// TODO: Delete this test post-Durango activation.
-	env.config.DurangoTime = mockable.MaxTime
-
-	var (
-		now                   = env.backend.Clk.Time()
-		defaultValidatorStake = 100 * units.MilliAvax
-
-		// Add a validator with StartTime in the future within [MaxFutureStartTime]
-		validatorStartTime = now.Add(txexecutor.MaxFutureStartTime - 1*time.Second)
-		validatorEndTime   = validatorStartTime.Add(360 * 24 * time.Hour)
-	)
-
-	tx1, err := env.txBuilder.NewAddValidatorTx(
-		defaultValidatorStake,
-		uint64(validatorStartTime.Unix()),
-		uint64(validatorEndTime.Unix()),
-		ids.GenerateTestNodeID(),
-		preFundedKeys[0].PublicKey().Address(),
-		reward.PercentDenominator,
-		[]*secp256k1.PrivateKey{preFundedKeys[0]},
-		preFundedKeys[0].PublicKey().Address(),
-		nil,
-	)
-	require.NoError(err)
-	require.NoError(env.mempool.Add(tx1))
-	tx1ID := tx1.ID()
-	_, ok := env.mempool.Get(tx1ID)
-	require.True(ok)
-
-	// Add a validator with StartTime before current chain time
-	validator2StartTime := now.Add(-5 * time.Second)
-	validator2EndTime := validator2StartTime.Add(360 * 24 * time.Hour)
-
-	tx2, err := env.txBuilder.NewAddValidatorTx(
-		defaultValidatorStake,
-		uint64(validator2StartTime.Unix()),
-		uint64(validator2EndTime.Unix()),
-		ids.GenerateTestNodeID(),
-		preFundedKeys[1].PublicKey().Address(),
-		reward.PercentDenominator,
-		[]*secp256k1.PrivateKey{preFundedKeys[1]},
-		preFundedKeys[1].PublicKey().Address(),
-		nil,
-	)
-	require.NoError(err)
-	require.NoError(env.mempool.Add(tx2))
-	tx2ID := tx2.ID()
-	_, ok = env.mempool.Get(tx2ID)
-	require.True(ok)
-
-	// Add a validator with StartTime in the future past [MaxFutureStartTime]
-	validator3StartTime := now.Add(txexecutor.MaxFutureStartTime + 5*time.Second)
-	validator3EndTime := validator2StartTime.Add(360 * 24 * time.Hour)
-
-	tx3, err := env.txBuilder.NewAddValidatorTx(
-		defaultValidatorStake,
-		uint64(validator3StartTime.Unix()),
-		uint64(validator3EndTime.Unix()),
-		ids.GenerateTestNodeID(),
-		preFundedKeys[2].PublicKey().Address(),
-		reward.PercentDenominator,
-		[]*secp256k1.PrivateKey{preFundedKeys[2]},
-		preFundedKeys[2].PublicKey().Address(),
-		nil,
-	)
-	require.NoError(err)
-	require.NoError(env.mempool.Add(tx3))
-	tx3ID := tx3.ID()
-	_, ok = env.mempool.Get(tx3ID)
-	require.True(ok)
-
-	// Only tx1 should be in a built block
-	blkIntf, err := env.Builder.BuildBlock(context.Background())
-	require.NoError(err)
-
-	require.IsType(&blockexecutor.Block{}, blkIntf)
-	blk := blkIntf.(*blockexecutor.Block)
-	require.Len(blk.Txs(), 1)
-	require.Equal(tx1ID, blk.Txs()[0].ID())
-
-	// Mempool should have none of the txs
-	_, ok = env.mempool.Get(tx1ID)
-	require.False(ok)
-	_, ok = env.mempool.Get(tx2ID)
-	require.False(ok)
-	_, ok = env.mempool.Get(tx3ID)
-	require.False(ok)
-
-	// Only tx2 and tx3 should be dropped
-	require.NoError(env.mempool.GetDropReason(tx1ID))
-
-	tx2DropReason := env.mempool.GetDropReason(tx2ID)
-	require.ErrorIs(tx2DropReason, txexecutor.ErrTimestampNotBeforeStartTime)
-
-	tx3DropReason := env.mempool.GetDropReason(tx3ID)
-	require.ErrorIs(tx3DropReason, txexecutor.ErrFutureStakeTime)
-}
-
 func TestBuildBlockInvalidStakingDurations(t *testing.T) {
 	require := require.New(t)
 
-	env := newEnvironment(t, latestFork)
+	env := newEnvironment(t, upgradetest.Latest)
 	env.ctx.Lock.Lock()
 	defer env.ctx.Lock.Unlock()
 
 	// Post-Durango, [StartTime] is no longer validated. Staking durations are
 	// based on the current chain timestamp and must be validated.
-	env.config.DurangoTime = time.Time{}
+	env.config.UpgradeConfig.DurangoTime = time.Time{}
+
+	wallet := newWallet(t, env, walletConfig{})
 
 	var (
 		now                   = env.backend.Clk.Time()
@@ -407,20 +323,29 @@ func TestBuildBlockInvalidStakingDurations(t *testing.T) {
 	sk, err := bls.NewSecretKey()
 	require.NoError(err)
 
-	tx1, err := env.txBuilder.NewAddPermissionlessValidatorTx(
-		defaultValidatorStake,
-		uint64(now.Unix()),
-		uint64(validatorEndTime.Unix()),
-		ids.GenerateTestNodeID(),
+	rewardsOwner := &secp256k1fx.OutputOwners{
+		Threshold: 1,
+		Addrs:     []ids.ShortID{ids.GenerateTestShortID()},
+	}
+	tx1, err := wallet.IssueAddPermissionlessValidatorTx(
+		&txs.SubnetValidator{
+			Validator: txs.Validator{
+				NodeID: ids.GenerateTestNodeID(),
+				Start:  uint64(now.Unix()),
+				End:    uint64(validatorEndTime.Unix()),
+				Wght:   defaultValidatorStake,
+			},
+			Subnet: constants.PrimaryNetworkID,
+		},
 		signer.NewProofOfPossession(sk),
-		preFundedKeys[0].PublicKey().Address(),
+		env.ctx.AVAXAssetID,
+		rewardsOwner,
+		rewardsOwner,
 		reward.PercentDenominator,
-		[]*secp256k1.PrivateKey{preFundedKeys[0]},
-		preFundedKeys[0].PublicKey().Address(),
-		nil,
 	)
 	require.NoError(err)
 	require.NoError(env.mempool.Add(tx1))
+
 	tx1ID := tx1.ID()
 	_, ok := env.mempool.Get(tx1ID)
 	require.True(ok)
@@ -431,20 +356,25 @@ func TestBuildBlockInvalidStakingDurations(t *testing.T) {
 	sk, err = bls.NewSecretKey()
 	require.NoError(err)
 
-	tx2, err := env.txBuilder.NewAddPermissionlessValidatorTx(
-		defaultValidatorStake,
-		uint64(now.Unix()),
-		uint64(validator2EndTime.Unix()),
-		ids.GenerateTestNodeID(),
+	tx2, err := wallet.IssueAddPermissionlessValidatorTx(
+		&txs.SubnetValidator{
+			Validator: txs.Validator{
+				NodeID: ids.GenerateTestNodeID(),
+				Start:  uint64(now.Unix()),
+				End:    uint64(validator2EndTime.Unix()),
+				Wght:   defaultValidatorStake,
+			},
+			Subnet: constants.PrimaryNetworkID,
+		},
 		signer.NewProofOfPossession(sk),
-		preFundedKeys[2].PublicKey().Address(),
+		env.ctx.AVAXAssetID,
+		rewardsOwner,
+		rewardsOwner,
 		reward.PercentDenominator,
-		[]*secp256k1.PrivateKey{preFundedKeys[2]},
-		preFundedKeys[2].PublicKey().Address(),
-		nil,
 	)
 	require.NoError(err)
 	require.NoError(env.mempool.Add(tx2))
+
 	tx2ID := tx2.ID()
 	_, ok = env.mempool.Get(tx2ID)
 	require.True(ok)
@@ -474,26 +404,28 @@ func TestBuildBlockInvalidStakingDurations(t *testing.T) {
 func TestPreviouslyDroppedTxsCannotBeReAddedToMempool(t *testing.T) {
 	require := require.New(t)
 
-	env := newEnvironment(t, latestFork)
+	env := newEnvironment(t, upgradetest.Latest)
 	env.ctx.Lock.Lock()
 	defer env.ctx.Lock.Unlock()
 
+	subnetID := testSubnet1.ID()
+	wallet := newWallet(t, env, walletConfig{
+		subnetIDs: []ids.ID{subnetID},
+	})
+
 	// Create a valid transaction
-	tx, err := env.txBuilder.NewCreateChainTx(
+	tx, err := wallet.IssueCreateChainTx(
 		testSubnet1.ID(),
 		nil,
 		constants.AVMID,
 		nil,
 		"chain name",
-		[]*secp256k1.PrivateKey{testSubnet1ControlKeys[0], testSubnet1ControlKeys[1]},
-		ids.ShortEmpty,
-		nil,
 	)
 	require.NoError(err)
-	txID := tx.ID()
 
 	// Transaction should not be marked as dropped before being added to the
 	// mempool
+	txID := tx.ID()
 	require.NoError(env.mempool.GetDropReason(txID))
 
 	// Mark the transaction as dropped
@@ -504,7 +436,7 @@ func TestPreviouslyDroppedTxsCannotBeReAddedToMempool(t *testing.T) {
 
 	// Issue the transaction
 	env.ctx.Lock.Unlock()
-	err = env.network.IssueTx(context.Background(), tx)
+	err = env.network.IssueTxFromRPC(tx)
 	require.ErrorIs(err, errTestingDropped)
 	env.ctx.Lock.Lock()
 	_, ok := env.mempool.Get(txID)
@@ -518,7 +450,7 @@ func TestPreviouslyDroppedTxsCannotBeReAddedToMempool(t *testing.T) {
 func TestNoErrorOnUnexpectedSetPreferenceDuringBootstrapping(t *testing.T) {
 	require := require.New(t)
 
-	env := newEnvironment(t, latestFork)
+	env := newEnvironment(t, upgradetest.Latest)
 	env.ctx.Lock.Lock()
 	defer env.ctx.Lock.Unlock()
 
@@ -555,13 +487,8 @@ func TestGetNextStakerToReward(t *testing.T) {
 			name:      "no stakers",
 			timestamp: now,
 			stateF: func(ctrl *gomock.Controller) state.Chain {
-				currentStakerIter := state.NewMockStakerIterator(ctrl)
-				currentStakerIter.EXPECT().Next().Return(false)
-				currentStakerIter.EXPECT().Release()
-
 				s := state.NewMockChain(ctrl)
-				s.EXPECT().GetCurrentStakerIterator().Return(currentStakerIter, nil)
-
+				s.EXPECT().GetCurrentStakerIterator().Return(iterator.Empty[*state.Staker]{}, nil)
 				return s
 			},
 		},
@@ -569,24 +496,21 @@ func TestGetNextStakerToReward(t *testing.T) {
 			name:      "expired subnet validator/delegator",
 			timestamp: now,
 			stateF: func(ctrl *gomock.Controller) state.Chain {
-				currentStakerIter := state.NewMockStakerIterator(ctrl)
-
-				currentStakerIter.EXPECT().Next().Return(true)
-				currentStakerIter.EXPECT().Value().Return(&state.Staker{
-					Priority: txs.SubnetPermissionedValidatorCurrentPriority,
-					EndTime:  now,
-				})
-				currentStakerIter.EXPECT().Next().Return(true)
-				currentStakerIter.EXPECT().Value().Return(&state.Staker{
-					TxID:     txID,
-					Priority: txs.SubnetPermissionlessDelegatorCurrentPriority,
-					EndTime:  now,
-				})
-				currentStakerIter.EXPECT().Release()
-
 				s := state.NewMockChain(ctrl)
-				s.EXPECT().GetCurrentStakerIterator().Return(currentStakerIter, nil)
-
+				s.EXPECT().GetCurrentStakerIterator().Return(
+					iterator.FromSlice(
+						&state.Staker{
+							Priority: txs.SubnetPermissionedValidatorCurrentPriority,
+							EndTime:  now,
+						},
+						&state.Staker{
+							TxID:     txID,
+							Priority: txs.SubnetPermissionlessDelegatorCurrentPriority,
+							EndTime:  now,
+						},
+					),
+					nil,
+				)
 				return s
 			},
 			expectedTxID:         txID,
@@ -596,24 +520,21 @@ func TestGetNextStakerToReward(t *testing.T) {
 			name:      "expired primary network validator after subnet expired subnet validator",
 			timestamp: now,
 			stateF: func(ctrl *gomock.Controller) state.Chain {
-				currentStakerIter := state.NewMockStakerIterator(ctrl)
-
-				currentStakerIter.EXPECT().Next().Return(true)
-				currentStakerIter.EXPECT().Value().Return(&state.Staker{
-					Priority: txs.SubnetPermissionedValidatorCurrentPriority,
-					EndTime:  now,
-				})
-				currentStakerIter.EXPECT().Next().Return(true)
-				currentStakerIter.EXPECT().Value().Return(&state.Staker{
-					TxID:     txID,
-					Priority: txs.PrimaryNetworkValidatorCurrentPriority,
-					EndTime:  now,
-				})
-				currentStakerIter.EXPECT().Release()
-
 				s := state.NewMockChain(ctrl)
-				s.EXPECT().GetCurrentStakerIterator().Return(currentStakerIter, nil)
-
+				s.EXPECT().GetCurrentStakerIterator().Return(
+					iterator.FromSlice(
+						&state.Staker{
+							Priority: txs.SubnetPermissionedValidatorCurrentPriority,
+							EndTime:  now,
+						},
+						&state.Staker{
+							TxID:     txID,
+							Priority: txs.PrimaryNetworkValidatorCurrentPriority,
+							EndTime:  now,
+						},
+					),
+					nil,
+				)
 				return s
 			},
 			expectedTxID:         txID,
@@ -623,24 +544,21 @@ func TestGetNextStakerToReward(t *testing.T) {
 			name:      "expired primary network delegator after subnet expired subnet validator",
 			timestamp: now,
 			stateF: func(ctrl *gomock.Controller) state.Chain {
-				currentStakerIter := state.NewMockStakerIterator(ctrl)
-
-				currentStakerIter.EXPECT().Next().Return(true)
-				currentStakerIter.EXPECT().Value().Return(&state.Staker{
-					Priority: txs.SubnetPermissionedValidatorCurrentPriority,
-					EndTime:  now,
-				})
-				currentStakerIter.EXPECT().Next().Return(true)
-				currentStakerIter.EXPECT().Value().Return(&state.Staker{
-					TxID:     txID,
-					Priority: txs.PrimaryNetworkDelegatorCurrentPriority,
-					EndTime:  now,
-				})
-				currentStakerIter.EXPECT().Release()
-
 				s := state.NewMockChain(ctrl)
-				s.EXPECT().GetCurrentStakerIterator().Return(currentStakerIter, nil)
-
+				s.EXPECT().GetCurrentStakerIterator().Return(
+					iterator.FromSlice(
+						&state.Staker{
+							Priority: txs.SubnetPermissionedValidatorCurrentPriority,
+							EndTime:  now,
+						},
+						&state.Staker{
+							TxID:     txID,
+							Priority: txs.PrimaryNetworkDelegatorCurrentPriority,
+							EndTime:  now,
+						},
+					),
+					nil,
+				)
 				return s
 			},
 			expectedTxID:         txID,
@@ -650,19 +568,17 @@ func TestGetNextStakerToReward(t *testing.T) {
 			name:      "non-expired primary network delegator",
 			timestamp: now,
 			stateF: func(ctrl *gomock.Controller) state.Chain {
-				currentStakerIter := state.NewMockStakerIterator(ctrl)
-
-				currentStakerIter.EXPECT().Next().Return(true)
-				currentStakerIter.EXPECT().Value().Return(&state.Staker{
-					TxID:     txID,
-					Priority: txs.PrimaryNetworkDelegatorCurrentPriority,
-					EndTime:  now.Add(time.Second),
-				})
-				currentStakerIter.EXPECT().Release()
-
 				s := state.NewMockChain(ctrl)
-				s.EXPECT().GetCurrentStakerIterator().Return(currentStakerIter, nil)
-
+				s.EXPECT().GetCurrentStakerIterator().Return(
+					iterator.FromSlice(
+						&state.Staker{
+							TxID:     txID,
+							Priority: txs.PrimaryNetworkDelegatorCurrentPriority,
+							EndTime:  now.Add(time.Second),
+						},
+					),
+					nil,
+				)
 				return s
 			},
 			expectedTxID:         txID,
@@ -672,19 +588,17 @@ func TestGetNextStakerToReward(t *testing.T) {
 			name:      "non-expired primary network validator",
 			timestamp: now,
 			stateF: func(ctrl *gomock.Controller) state.Chain {
-				currentStakerIter := state.NewMockStakerIterator(ctrl)
-
-				currentStakerIter.EXPECT().Next().Return(true)
-				currentStakerIter.EXPECT().Value().Return(&state.Staker{
-					TxID:     txID,
-					Priority: txs.PrimaryNetworkValidatorCurrentPriority,
-					EndTime:  now.Add(time.Second),
-				})
-				currentStakerIter.EXPECT().Release()
-
 				s := state.NewMockChain(ctrl)
-				s.EXPECT().GetCurrentStakerIterator().Return(currentStakerIter, nil)
-
+				s.EXPECT().GetCurrentStakerIterator().Return(
+					iterator.FromSlice(
+						&state.Staker{
+							TxID:     txID,
+							Priority: txs.PrimaryNetworkValidatorCurrentPriority,
+							EndTime:  now.Add(time.Second),
+						},
+					),
+					nil,
+				)
 				return s
 			},
 			expectedTxID:         txID,

@@ -12,20 +12,26 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow"
-	"github.com/ava-labs/avalanchego/snow/choices"
 	"github.com/ava-labs/avalanchego/snow/consensus/snowman"
+	"github.com/ava-labs/avalanchego/snow/consensus/snowman/snowmanmock"
+	"github.com/ava-labs/avalanchego/snow/consensus/snowman/snowmantest"
 	"github.com/ava-labs/avalanchego/snow/engine/snowman/block"
+	"github.com/ava-labs/avalanchego/snow/engine/snowman/block/blockmock"
 	"github.com/ava-labs/avalanchego/snow/validators"
+	"github.com/ava-labs/avalanchego/snow/validators/validatorsmock"
 	"github.com/ava-labs/avalanchego/staking"
+	"github.com/ava-labs/avalanchego/upgrade/upgradetest"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 	"github.com/ava-labs/avalanchego/vms/proposervm/proposer"
-	"github.com/ava-labs/avalanchego/vms/proposervm/scheduler"
+	"github.com/ava-labs/avalanchego/vms/proposervm/proposer/proposermock"
+	"github.com/ava-labs/avalanchego/vms/proposervm/scheduler/schedulermock"
 )
 
 // Assert that when the underlying VM implements ChainVMWithBuildBlockContext
@@ -45,35 +51,35 @@ func TestPostForkCommonComponents_buildChild(t *testing.T) {
 		blkID                  = ids.GenerateTestID()
 	)
 
-	innerBlk := snowman.NewMockBlock(ctrl)
+	innerBlk := snowmanmock.NewBlock(ctrl)
 	innerBlk.EXPECT().ID().Return(blkID).AnyTimes()
 	innerBlk.EXPECT().Height().Return(parentHeight + 1).AnyTimes()
 
-	builtBlk := snowman.NewMockBlock(ctrl)
+	builtBlk := snowmanmock.NewBlock(ctrl)
 	builtBlk.EXPECT().Bytes().Return([]byte{1, 2, 3}).AnyTimes()
 	builtBlk.EXPECT().ID().Return(ids.GenerateTestID()).AnyTimes()
 	builtBlk.EXPECT().Height().Return(pChainHeight).AnyTimes()
 
-	innerVM := block.NewMockChainVM(ctrl)
-	innerBlockBuilderVM := block.NewMockBuildBlockWithContextChainVM(ctrl)
+	innerVM := blockmock.NewChainVM(ctrl)
+	innerBlockBuilderVM := blockmock.NewBuildBlockWithContextChainVM(ctrl)
 	innerBlockBuilderVM.EXPECT().BuildBlockWithContext(gomock.Any(), &block.Context{
-		PChainHeight: pChainHeight - 1,
+		PChainHeight: pChainHeight,
 	}).Return(builtBlk, nil).AnyTimes()
 
-	vdrState := validators.NewMockState(ctrl)
+	vdrState := validatorsmock.NewState(ctrl)
 	vdrState.EXPECT().GetMinimumHeight(context.Background()).Return(pChainHeight, nil).AnyTimes()
 
-	windower := proposer.NewMockWindower(ctrl)
+	windower := proposermock.NewWindower(ctrl)
 	windower.EXPECT().ExpectedProposer(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nodeID, nil).AnyTimes()
 
 	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(err)
 	vm := &VM{
 		Config: Config{
-			ActivationTime:    time.Unix(0, 0),
-			DurangoTime:       time.Unix(0, 0),
+			Upgrades:          upgradetest.GetConfig(upgradetest.Latest),
 			StakingCertLeaf:   &staking.Certificate{},
 			StakingLeafSigner: pk,
+			Registerer:        prometheus.NewRegistry(),
 		},
 		ChainVM:        innerVM,
 		blockBuilderVM: innerBlockBuilderVM,
@@ -109,7 +115,7 @@ func TestPreDurangoValidatorNodeBlockBuiltDelaysTests(t *testing.T) {
 		activationTime = time.Unix(0, 0)
 		durangoTime    = mockable.MaxTime
 	)
-	coreVM, valState, proVM, coreGenBlk, _ := initTestProposerVM(t, activationTime, durangoTime, 0)
+	coreVM, valState, proVM, _ := initTestProposerVM(t, activationTime, durangoTime, 0)
 	defer func() {
 		require.NoError(proVM.Shutdown(ctx))
 	}()
@@ -118,24 +124,16 @@ func TestPreDurangoValidatorNodeBlockBuiltDelaysTests(t *testing.T) {
 	parentTime := time.Now().Truncate(time.Second)
 	proVM.Set(parentTime)
 
-	coreParentBlk := &snowman.TestBlock{
-		TestDecidable: choices.TestDecidable{
-			IDV:     ids.GenerateTestID(),
-			StatusV: choices.Processing,
-		},
-		BytesV:  []byte{1},
-		ParentV: coreGenBlk.ID(),
-		HeightV: coreGenBlk.Height() + 1,
-	}
+	coreParentBlk := snowmantest.BuildChild(snowmantest.Genesis)
 	coreVM.BuildBlockF = func(context.Context) (snowman.Block, error) {
 		return coreParentBlk, nil
 	}
 	coreVM.GetBlockF = func(_ context.Context, blkID ids.ID) (snowman.Block, error) {
-		switch {
-		case blkID == coreParentBlk.ID():
+		switch blkID {
+		case coreParentBlk.ID():
 			return coreParentBlk, nil
-		case blkID == coreGenBlk.ID():
-			return coreGenBlk, nil
+		case snowmantest.GenesisID:
+			return snowmantest.Genesis, nil
 		default:
 			return nil, errUnknownBlock
 		}
@@ -144,8 +142,8 @@ func TestPreDurangoValidatorNodeBlockBuiltDelaysTests(t *testing.T) {
 		switch {
 		case bytes.Equal(b, coreParentBlk.Bytes()):
 			return coreParentBlk, nil
-		case bytes.Equal(b, coreGenBlk.Bytes()):
-			return coreGenBlk, nil
+		case bytes.Equal(b, snowmantest.GenesisBytes):
+			return snowmantest.Genesis, nil
 		default:
 			return nil, errUnknownBlock
 		}
@@ -176,15 +174,7 @@ func TestPreDurangoValidatorNodeBlockBuiltDelaysTests(t *testing.T) {
 		}, nil
 	}
 
-	coreChildBlk := &snowman.TestBlock{
-		TestDecidable: choices.TestDecidable{
-			IDV:     ids.GenerateTestID(),
-			StatusV: choices.Processing,
-		},
-		BytesV:  []byte{2},
-		ParentV: coreParentBlk.ID(),
-		HeightV: coreParentBlk.Height() + 1,
-	}
+	coreChildBlk := snowmantest.BuildChild(coreParentBlk)
 	coreVM.BuildBlockF = func(context.Context) (snowman.Block, error) {
 		return coreChildBlk, nil
 	}
@@ -195,10 +185,12 @@ func TestPreDurangoValidatorNodeBlockBuiltDelaysTests(t *testing.T) {
 		localTime := parentBlk.Timestamp().Add(proposer.MaxVerifyDelay - time.Second)
 		proVM.Set(localTime)
 
-		childBlk, err := proVM.BuildBlock(ctx)
+		childBlkIntf, err := proVM.BuildBlock(ctx)
 		require.NoError(err)
-		require.IsType(&postForkBlock{}, childBlk)
-		require.Equal(proVM.ctx.NodeID, childBlk.(*postForkBlock).Proposer()) // signed block
+		require.IsType(&postForkBlock{}, childBlkIntf)
+
+		childBlk := childBlkIntf.(*postForkBlock)
+		require.Equal(proVM.ctx.NodeID, childBlk.Proposer()) // signed block
 	}
 
 	{
@@ -207,34 +199,41 @@ func TestPreDurangoValidatorNodeBlockBuiltDelaysTests(t *testing.T) {
 		localTime := parentBlk.Timestamp().Add(proposer.MaxVerifyDelay)
 		proVM.Set(localTime)
 
-		childBlk, err := proVM.BuildBlock(ctx)
+		childBlkIntf, err := proVM.BuildBlock(ctx)
 		require.NoError(err)
-		require.IsType(&postForkBlock{}, childBlk)
-		require.Equal(ids.EmptyNodeID, childBlk.(*postForkBlock).Proposer()) // signed block
+		require.IsType(&postForkBlock{}, childBlkIntf)
+
+		childBlk := childBlkIntf.(*postForkBlock)
+		require.Equal(ids.EmptyNodeID, childBlk.Proposer()) // unsigned block
 	}
 
 	{
-		// Set local clock among MaxVerifyDelay and MaxBuildDelay from parent timestamp
-		// Check that child block is unsigned
+		// Set local clock between MaxVerifyDelay and MaxBuildDelay from parent
+		// timestamp.
+		// Check that child block is unsigned.
 		localTime := parentBlk.Timestamp().Add((proposer.MaxVerifyDelay + proposer.MaxBuildDelay) / 2)
 		proVM.Set(localTime)
 
-		childBlk, err := proVM.BuildBlock(ctx)
+		childBlkIntf, err := proVM.BuildBlock(ctx)
 		require.NoError(err)
-		require.IsType(&postForkBlock{}, childBlk)
-		require.Equal(ids.EmptyNodeID, childBlk.(*postForkBlock).Proposer()) // unsigned so no proposer
+		require.IsType(&postForkBlock{}, childBlkIntf)
+
+		childBlk := childBlkIntf.(*postForkBlock)
+		require.Equal(ids.EmptyNodeID, childBlk.Proposer()) // unsigned block
 	}
 
 	{
-		// Set local clock after MaxBuildDelay from parent timestamp
-		// Check that child block is unsigned
+		// Set local clock after MaxBuildDelay from parent timestamp.
+		// Check that child block is unsigned.
 		localTime := parentBlk.Timestamp().Add(proposer.MaxBuildDelay)
 		proVM.Set(localTime)
 
-		childBlk, err := proVM.BuildBlock(ctx)
+		childBlkIntf, err := proVM.BuildBlock(ctx)
 		require.NoError(err)
-		require.IsType(&postForkBlock{}, childBlk)
-		require.Equal(ids.EmptyNodeID, childBlk.(*postForkBlock).Proposer()) // unsigned so no proposer
+		require.IsType(&postForkBlock{}, childBlkIntf)
+
+		childBlk := childBlkIntf.(*postForkBlock)
+		require.Equal(ids.EmptyNodeID, childBlk.Proposer()) // unsigned block
 	}
 }
 
@@ -246,7 +245,7 @@ func TestPreDurangoNonValidatorNodeBlockBuiltDelaysTests(t *testing.T) {
 		activationTime = time.Unix(0, 0)
 		durangoTime    = mockable.MaxTime
 	)
-	coreVM, valState, proVM, coreGenBlk, _ := initTestProposerVM(t, activationTime, durangoTime, 0)
+	coreVM, valState, proVM, _ := initTestProposerVM(t, activationTime, durangoTime, 0)
 	defer func() {
 		require.NoError(proVM.Shutdown(ctx))
 	}()
@@ -255,24 +254,16 @@ func TestPreDurangoNonValidatorNodeBlockBuiltDelaysTests(t *testing.T) {
 	parentTime := time.Now().Truncate(time.Second)
 	proVM.Set(parentTime)
 
-	coreParentBlk := &snowman.TestBlock{
-		TestDecidable: choices.TestDecidable{
-			IDV:     ids.GenerateTestID(),
-			StatusV: choices.Processing,
-		},
-		BytesV:  []byte{1},
-		ParentV: coreGenBlk.ID(),
-		HeightV: coreGenBlk.Height() + 1,
-	}
+	coreParentBlk := snowmantest.BuildChild(snowmantest.Genesis)
 	coreVM.BuildBlockF = func(context.Context) (snowman.Block, error) {
 		return coreParentBlk, nil
 	}
 	coreVM.GetBlockF = func(_ context.Context, blkID ids.ID) (snowman.Block, error) {
-		switch {
-		case blkID == coreParentBlk.ID():
+		switch blkID {
+		case coreParentBlk.ID():
 			return coreParentBlk, nil
-		case blkID == coreGenBlk.ID():
-			return coreGenBlk, nil
+		case snowmantest.GenesisID:
+			return snowmantest.Genesis, nil
 		default:
 			return nil, errUnknownBlock
 		}
@@ -281,8 +272,8 @@ func TestPreDurangoNonValidatorNodeBlockBuiltDelaysTests(t *testing.T) {
 		switch {
 		case bytes.Equal(b, coreParentBlk.Bytes()):
 			return coreParentBlk, nil
-		case bytes.Equal(b, coreGenBlk.Bytes()):
-			return coreGenBlk, nil
+		case bytes.Equal(b, snowmantest.GenesisBytes):
+			return snowmantest.Genesis, nil
 		default:
 			return nil, errUnknownBlock
 		}
@@ -315,15 +306,7 @@ func TestPreDurangoNonValidatorNodeBlockBuiltDelaysTests(t *testing.T) {
 		}, nil
 	}
 
-	coreChildBlk := &snowman.TestBlock{
-		TestDecidable: choices.TestDecidable{
-			IDV:     ids.GenerateTestID(),
-			StatusV: choices.Processing,
-		},
-		BytesV:  []byte{2},
-		ParentV: coreParentBlk.ID(),
-		HeightV: coreParentBlk.Height() + 1,
-	}
+	coreChildBlk := snowmantest.BuildChild(coreParentBlk)
 	coreVM.BuildBlockF = func(context.Context) (snowman.Block, error) {
 		return coreChildBlk, nil
 	}
@@ -364,10 +347,12 @@ func TestPreDurangoNonValidatorNodeBlockBuiltDelaysTests(t *testing.T) {
 		localTime := parentBlk.Timestamp().Add(proposer.MaxBuildDelay)
 		proVM.Set(localTime)
 
-		childBlk, err := proVM.BuildBlock(ctx)
+		childBlkIntf, err := proVM.BuildBlock(ctx)
 		require.NoError(err)
-		require.IsType(&postForkBlock{}, childBlk)
-		require.Equal(ids.EmptyNodeID, childBlk.(*postForkBlock).Proposer()) // unsigned so no proposer
+		require.IsType(&postForkBlock{}, childBlkIntf)
+
+		childBlk := childBlkIntf.(*postForkBlock)
+		require.Equal(ids.EmptyNodeID, childBlk.Proposer()) // unsigned block
 	}
 }
 
@@ -387,35 +372,36 @@ func TestPostDurangoBuildChildResetScheduler(t *testing.T) {
 		parentHeight     uint64 = 1234
 	)
 
-	innerBlk := snowman.NewMockBlock(ctrl)
+	innerBlk := snowmanmock.NewBlock(ctrl)
 	innerBlk.EXPECT().Height().Return(parentHeight + 1).AnyTimes()
 
-	vdrState := validators.NewMockState(ctrl)
+	vdrState := validatorsmock.NewState(ctrl)
 	vdrState.EXPECT().GetMinimumHeight(context.Background()).Return(pChainHeight, nil).AnyTimes()
 
-	windower := proposer.NewMockWindower(ctrl)
+	windower := proposermock.NewWindower(ctrl)
 	windower.EXPECT().ExpectedProposer(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(selectedProposer, nil).AnyTimes() // return a proposer different from thisNode, to check whether scheduler is reset
 
-	scheduler := scheduler.NewMockScheduler(ctrl)
+	scheduler := schedulermock.NewScheduler(ctrl)
 
 	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(err)
 	vm := &VM{
 		Config: Config{
-			ActivationTime:    time.Unix(0, 0),
-			DurangoTime:       time.Unix(0, 0),
+			Upgrades:          upgradetest.GetConfig(upgradetest.Latest),
 			StakingCertLeaf:   &staking.Certificate{},
 			StakingLeafSigner: pk,
+			Registerer:        prometheus.NewRegistry(),
 		},
-		ChainVM: block.NewMockChainVM(ctrl),
+		ChainVM: blockmock.NewChainVM(ctrl),
 		ctx: &snow.Context{
 			NodeID:         thisNodeID,
 			ValidatorState: vdrState,
 			Log:            logging.NoLog{},
 		},
-		Windower:  windower,
-		Scheduler: scheduler,
+		Windower:               windower,
+		Scheduler:              scheduler,
+		proposerBuildSlotGauge: prometheus.NewGauge(prometheus.GaugeOpts{}),
 	}
 	vm.Clock.Set(now)
 
@@ -447,4 +433,65 @@ func TestPostDurangoBuildChildResetScheduler(t *testing.T) {
 		)
 		require.ErrorIs(err, errUnexpectedProposer)
 	}
+}
+
+// Confirm that prior to Etna activation, the P-chain height passed to the
+// VM building the inner block is P-Chain height of the parent block.
+func TestPreEtnaContextPChainHeight(t *testing.T) {
+	require := require.New(t)
+	ctrl := gomock.NewController(t)
+
+	var (
+		nodeID                   = ids.GenerateTestNodeID()
+		pChainHeight      uint64 = 1337
+		parentPChainHeght        = pChainHeight - 1
+		parentID                 = ids.GenerateTestID()
+		parentTimestamp          = time.Now().Truncate(time.Second)
+	)
+
+	innerParentBlock := snowmantest.Genesis
+	innerChildBlock := snowmantest.BuildChild(innerParentBlock)
+
+	innerBlockBuilderVM := blockmock.NewBuildBlockWithContextChainVM(ctrl)
+	// Expect the that context passed in has parent's P-Chain height
+	innerBlockBuilderVM.EXPECT().BuildBlockWithContext(gomock.Any(), &block.Context{
+		PChainHeight: parentPChainHeght,
+	}).Return(innerChildBlock, nil).AnyTimes()
+
+	vdrState := validatorsmock.NewState(ctrl)
+	vdrState.EXPECT().GetMinimumHeight(context.Background()).Return(pChainHeight, nil).AnyTimes()
+
+	windower := proposermock.NewWindower(ctrl)
+	windower.EXPECT().ExpectedProposer(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nodeID, nil).AnyTimes()
+
+	vm := &VM{
+		Config: Config{
+			Upgrades:          upgradetest.GetConfig(upgradetest.Durango), // Use Durango for pre-Etna behavior
+			StakingCertLeaf:   pTestCert,
+			StakingLeafSigner: pTestSigner,
+			Registerer:        prometheus.NewRegistry(),
+		},
+		blockBuilderVM: innerBlockBuilderVM,
+		ctx: &snow.Context{
+			NodeID:         nodeID,
+			ValidatorState: vdrState,
+			Log:            logging.NoLog{},
+		},
+		Windower: windower,
+	}
+
+	blk := &postForkCommonComponents{
+		innerBlk: innerChildBlock,
+		vm:       vm,
+	}
+
+	// Should call BuildBlockWithContext since proposervm is activated
+	gotChild, err := blk.buildChild(
+		context.Background(),
+		parentID,
+		parentTimestamp,
+		parentPChainHeght,
+	)
+	require.NoError(err)
+	require.Equal(innerChildBlock, gotChild.(*postForkBlock).innerBlk)
 }

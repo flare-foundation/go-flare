@@ -4,6 +4,7 @@
 package constants
 
 import (
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ethereum/go-ethereum/common"
 )
 
@@ -23,6 +24,37 @@ const (
 	LocalFlareID uint32 = 162
 	SongbirdID   uint32 = 5
 	CostonID     uint32 = 7
+
+	MainnetHRP    = "avax"
+	CascadeHRP    = "cascade"
+	DenaliHRP     = "denali"
+	EverestHRP    = "everest"
+	UnitTestHRP   = "testing"
+	LocalHRP      = "local"
+	FallbackHRP   = "custom"
+	FlareHRP      = "flare"
+	CostwoHRP     = "costwo"
+	LocalFlareHRP = "localflare"
+	SongbirdHRP   = "songbird"
+	CostonHRP     = "coston"
+)
+
+var (
+	NetworkIDToHRP = map[uint32]string{
+		MainnetID:    MainnetHRP,
+		CascadeID:    CascadeHRP,
+		DenaliID:     DenaliHRP,
+		EverestID:    EverestHRP,
+		UnitTestID:   UnitTestHRP,
+		LocalID:      LocalHRP,
+		FlareID:      FlareHRP,
+		CostwoID:     CostwoHRP,
+		LocalFlareID: LocalFlareHRP,
+		SongbirdID:   SongbirdHRP,
+		CostonID:     CostonHRP,
+	}
+
+	ProductionNetworkIDs = set.Of(FlareID, SongbirdID, CostwoID, CostonID)
 )
 
 var (
@@ -31,3 +63,11 @@ var (
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	}
 )
+
+// GetHRP returns the Human-Readable-Part of bech32 addresses for a networkID
+func GetHRP(networkID uint32) string {
+	if hrp, ok := NetworkIDToHRP[networkID]; ok {
+		return hrp
+	}
+	return FallbackHRP
+}

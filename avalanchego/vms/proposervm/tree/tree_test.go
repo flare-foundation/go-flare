@@ -9,32 +9,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/snow/choices"
-	"github.com/ava-labs/avalanchego/snow/consensus/snowman"
-)
-
-var (
-	GenesisID = ids.GenerateTestID()
-	Genesis   = &snowman.TestBlock{TestDecidable: choices.TestDecidable{
-		IDV:     GenesisID,
-		StatusV: choices.Accepted,
-	}}
+	"github.com/ava-labs/avalanchego/snow/consensus/snowman/snowmantest"
+	"github.com/ava-labs/avalanchego/snow/snowtest"
 )
 
 func TestAcceptSingleBlock(t *testing.T) {
 	require := require.New(t)
 
-	block := &snowman.TestBlock{
-		TestDecidable: choices.TestDecidable{
-			IDV:     ids.GenerateTestID(),
-			StatusV: choices.Processing,
-		},
-		ParentV: Genesis.ID(),
-	}
-
 	tr := New()
 
+	block := snowmantest.BuildChild(snowmantest.Genesis)
 	_, contains := tr.Get(block)
 	require.False(contains)
 
@@ -44,7 +28,7 @@ func TestAcceptSingleBlock(t *testing.T) {
 	require.True(contains)
 
 	require.NoError(tr.Accept(context.Background(), block))
-	require.Equal(choices.Accepted, block.Status())
+	require.Equal(snowtest.Accepted, block.Status)
 
 	_, contains = tr.Get(block)
 	require.False(contains)
@@ -53,23 +37,10 @@ func TestAcceptSingleBlock(t *testing.T) {
 func TestAcceptBlockConflict(t *testing.T) {
 	require := require.New(t)
 
-	blockToAccept := &snowman.TestBlock{
-		TestDecidable: choices.TestDecidable{
-			IDV:     ids.GenerateTestID(),
-			StatusV: choices.Processing,
-		},
-		ParentV: Genesis.ID(),
-	}
-
-	blockToReject := &snowman.TestBlock{
-		TestDecidable: choices.TestDecidable{
-			IDV:     ids.GenerateTestID(),
-			StatusV: choices.Processing,
-		},
-		ParentV: Genesis.ID(),
-	}
-
 	tr := New()
+
+	blockToAccept := snowmantest.BuildChild(snowmantest.Genesis)
+	blockToReject := snowmantest.BuildChild(snowmantest.Genesis)
 
 	// add conflicting blocks
 	tr.Add(blockToAccept)
@@ -84,11 +55,11 @@ func TestAcceptBlockConflict(t *testing.T) {
 	require.NoError(tr.Accept(context.Background(), blockToAccept))
 
 	// check their statuses and that they are removed from the tree
-	require.Equal(choices.Accepted, blockToAccept.Status())
+	require.Equal(snowtest.Accepted, blockToAccept.Status)
 	_, contains = tr.Get(blockToAccept)
 	require.False(contains)
 
-	require.Equal(choices.Rejected, blockToReject.Status())
+	require.Equal(snowtest.Rejected, blockToReject.Status)
 	_, contains = tr.Get(blockToReject)
 	require.False(contains)
 }
@@ -96,31 +67,11 @@ func TestAcceptBlockConflict(t *testing.T) {
 func TestAcceptChainConflict(t *testing.T) {
 	require := require.New(t)
 
-	blockToAccept := &snowman.TestBlock{
-		TestDecidable: choices.TestDecidable{
-			IDV:     ids.GenerateTestID(),
-			StatusV: choices.Processing,
-		},
-		ParentV: Genesis.ID(),
-	}
-
-	blockToReject := &snowman.TestBlock{
-		TestDecidable: choices.TestDecidable{
-			IDV:     ids.GenerateTestID(),
-			StatusV: choices.Processing,
-		},
-		ParentV: Genesis.ID(),
-	}
-
-	blockToRejectChild := &snowman.TestBlock{
-		TestDecidable: choices.TestDecidable{
-			IDV:     ids.GenerateTestID(),
-			StatusV: choices.Processing,
-		},
-		ParentV: blockToReject.ID(),
-	}
-
 	tr := New()
+
+	blockToAccept := snowmantest.BuildChild(snowmantest.Genesis)
+	blockToReject := snowmantest.BuildChild(snowmantest.Genesis)
+	blockToRejectChild := snowmantest.BuildChild(blockToReject)
 
 	// add conflicting blocks.
 	tr.Add(blockToAccept)
@@ -139,15 +90,15 @@ func TestAcceptChainConflict(t *testing.T) {
 	require.NoError(tr.Accept(context.Background(), blockToAccept))
 
 	// check their statuses and whether they are removed from tree
-	require.Equal(choices.Accepted, blockToAccept.Status())
+	require.Equal(snowtest.Accepted, blockToAccept.Status)
 	_, contains = tr.Get(blockToAccept)
 	require.False(contains)
 
-	require.Equal(choices.Rejected, blockToReject.Status())
+	require.Equal(snowtest.Rejected, blockToReject.Status)
 	_, contains = tr.Get(blockToReject)
 	require.False(contains)
 
-	require.Equal(choices.Rejected, blockToRejectChild.Status())
+	require.Equal(snowtest.Rejected, blockToRejectChild.Status)
 	_, contains = tr.Get(blockToRejectChild)
 	require.False(contains)
 }

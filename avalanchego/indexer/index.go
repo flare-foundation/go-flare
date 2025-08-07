@@ -15,7 +15,6 @@ import (
 	"github.com/ava-labs/avalanchego/database/versiondb"
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow"
-	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 )
@@ -79,17 +78,16 @@ func newIndex(
 	}
 
 	// Get next accepted index from db
-	nextAcceptedIndex, err := database.GetUInt64(i.vDB, nextAcceptedIndexKey)
-	if err == database.ErrNotFound {
-		// Couldn't find it in the database. Must not have accepted any containers in previous runs.
-		i.log.Info("created new index",
-			zap.Uint64("nextAcceptedIndex", i.nextAcceptedIndex),
-		)
-		return i, nil
-	}
+	nextAcceptedIndex, err := database.WithDefault(
+		database.GetUInt64,
+		i.vDB,
+		nextAcceptedIndexKey,
+		0,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't get next accepted index from database: %w", err)
 	}
+
 	i.nextAcceptedIndex = nextAcceptedIndex
 	i.log.Info("created new index",
 		zap.Uint64("nextAcceptedIndex", i.nextAcceptedIndex),
@@ -99,7 +97,7 @@ func newIndex(
 
 // Close this index
 func (i *index) Close() error {
-	return utils.Err(
+	return errors.Join(
 		i.indexToContainer.Close(),
 		i.containerToIndex.Close(),
 		i.vDB.Close(),

@@ -7,15 +7,16 @@ package sampler
 // Note that the behavior is to sample the weight without replacement, not the
 // indices. So duplicate indices can be returned.
 type WeightedWithoutReplacement interface {
-	Initialize(weights []uint64) error
-	Sample(count int) ([]int, error)
+	InitializeWithAdjustedWeights(weights []uint64) error
+	Sample(count int) ([]int, bool)
+	TotalAdjustedWeight() uint64
 }
 
-// NewWeightedWithoutReplacement returns a new sampler
+// NewDeterministicWeightedWithoutReplacement returns a new sampler
 func NewDeterministicWeightedWithoutReplacement(source Source) WeightedWithoutReplacement {
 	return &weightedWithoutReplacementGeneric{
 		u: NewDeterministicUniform(source),
-		w: NewDeterministicWeighted(),
+		w: NewWeighted(),
 	}
 }
 
@@ -23,16 +24,6 @@ func NewDeterministicWeightedWithoutReplacement(source Source) WeightedWithoutRe
 func NewWeightedWithoutReplacement() WeightedWithoutReplacement {
 	return &weightedWithoutReplacementGeneric{
 		u: NewUniform(),
-		w: NewWeighted(),
-	}
-}
-
-// NewBestWeightedWithoutReplacement returns a new sampler
-func NewBestWeightedWithoutReplacement(
-	expectedSampleSize int,
-) WeightedWithoutReplacement {
-	return &weightedWithoutReplacementGeneric{
-		u: NewBestUniform(expectedSampleSize),
 		w: NewWeighted(),
 	}
 }

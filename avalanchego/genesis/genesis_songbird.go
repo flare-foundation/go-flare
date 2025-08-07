@@ -8,6 +8,7 @@ import (
 
 	"github.com/ava-labs/avalanchego/utils/units"
 	"github.com/ava-labs/avalanchego/vms/platformvm/reward"
+	txfee "github.com/ava-labs/avalanchego/vms/platformvm/txs/fee"
 )
 
 var (
@@ -104,10 +105,18 @@ var (
 	// SongbirdParams are the params used for the Songbird canary network.
 	SongbirdParams = Params{
 		TxFeeConfig: TxFeeConfig{
-			TxFee:                 units.MilliAvax,
-			CreateAssetTxFee:      10 * units.MilliAvax,
-			CreateSubnetTxFee:     1 * units.Avax,
-			CreateBlockchainTxFee: 1 * units.Avax,
+			CreateAssetTxFee: 10 * units.MilliAvax,
+			StaticFeeConfig: txfee.StaticConfig{
+				TxFee:                 units.MilliAvax,
+				CreateSubnetTxFee:     1 * units.Avax,
+				CreateBlockchainTxFee: 1 * units.Avax,
+
+				TransformSubnetTxFee:          1 * units.Avax,
+				AddPrimaryNetworkValidatorFee: 0,
+				AddPrimaryNetworkDelegatorFee: 0,
+				AddSubnetValidatorFee:         units.MilliAvax,
+				AddSubnetDelegatorFee:         units.MilliAvax,
+			},
 		},
 		StakingConfig: StakingConfig{
 			UptimeRequirement: .8, // 80%

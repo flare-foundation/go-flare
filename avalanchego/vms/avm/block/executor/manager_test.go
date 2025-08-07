@@ -14,9 +14,9 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/vms/avm/block"
-	"github.com/ava-labs/avalanchego/vms/avm/state"
+	"github.com/ava-labs/avalanchego/vms/avm/state/statemock"
 	"github.com/ava-labs/avalanchego/vms/avm/txs"
-	"github.com/ava-labs/avalanchego/vms/avm/txs/executor"
+	"github.com/ava-labs/avalanchego/vms/avm/txs/txsmock"
 )
 
 var (
@@ -30,7 +30,7 @@ func TestManagerGetStatelessBlock(t *testing.T) {
 	require := require.New(t)
 	ctrl := gomock.NewController(t)
 
-	state := state.NewMockState(ctrl)
+	state := statemock.NewState(ctrl)
 	m := &manager{
 		state:        state,
 		blkIDToState: map[ids.ID]*blockState{},
@@ -72,7 +72,7 @@ func TestManagerGetState(t *testing.T) {
 	require := require.New(t)
 	ctrl := gomock.NewController(t)
 
-	s := state.NewMockState(ctrl)
+	s := statemock.NewState(ctrl)
 	m := &manager{
 		state:        s,
 		blkIDToState: map[ids.ID]*blockState{},
@@ -81,7 +81,7 @@ func TestManagerGetState(t *testing.T) {
 
 	// Case: Block is in memory
 	{
-		diff := state.NewMockDiff(ctrl)
+		diff := statemock.NewDiff(ctrl)
 		blkID := ids.GenerateTestID()
 		m.blkIDToState[blkID] = &blockState{
 			onAcceptState: diff,
@@ -123,7 +123,7 @@ func TestManagerVerifyTx(t *testing.T) {
 			},
 			managerF: func(*gomock.Controller) *manager {
 				return &manager{
-					backend: &executor.Backend{},
+					backend: defaultTestBackend(false, nil),
 				}
 			},
 			expectedErr: ErrChainNotSynced,
@@ -131,7 +131,7 @@ func TestManagerVerifyTx(t *testing.T) {
 		{
 			name: "fails syntactic verification",
 			txF: func(ctrl *gomock.Controller) *txs.Tx {
-				unsigned := txs.NewMockUnsignedTx(ctrl)
+				unsigned := txsmock.NewUnsignedTx(ctrl)
 				unsigned.EXPECT().Visit(gomock.Any()).Return(errTestSyntacticVerifyFail)
 				return &txs.Tx{
 					Unsigned: unsigned,
@@ -139,9 +139,7 @@ func TestManagerVerifyTx(t *testing.T) {
 			},
 			managerF: func(*gomock.Controller) *manager {
 				return &manager{
-					backend: &executor.Backend{
-						Bootstrapped: true,
-					},
+					backend: defaultTestBackend(true, nil),
 				}
 			},
 			expectedErr: errTestSyntacticVerifyFail,
@@ -149,7 +147,7 @@ func TestManagerVerifyTx(t *testing.T) {
 		{
 			name: "fails semantic verification",
 			txF: func(ctrl *gomock.Controller) *txs.Tx {
-				unsigned := txs.NewMockUnsignedTx(ctrl)
+				unsigned := txsmock.NewUnsignedTx(ctrl)
 				// Syntactic verification passes
 				unsigned.EXPECT().Visit(gomock.Any()).Return(nil)
 				// Semantic verification fails
@@ -162,14 +160,12 @@ func TestManagerVerifyTx(t *testing.T) {
 				lastAcceptedID := ids.GenerateTestID()
 
 				// These values don't matter for this test
-				state := state.NewMockState(ctrl)
+				state := statemock.NewState(ctrl)
 				state.EXPECT().GetLastAccepted().Return(lastAcceptedID)
 				state.EXPECT().GetTimestamp().Return(time.Time{})
 
 				return &manager{
-					backend: &executor.Backend{
-						Bootstrapped: true,
-					},
+					backend:      defaultTestBackend(true, nil),
 					state:        state,
 					lastAccepted: lastAcceptedID,
 				}
@@ -179,7 +175,7 @@ func TestManagerVerifyTx(t *testing.T) {
 		{
 			name: "fails execution",
 			txF: func(ctrl *gomock.Controller) *txs.Tx {
-				unsigned := txs.NewMockUnsignedTx(ctrl)
+				unsigned := txsmock.NewUnsignedTx(ctrl)
 				// Syntactic verification passes
 				unsigned.EXPECT().Visit(gomock.Any()).Return(nil)
 				// Semantic verification passes
@@ -194,14 +190,12 @@ func TestManagerVerifyTx(t *testing.T) {
 				lastAcceptedID := ids.GenerateTestID()
 
 				// These values don't matter for this test
-				state := state.NewMockState(ctrl)
+				state := statemock.NewState(ctrl)
 				state.EXPECT().GetLastAccepted().Return(lastAcceptedID)
 				state.EXPECT().GetTimestamp().Return(time.Time{})
 
 				return &manager{
-					backend: &executor.Backend{
-						Bootstrapped: true,
-					},
+					backend:      defaultTestBackend(true, nil),
 					state:        state,
 					lastAccepted: lastAcceptedID,
 				}
@@ -211,7 +205,7 @@ func TestManagerVerifyTx(t *testing.T) {
 		{
 			name: "happy path",
 			txF: func(ctrl *gomock.Controller) *txs.Tx {
-				unsigned := txs.NewMockUnsignedTx(ctrl)
+				unsigned := txsmock.NewUnsignedTx(ctrl)
 				// Syntactic verification passes
 				unsigned.EXPECT().Visit(gomock.Any()).Return(nil)
 				// Semantic verification passes
@@ -226,14 +220,12 @@ func TestManagerVerifyTx(t *testing.T) {
 				lastAcceptedID := ids.GenerateTestID()
 
 				// These values don't matter for this test
-				state := state.NewMockState(ctrl)
+				state := statemock.NewState(ctrl)
 				state.EXPECT().GetLastAccepted().Return(lastAcceptedID)
 				state.EXPECT().GetTimestamp().Return(time.Time{})
 
 				return &manager{
-					backend: &executor.Backend{
-						Bootstrapped: true,
-					},
+					backend:      defaultTestBackend(true, nil),
 					state:        state,
 					lastAccepted: lastAcceptedID,
 				}

@@ -7,12 +7,12 @@ import (
 	"math"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/snowtest"
+	"github.com/ava-labs/avalanchego/upgrade/upgradetest"
 	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
 	"github.com/ava-labs/avalanchego/vms/avm/config"
@@ -28,6 +28,7 @@ import (
 var (
 	keys      = secp256k1.TestKeys()
 	feeConfig = config.Config{
+		Upgrades:         upgradetest.GetConfig(upgradetest.Durango),
 		TxFee:            2,
 		CreateAssetTxFee: 3,
 	}
@@ -38,8 +39,6 @@ func TestSyntacticVerifierBaseTx(t *testing.T) {
 
 	fx := &secp256k1fx.Fx{}
 	parser, err := txs.NewParser(
-		time.Time{},
-		time.Time{},
 		[]fxs.Fx{
 			fx,
 		},
@@ -412,8 +411,6 @@ func TestSyntacticVerifierCreateAssetTx(t *testing.T) {
 
 	fx := &secp256k1fx.Fx{}
 	parser, err := txs.NewParser(
-		time.Time{},
-		time.Time{},
 		[]fxs.Fx{
 			fx,
 		},
@@ -1023,8 +1020,6 @@ func TestSyntacticVerifierOperationTx(t *testing.T) {
 
 	fx := &secp256k1fx.Fx{}
 	parser, err := txs.NewParser(
-		time.Time{},
-		time.Time{},
 		[]fxs.Fx{
 			fx,
 		},
@@ -1514,8 +1509,6 @@ func TestSyntacticVerifierImportTx(t *testing.T) {
 
 	fx := &secp256k1fx.Fx{}
 	parser, err := txs.NewParser(
-		time.Time{},
-		time.Time{},
 		[]fxs.Fx{
 			fx,
 		},
@@ -1916,8 +1909,6 @@ func TestSyntacticVerifierExportTx(t *testing.T) {
 
 	fx := &secp256k1fx.Fx{}
 	parser, err := txs.NewParser(
-		time.Time{},
-		time.Time{},
 		[]fxs.Fx{
 			fx,
 		},

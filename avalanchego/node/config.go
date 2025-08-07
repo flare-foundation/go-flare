@@ -5,6 +5,7 @@ package node
 
 import (
 	"crypto/tls"
+	"net/netip"
 	"time"
 
 	"github.com/ava-labs/avalanchego/api/server"
@@ -17,24 +18,13 @@ import (
 	"github.com/ava-labs/avalanchego/snow/networking/tracker"
 	"github.com/ava-labs/avalanchego/subnets"
 	"github.com/ava-labs/avalanchego/trace"
+	"github.com/ava-labs/avalanchego/upgrade"
 	"github.com/ava-labs/avalanchego/utils/crypto/bls"
-	"github.com/ava-labs/avalanchego/utils/ips"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/profiler"
 	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/utils/timer"
 )
-
-type IPCConfig struct {
-	IPCAPIEnabled      bool     `json:"ipcAPIEnabled"`
-	IPCPath            string   `json:"ipcPath"`
-	IPCDefaultChainIDs []string `json:"ipcDefaultChainIDs"`
-}
-
-type APIAuthConfig struct {
-	APIRequireAuthToken bool   `json:"apiRequireAuthToken"`
-	APIAuthPassword     string `json:"-"`
-}
 
 type APIIndexerConfig struct {
 	IndexAPIEnabled      bool `json:"indexAPIEnabled"`
@@ -59,9 +49,7 @@ type HTTPConfig struct {
 }
 
 type APIConfig struct {
-	APIAuthConfig    `json:"authConfig"`
 	APIIndexerConfig `json:"indexerConfig"`
-	IPCConfig        `json:"ipcConfig"`
 
 	// Enable/Disable APIs
 	AdminAPIEnabled    bool `json:"adminAPIEnabled"`
@@ -97,8 +85,8 @@ type StakingConfig struct {
 }
 
 type StateSyncConfig struct {
-	StateSyncIDs []ids.NodeID `json:"stateSyncIDs"`
-	StateSyncIPs []ips.IPPort `json:"stateSyncIPs"`
+	StateSyncIDs []ids.NodeID     `json:"stateSyncIDs"`
+	StateSyncIPs []netip.AddrPort `json:"stateSyncIPs"`
 }
 
 type BootstrapConfig struct {
@@ -142,6 +130,8 @@ type Config struct {
 	StateSyncConfig     `json:"stateSyncConfig"`
 	BootstrapConfig     `json:"bootstrapConfig"`
 	DatabaseConfig      `json:"databaseConfig"`
+
+	UpgradeConfig upgrade.Config `json:"upgradeConfig"`
 
 	// Genesis information
 	GenesisBytes []byte `json:"-"`

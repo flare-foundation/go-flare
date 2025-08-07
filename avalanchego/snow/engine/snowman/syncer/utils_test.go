@@ -5,6 +5,7 @@ package syncer
 
 import (
 	"context"
+	"math/big"
 	"testing"
 	"time"
 
@@ -13,9 +14,10 @@ import (
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow"
-	"github.com/ava-labs/avalanchego/snow/engine/common"
 	"github.com/ava-labs/avalanchego/snow/engine/common/tracker"
+	"github.com/ava-labs/avalanchego/snow/engine/enginetest"
 	"github.com/ava-labs/avalanchego/snow/engine/snowman/block"
+	"github.com/ava-labs/avalanchego/snow/engine/snowman/block/blocktest"
 	"github.com/ava-labs/avalanchego/snow/engine/snowman/getter"
 	"github.com/ava-labs/avalanchego/snow/validators"
 	"github.com/ava-labs/avalanchego/utils/hashing"
@@ -53,8 +55,8 @@ func init() {
 }
 
 type fullVM struct {
-	*block.TestVM
-	*block.TestStateSyncableVM
+	*blocktest.VM
+	*blocktest.StateSyncableVM
 }
 
 func buildTestPeers(t *testing.T, subnetID ids.ID) validators.Manager {
@@ -73,23 +75,23 @@ func buildTestsObjects(
 	ctx *snow.ConsensusContext,
 	startupTracker tracker.Startup,
 	beacons validators.Manager,
-	alpha uint64,
+	alpha *big.Int,
 ) (
 	*stateSyncer,
 	*fullVM,
-	*common.SenderTest,
+	*enginetest.Sender,
 ) {
 	require := require.New(t)
 
 	fullVM := &fullVM{
-		TestVM: &block.TestVM{
-			TestVM: common.TestVM{T: t},
+		VM: &blocktest.VM{
+			VM: enginetest.VM{T: t},
 		},
-		TestStateSyncableVM: &block.TestStateSyncableVM{
+		StateSyncableVM: &blocktest.StateSyncableVM{
 			T: t,
 		},
 	}
-	sender := &common.SenderTest{T: t}
+	sender := &enginetest.Sender{T: t}
 	dummyGetter, err := getter.New(
 		fullVM,
 		sender,
@@ -106,7 +108,7 @@ func buildTestsObjects(
 		startupTracker,
 		sender,
 		beacons,
-		beacons.Count(ctx.SubnetID),
+		beacons.NumValidators(ctx.SubnetID),
 		alpha,
 		nil,
 		fullVM,

@@ -37,7 +37,7 @@ import (
 )
 
 // makeTestTrie create a sample test trie to test node-wise reconstruction.
-func makeTestTrie(scheme string) (ethdb.Database, *Database, *StateTrie, map[string][]byte) {
+func makeTestTrie(scheme string) (ethdb.Database, *testDb, *StateTrie, map[string][]byte) {
 	// Create an empty trie
 	db := rawdb.NewMemoryDatabase()
 	triedb := newTestDatabase(db, scheme)
@@ -62,14 +62,36 @@ func makeTestTrie(scheme string) (ethdb.Database, *Database, *StateTrie, map[str
 			trie.MustUpdate(key, val)
 		}
 	}
-	root, nodes := trie.Commit(false)
+	root, nodes, _ := trie.Commit(false)
 	if err := triedb.Update(root, types.EmptyRootHash, trienode.NewWithNodeSet(nodes)); err != nil {
 		panic(fmt.Errorf("failed to commit db %v", err))
 	}
-	if err := triedb.Commit(root, false); err != nil {
+	if err := triedb.Commit(root); err != nil {
 		panic(err)
 	}
 	// Re-create the trie based on the new state
 	trie, _ = NewStateTrie(TrieID(root), triedb)
 	return db, triedb, trie, content
+}
+
+// checkTrieConsistency checks that all nodes in a trie are indeed present.
+func checkTrieConsistency(db ethdb.Database, scheme string, root common.Hash, rawTrie bool) error {
+	ndb := newTestDatabase(db, scheme)
+	var it NodeIterator
+	if rawTrie {
+		trie, err := New(TrieID(root), ndb)
+		if err != nil {
+			return nil // Consider a non existent state consistent
+		}
+		it = trie.MustNodeIterator(nil)
+	} else {
+		trie, err := NewStateTrie(TrieID(root), ndb)
+		if err != nil {
+			return nil // Consider a non existent state consistent
+		}
+		it = trie.MustNodeIterator(nil)
+	}
+	for it.Next(true) {
+	}
+	return it.Error()
 }

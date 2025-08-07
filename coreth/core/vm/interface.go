@@ -32,15 +32,16 @@ import (
 	"github.com/ava-labs/coreth/core/types"
 	"github.com/ava-labs/coreth/params"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/holiman/uint256"
 )
 
 // StateDB is an EVM database for full state querying.
 type StateDB interface {
 	CreateAccount(common.Address)
 
-	SubBalance(common.Address, *big.Int)
-	AddBalance(common.Address, *big.Int)
-	GetBalance(common.Address) *big.Int
+	SubBalance(common.Address, *uint256.Int)
+	AddBalance(common.Address, *uint256.Int)
+	GetBalance(common.Address) *uint256.Int
 
 	SubBalanceMultiCoin(common.Address, common.Hash, *big.Int)
 	AddBalanceMultiCoin(common.Address, common.Hash, *big.Int)
@@ -66,11 +67,13 @@ type StateDB interface {
 	GetTransientState(addr common.Address, key common.Hash) common.Hash
 	SetTransientState(addr common.Address, key, value common.Hash)
 
-	Suicide(common.Address) bool
-	HasSuicided(common.Address) bool
+	SelfDestruct(common.Address)
+	HasSelfDestructed(common.Address) bool
+
+	Selfdestruct6780(common.Address)
 
 	// Exist reports whether the given account exists in state.
-	// Notably this should also return true for suicided accounts.
+	// Notably this should also return true for self-destructed accounts.
 	Exist(common.Address) bool
 	// Empty returns whether the given account is empty. Empty
 	// is defined according to EIP161 (balance = nonce = code = 0).

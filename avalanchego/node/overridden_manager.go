@@ -5,6 +5,7 @@ package node
 
 import (
 	"fmt"
+	"math/big"
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/validators"
@@ -48,7 +49,7 @@ func (o *overriddenManager) GetValidator(_ ids.ID, nodeID ids.NodeID) (*validato
 	return o.manager.GetValidator(o.subnetID, nodeID)
 }
 
-func (o *overriddenManager) SubsetWeight(_ ids.ID, nodeIDs set.Set[ids.NodeID]) (uint64, error) {
+func (o *overriddenManager) SubsetWeight(_ ids.ID, nodeIDs set.Set[ids.NodeID]) *big.Int {
 	return o.manager.SubsetWeight(o.subnetID, nodeIDs)
 }
 
@@ -56,11 +57,18 @@ func (o *overriddenManager) RemoveWeight(_ ids.ID, nodeID ids.NodeID, weight uin
 	return o.manager.RemoveWeight(o.subnetID, nodeID, weight)
 }
 
-func (o *overriddenManager) Count(ids.ID) int {
-	return o.manager.Count(o.subnetID)
+func (o *overriddenManager) NumSubnets() int {
+	if o.manager.NumValidators(o.subnetID) == 0 {
+		return 0
+	}
+	return 1
 }
 
-func (o *overriddenManager) TotalWeight(ids.ID) (uint64, error) {
+func (o *overriddenManager) NumValidators(ids.ID) int {
+	return o.manager.NumValidators(o.subnetID)
+}
+
+func (o *overriddenManager) TotalWeight(ids.ID) *big.Int {
 	return o.manager.TotalWeight(o.subnetID)
 }
 
@@ -72,8 +80,12 @@ func (o *overriddenManager) GetMap(ids.ID) map[ids.NodeID]*validators.GetValidat
 	return o.manager.GetMap(o.subnetID)
 }
 
-func (o *overriddenManager) RegisterCallbackListener(_ ids.ID, listener validators.SetCallbackListener) {
-	o.manager.RegisterCallbackListener(o.subnetID, listener)
+func (o *overriddenManager) RegisterCallbackListener(listener validators.ManagerCallbackListener) {
+	o.manager.RegisterCallbackListener(listener)
+}
+
+func (o *overriddenManager) RegisterSetCallbackListener(_ ids.ID, listener validators.SetCallbackListener) {
+	o.manager.RegisterSetCallbackListener(o.subnetID, listener)
 }
 
 func (o *overriddenManager) String() string {

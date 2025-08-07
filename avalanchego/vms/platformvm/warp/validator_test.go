@@ -14,6 +14,8 @@ import (
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/validators"
+	"github.com/ava-labs/avalanchego/snow/validators/validatorsmock"
+	"github.com/ava-labs/avalanchego/snow/validators/validatorstest"
 	"github.com/ava-labs/avalanchego/utils/crypto/bls"
 	"github.com/ava-labs/avalanchego/utils/set"
 )
@@ -31,7 +33,7 @@ func TestGetCanonicalValidatorSet(t *testing.T) {
 		{
 			name: "can't get validator set",
 			stateF: func(ctrl *gomock.Controller) validators.State {
-				state := validators.NewMockState(ctrl)
+				state := validatorsmock.NewState(ctrl)
 				state.EXPECT().GetValidatorSet(gomock.Any(), pChainHeight, subnetID).Return(nil, errTest)
 				return state
 			},
@@ -40,7 +42,7 @@ func TestGetCanonicalValidatorSet(t *testing.T) {
 		{
 			name: "all validators have public keys; no duplicate pub keys",
 			stateF: func(ctrl *gomock.Controller) validators.State {
-				state := validators.NewMockState(ctrl)
+				state := validatorsmock.NewState(ctrl)
 				state.EXPECT().GetValidatorSet(gomock.Any(), pChainHeight, subnetID).Return(
 					map[ids.NodeID]*validators.GetValidatorOutput{
 						testVdrs[0].nodeID: {
@@ -65,7 +67,7 @@ func TestGetCanonicalValidatorSet(t *testing.T) {
 		{
 			name: "all validators have public keys; duplicate pub keys",
 			stateF: func(ctrl *gomock.Controller) validators.State {
-				state := validators.NewMockState(ctrl)
+				state := validatorsmock.NewState(ctrl)
 				state.EXPECT().GetValidatorSet(gomock.Any(), pChainHeight, subnetID).Return(
 					map[ids.NodeID]*validators.GetValidatorOutput{
 						testVdrs[0].nodeID: {
@@ -106,7 +108,7 @@ func TestGetCanonicalValidatorSet(t *testing.T) {
 		{
 			name: "validator without public key; no duplicate pub keys",
 			stateF: func(ctrl *gomock.Controller) validators.State {
-				state := validators.NewMockState(ctrl)
+				state := validatorsmock.NewState(ctrl)
 				state.EXPECT().GetValidatorSet(gomock.Any(), pChainHeight, subnetID).Return(
 					map[ids.NodeID]*validators.GetValidatorOutput{
 						testVdrs[0].nodeID: {
@@ -148,8 +150,8 @@ func TestGetCanonicalValidatorSet(t *testing.T) {
 			require.Len(vdrs, len(tt.expectedVdrs))
 			for i, expectedVdr := range tt.expectedVdrs {
 				gotVdr := vdrs[i]
-				expectedPKBytes := bls.PublicKeyToBytes(expectedVdr.PublicKey)
-				gotPKBytes := bls.PublicKeyToBytes(gotVdr.PublicKey)
+				expectedPKBytes := bls.PublicKeyToCompressedBytes(expectedVdr.PublicKey)
+				gotPKBytes := bls.PublicKeyToCompressedBytes(gotVdr.PublicKey)
 				require.Equal(expectedPKBytes, gotPKBytes)
 				require.Equal(expectedVdr.PublicKeyBytes, gotVdr.PublicKeyBytes)
 				require.Equal(expectedVdr.Weight, gotVdr.Weight)
@@ -165,7 +167,7 @@ func TestFilterValidators(t *testing.T) {
 	pk0 := bls.PublicFromSecretKey(sk0)
 	vdr0 := &Validator{
 		PublicKey:      pk0,
-		PublicKeyBytes: bls.SerializePublicKey(pk0),
+		PublicKeyBytes: bls.PublicKeyToUncompressedBytes(pk0),
 		Weight:         1,
 	}
 
@@ -174,7 +176,7 @@ func TestFilterValidators(t *testing.T) {
 	pk1 := bls.PublicFromSecretKey(sk1)
 	vdr1 := &Validator{
 		PublicKey:      pk1,
-		PublicKeyBytes: bls.SerializePublicKey(pk1),
+		PublicKeyBytes: bls.PublicKeyToUncompressedBytes(pk1),
 		Weight:         2,
 	}
 
@@ -329,7 +331,7 @@ func BenchmarkGetCanonicalValidatorSet(b *testing.B) {
 			validator := getValidatorOutputs[i]
 			getValidatorsOutput[validator.NodeID] = validator
 		}
-		validatorState := &validators.TestState{
+		validatorState := &validatorstest.State{
 			GetValidatorSetF: func(context.Context, uint64, ids.ID) (map[ids.NodeID]*validators.GetValidatorOutput, error) {
 				return getValidatorsOutput, nil
 			},

@@ -4,6 +4,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/ava-labs/avalanchego/app"
 	"github.com/ava-labs/avalanchego/config"
 	"github.com/ava-labs/avalanchego/version"
+	"github.com/ava-labs/avalanchego/vms/platformvm/block/executor"
 )
 
 func main() {
@@ -30,8 +32,24 @@ func main() {
 		os.Exit(1)
 	}
 
+	if v.GetBool(config.VersionJSONKey) && v.GetBool(config.VersionKey) {
+		fmt.Println("can't print both JSON and human readable versions")
+		os.Exit(1)
+	}
+
+	if v.GetBool(config.VersionJSONKey) {
+		versions := version.GetVersions()
+		jsonBytes, err := json.MarshalIndent(versions, "", "  ")
+		if err != nil {
+			fmt.Printf("couldn't marshal versions: %s\n", err)
+			os.Exit(1)
+		}
+		fmt.Println(string(jsonBytes))
+		os.Exit(0)
+	}
+
 	if v.GetBool(config.VersionKey) {
-		fmt.Print(version.String)
+		fmt.Println(version.GetVersions().String())
 		os.Exit(0)
 	}
 
@@ -46,6 +64,8 @@ func main() {
 
 	if term.IsTerminal(int(os.Stdout.Fd())) {
 		fmt.Println(app.Header)
+	} else {
+		executor.EtnaActivationWasLogged.Set(true)
 	}
 
 	nodeApp, err := app.New(nodeConfig)

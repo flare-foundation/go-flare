@@ -1,6 +1,69 @@
 # Release Notes
 
+## [v0.13.8](https://github.com/ava-labs/coreth/releases/tag/v0.13.8)
+- Update geth dependency to v1.13.14
+- eupgrade: lowering the base fee to 1 nAVAX
+- eupgrade/cancun: verify no blobs in header
+- Supports ACP-118 message types
+- Gets network upgrade timestamps from avalanchego
+- Remove cross-chain handlers
+
+## [v0.13.7](https://github.com/ava-labs/coreth/releases/tag/v0.13.7)
+- Add EUpgrade base definitions
+- Remove Block Status
+- Fix and improve "GetBlockIDAtHeight"
+- Bump golang version requirement to 1.21.12
+- Bump AvalancheGo to v1.11.10-prerelease
+
+## [v0.13.6](https://github.com/ava-labs/coreth/releases/tag/v0.13.6)
+- rpc: truncate call error data logs
+- logging: remove path prefix (up to coreth@version/) from logged file names.
+- cleanup: removes pre-Durango scripts
+
+## [v0.13.5](https://github.com/ava-labs/coreth/releases/tag/v0.13.5)
+- Bump AvalancheGo to v1.11.7
+- Bump golang version requirement to 1.21.12
+- Switches timestamp log back to "timestamp" (as was before v0.13.4)
+- Add missing fields to "toCallArg"
+- Fix state sync ETA overflow
+- Fix state sync crash bug
+
+## [v0.13.4](https://github.com/ava-labs/coreth/releases/tag/v0.13.4)
+- Fixes snapshot use when state sync was explicitly enabled
+- Fixes v0.13.3 locking regression in async snapshot generation
+- Update go-ethereum to v1.13.8
+- Bump AvalancheGo to v1.11.6
+- Bump golang version requirement to 1.21.10
+- "timestamp" in logs is changed to "t"
+
+## [v0.13.3](https://github.com/ava-labs/coreth/releases/tag/v0.13.3)
+- Update go-ethereum to v1.13.2
+- Bump AvalancheGo to v1.11.5
+- Bump golang version requirement to 1.21.9
+- Respect local flag in legacy tx pool
+- Disable blobpool
+- Testing improvements
+
+## [v0.13.2](https://github.com/ava-labs/coreth/releases/tag/v0.13.2)
+- Integrate stake weighted gossip selection
+- Update go-ethereum to v1.12.2
+- Force precompile modules registration in ethclient
+- Bump Avalanchego to v1.11.3
+
+## [v0.13.1](https://github.com/ava-labs/coreth/releases/tag/v0.13.1)
+
+- Bump AvalancheGo to v1.11.2
+- Remove Legacy Gossipper
+- Tune default gossip parameters
+
+## [v0.13.0](https://github.com/ava-labs/coreth/releases/tag/v0.13.0)
+
+- Bump AvalancheGo to v1.11.1
+- Bump minimum Go version to 1.21.7
+- Add more error messages to warp backend
+
 ## [v0.12.10](https://github.com/ava-labs/coreth/releases/tag/v0.12.10)
+
 - Add support for off-chain warp messages
 - Add support for getBlockReceipts RPC API
 - Fix issue with state sync for large blocks

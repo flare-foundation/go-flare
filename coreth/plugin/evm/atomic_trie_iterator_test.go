@@ -25,7 +25,7 @@ func TestIteratorCanIterate(t *testing.T) {
 	lastAcceptedHeight := uint64(1000)
 	db := versiondb.New(memdb.New())
 	codec := testTxCodec()
-	repo, err := NewAtomicTxRepository(db, codec, lastAcceptedHeight, nil)
+	repo, err := NewAtomicTxRepository(db, codec, lastAcceptedHeight)
 	assert.NoError(t, err)
 
 	// create state with multiple transactions
@@ -65,7 +65,7 @@ func TestIteratorHandlesInvalidData(t *testing.T) {
 	lastAcceptedHeight := uint64(1000)
 	db := versiondb.New(memdb.New())
 	codec := testTxCodec()
-	repo, err := NewAtomicTxRepository(db, codec, lastAcceptedHeight, nil)
+	repo, err := NewAtomicTxRepository(db, codec, lastAcceptedHeight)
 	require.NoError(err)
 
 	// create state with multiple transactions
@@ -94,7 +94,8 @@ func TestIteratorHandlesInvalidData(t *testing.T) {
 	require.NoError(err)
 	require.NoError(atomicTrieSnapshot.Update(utils.RandomBytes(50), utils.RandomBytes(50)))
 
-	nextRoot, nodes := atomicTrieSnapshot.Commit(false)
+	nextRoot, nodes, err := atomicTrieSnapshot.Commit(false)
+	require.NoError(err)
 	err = atomicTrie.InsertTrie(nodes, nextRoot)
 	require.NoError(err)
 	isCommit, err := atomicTrie.AcceptTrie(lastCommittedHeight+commitInterval, nextRoot)

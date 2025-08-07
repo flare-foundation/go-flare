@@ -27,39 +27,32 @@
 package trie
 
 import (
-	"fmt"
-
+	"github.com/ava-labs/coreth/core/types"
+	"github.com/ava-labs/coreth/trie/triestate"
+	"github.com/ava-labs/coreth/triedb/database"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/log"
 )
-
-// Reader wraps the Node method of a backing trie store.
-type Reader interface {
-	// Node retrieves the RLP-encoded trie node blob with the provided trie
-	// identifier, node path and the corresponding node hash. No error will
-	// be returned if the node is not found.
-	Node(owner common.Hash, path []byte, hash common.Hash) ([]byte, error)
-}
-
-// NodeReader wraps all the necessary functions for accessing trie node.
-type NodeReader interface {
-	// Reader returns a reader for accessing all trie nodes with provided
-	// state root. Nil is returned in case the state is not available.
-	Reader(root common.Hash) Reader
-}
 
 // trieReader is a wrapper of the underlying node reader. It's not safe
 // for concurrent usage.
 type trieReader struct {
 	owner  common.Hash
-	reader Reader
+	reader database.Reader
 	banned map[string]struct{} // Marker to prevent node from being accessed, for tests
 }
 
 // newTrieReader initializes the trie reader with the given node reader.
-func newTrieReader(stateRoot, owner common.Hash, db NodeReader) (*trieReader, error) {
-	reader := db.Reader(stateRoot)
-	if reader == nil {
-		return nil, fmt.Errorf("state not found #%x", stateRoot)
+func newTrieReader(stateRoot, owner common.Hash, db database.Database) (*trieReader, error) {
+	if stateRoot == (common.Hash{}) || stateRoot == types.EmptyRootHash {
+		if stateRoot == (common.Hash{}) {
+			log.Error("Zero state root hash!")
+		}
+		return &trieReader{owner: owner}, nil
+	}
+	reader, err := db.Reader(stateRoot)
+	if err != nil {
+		return nil, &MissingNodeError{Owner: owner, NodeHash: stateRoot, err: err}
 	}
 	return &trieReader{owner: owner, reader: reader}, nil
 }
@@ -88,4 +81,24 @@ func (r *trieReader) node(path []byte, hash common.Hash) ([]byte, error) {
 		return nil, &MissingNodeError{Owner: r.owner, NodeHash: hash, Path: path, err: err}
 	}
 	return blob, nil
+}
+
+// MerkleLoader implements triestate.TrieLoader for constructing tries.
+type MerkleLoader struct {
+	db database.Database
+}
+
+// NewMerkleLoader creates the merkle trie loader.
+func NewMerkleLoader(db database.Database) *MerkleLoader {
+	return &MerkleLoader{db: db}
+}
+
+// OpenTrie opens the main account trie.
+func (l *MerkleLoader) OpenTrie(root common.Hash) (triestate.Trie, error) {
+	return New(TrieID(root), l.db)
+}
+
+// OpenStorageTrie opens the storage trie of an account.
+func (l *MerkleLoader) OpenStorageTrie(stateRoot common.Hash, addrHash, root common.Hash) (triestate.Trie, error) {
+	return New(StorageTrieID(stateRoot, addrHash, root), l.db)
 }

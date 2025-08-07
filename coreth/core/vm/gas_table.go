@@ -71,6 +71,7 @@ func memoryGasCost(mem *Memory, newMemSize uint64) (uint64, error) {
 // as argument:
 // CALLDATACOPY (stack position 2)
 // CODECOPY (stack position 2)
+// MCOPY (stack position 2)
 // EXTCODECOPY (stack position 3)
 // RETURNDATACOPY (stack position 2)
 func memoryCopierGas(stackpos int) gasFunc {
@@ -100,6 +101,7 @@ func memoryCopierGas(stackpos int) gasFunc {
 var (
 	gasCallDataCopy   = memoryCopierGas(2)
 	gasCodeCopy       = memoryCopierGas(2)
+	gasMcopy          = memoryCopierGas(2)
 	gasExtCodeCopy    = memoryCopierGas(3)
 	gasReturnDataCopy = memoryCopierGas(2)
 )
@@ -113,7 +115,7 @@ func gasSStore(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySi
 	// Legacy rules should be applied if we are in Petersburg (removal of EIP-1283)
 	// OR Constantinople is not active
 	if evm.chainRules.IsPetersburg || !evm.chainRules.IsConstantinople {
-		// This checks for 3 scenario's and calculates gas accordingly:
+		// This checks for 3 scenarios and calculates gas accordingly:
 		//
 		// 1. From a zero-value address to a non-zero value         (NEW VALUE)
 		// 2. From a non-zero value address to a zero-value address (DELETE)
@@ -442,45 +444,6 @@ func gasCall(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize
 	return gas, nil
 }
 
-func gasCallExpertAP1(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
-	var (
-		gas                     uint64
-		transfersValue          = !stack.Back(2).IsZero()
-		multiCoinTransfersValue = !stack.Back(4).IsZero()
-		address                 = common.Address(stack.Back(1).Bytes20())
-	)
-	if evm.chainRules.IsEIP158 {
-		if (transfersValue || multiCoinTransfersValue) && evm.StateDB.Empty(address) {
-			gas += params.CallNewAccountGas
-		}
-	} else if !evm.StateDB.Exist(address) {
-		gas += params.CallNewAccountGas
-	}
-	if transfersValue {
-		gas += params.CallValueTransferGas
-	}
-	if multiCoinTransfersValue {
-		gas += params.CallValueTransferGas
-	}
-	memoryGas, err := memoryGasCost(mem, memorySize)
-	if err != nil {
-		return 0, err
-	}
-	var overflow bool
-	if gas, overflow = math.SafeAdd(gas, memoryGas); overflow {
-		return 0, vmerrs.ErrGasUintOverflow
-	}
-
-	evm.callGasTemp, err = callGas(evm.chainRules.IsEIP150, contract.Gas, gas, stack.Back(0))
-	if err != nil {
-		return 0, err
-	}
-	if gas, overflow = math.SafeAdd(gas, evm.callGasTemp); overflow {
-		return 0, vmerrs.ErrGasUintOverflow
-	}
-	return gas, nil
-}
-
 func gasCallCode(evm *EVM, contract *Contract, stack *Stack, mem *Memory, memorySize uint64) (uint64, error) {
 	memoryGas, err := memoryGasCost(mem, memorySize)
 	if err != nil {
@@ -555,7 +518,7 @@ func gasSelfdestruct(evm *EVM, contract *Contract, stack *Stack, mem *Memory, me
 		}
 	}
 
-	if !evm.StateDB.HasSuicided(contract.Address()) {
+	if !evm.StateDB.HasSelfDestructed(contract.Address()) {
 		evm.StateDB.AddRefund(params.SelfdestructRefundGas)
 	}
 	return gas, nil

@@ -5,7 +5,6 @@ package executor
 
 import (
 	"testing"
-	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
@@ -38,8 +37,6 @@ func TestBaseTxExecutor(t *testing.T) {
 
 	secpFx := &secp256k1fx.Fx{}
 	parser, err := block.NewParser(
-		time.Time{},
-		time.Time{},
 		[]fxs.Fx{secpFx},
 	)
 	require.NoError(err)
@@ -147,8 +144,6 @@ func TestCreateAssetTxExecutor(t *testing.T) {
 
 	secpFx := &secp256k1fx.Fx{}
 	parser, err := block.NewParser(
-		time.Time{},
-		time.Time{},
 		[]fxs.Fx{secpFx},
 	)
 	require.NoError(err)
@@ -294,8 +289,6 @@ func TestOperationTxExecutor(t *testing.T) {
 
 	secpFx := &secp256k1fx.Fx{}
 	parser, err := block.NewParser(
-		time.Time{},
-		time.Time{},
 		[]fxs.Fx{secpFx},
 	)
 	require.NoError(err)

@@ -27,7 +27,7 @@
 package vm
 
 import (
-	"errors"
+	"math"
 
 	"github.com/ava-labs/coreth/params"
 	"github.com/ava-labs/coreth/vmerrs"
@@ -263,6 +263,7 @@ func opKeccak256(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) (
 	size.SetBytes(interpreter.hasherBuf[:])
 	return nil, nil
 }
+
 func opAddress(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	scope.Stack.push(new(uint256.Int).SetBytes(scope.Contract.Address().Bytes()))
 	return nil, nil
@@ -271,18 +272,7 @@ func opAddress(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 func opBalance(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	slot := scope.Stack.peek()
 	address := common.Address(slot.Bytes20())
-	slot.SetFromBig(interpreter.evm.StateDB.GetBalance(address))
-	return nil, nil
-}
-
-func opBalanceMultiCoin(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	addr, cid := scope.Stack.pop(), scope.Stack.pop()
-	res, err := uint256.FromBig(interpreter.evm.StateDB.GetBalanceMultiCoin(
-		common.BigToAddress(addr.ToBig()), common.BigToHash(cid.ToBig())))
-	if err {
-		return nil, errors.New("balance overflow")
-	}
-	scope.Stack.push(res)
+	slot.Set(interpreter.evm.StateDB.GetBalance(address))
 	return nil, nil
 }
 
@@ -290,14 +280,14 @@ func opOrigin(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 	scope.Stack.push(new(uint256.Int).SetBytes(interpreter.evm.Origin.Bytes()))
 	return nil, nil
 }
+
 func opCaller(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	scope.Stack.push(new(uint256.Int).SetBytes(scope.Contract.Caller().Bytes()))
 	return nil, nil
 }
 
 func opCallValue(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	v, _ := uint256.FromBig(scope.Contract.value)
-	scope.Stack.push(v)
+	scope.Stack.push(scope.Contract.value)
 	return nil, nil
 }
 
@@ -369,9 +359,7 @@ func opExtCodeSize(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext)
 }
 
 func opCodeSize(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	l := new(uint256.Int)
-	l.SetUint64(uint64(len(scope.Contract.Code)))
-	scope.Stack.push(l)
+	scope.Stack.push(new(uint256.Int).SetUint64(uint64(len(scope.Contract.Code))))
 	return nil, nil
 }
 
@@ -383,7 +371,7 @@ func opCodeCopy(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 	)
 	uint64CodeOffset, overflow := codeOffset.Uint64WithOverflow()
 	if overflow {
-		uint64CodeOffset = 0xffffffffffffffff
+		uint64CodeOffset = math.MaxUint64
 	}
 	codeCopy := getData(scope.Contract.Code, uint64CodeOffset, length.Uint64())
 	scope.Memory.Set(memOffset.Uint64(), length.Uint64(), codeCopy)
@@ -401,7 +389,7 @@ func opExtCodeCopy(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext)
 	)
 	uint64CodeOffset, overflow := codeOffset.Uint64WithOverflow()
 	if overflow {
-		uint64CodeOffset = 0xffffffffffffffff
+		uint64CodeOffset = math.MaxUint64
 	}
 	addr := common.Address(a.Bytes20())
 	codeCopy := getData(interpreter.evm.StateDB.GetCode(addr), uint64CodeOffset, length.Uint64())
@@ -431,7 +419,7 @@ func opExtCodeCopy(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext)
 // emptyCodeHash. If the precompile account is not transferred any amount on a private or
 // customized chain, the return value will be zero.
 //
-//  5. Caller tries to get the code hash for an account which is marked as suicided
+//  5. Caller tries to get the code hash for an account which is marked as self-destructed
 //     in the current transaction, the code hash of this account should be returned.
 //
 //  6. Caller tries to get the code hash for an account which is marked as deleted, this
@@ -607,13 +595,8 @@ func opCreate(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 	stackvalue := size
 
 	scope.Contract.UseGas(gas)
-	//TODO: use uint256.Int instead of converting with toBig()
-	var bigVal = big0
-	if !value.IsZero() {
-		bigVal = value.ToBig()
-	}
 
-	res, addr, returnGas, suberr := interpreter.evm.Create(scope.Contract, input, gas, bigVal)
+	res, addr, returnGas, suberr := interpreter.evm.Create(scope.Contract, input, gas, &value)
 	// Push item on the stack based on the returned error. If the ruleset is
 	// homestead we must check for CodeStoreOutOfGasError (homestead only
 	// rule) and treat as an error, if the ruleset is frontier we must
@@ -652,13 +635,8 @@ func opCreate2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 	scope.Contract.UseGas(gas)
 	// reuse size int for stackvalue
 	stackvalue := size
-	//TODO: use uint256.Int instead of converting with toBig()
-	bigEndowment := big0
-	if !endowment.IsZero() {
-		bigEndowment = endowment.ToBig()
-	}
 	res, addr, returnGas, suberr := interpreter.evm.Create2(scope.Contract, input, gas,
-		bigEndowment, &salt)
+		&endowment, &salt)
 	// Push item on the stack based on the returned error.
 	if suberr != nil {
 		stackvalue.Clear()
@@ -691,16 +669,11 @@ func opCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 	if interpreter.readOnly && !value.IsZero() {
 		return nil, vmerrs.ErrWriteProtection
 	}
-	var bigVal = big0
-	//TODO: use uint256.Int instead of converting with toBig()
-	// By using big0 here, we save an alloc for the most common case (non-ether-transferring contract calls),
-	// but it would make more sense to extend the usage of uint256.Int
 	if !value.IsZero() {
 		gas += params.CallStipend
-		bigVal = value.ToBig()
 	}
+	ret, returnGas, err := interpreter.evm.Call(scope.Contract, toAddr, args, gas, &value)
 
-	ret, returnGas, err := interpreter.evm.Call(scope.Contract, toAddr, args, gas, bigVal)
 	if err != nil {
 		temp.Clear()
 	} else {
@@ -716,57 +689,6 @@ func opCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 	return ret, nil
 }
 
-// Note: opCallExpert was de-activated in ApricotPhase2.
-func opCallExpert(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
-	stack := scope.Stack
-	// Pop gas. The actual gas in interpreter.evm.callGasTemp.
-	// We can use this as a temporary value
-	temp := stack.pop()
-	gas := interpreter.evm.callGasTemp
-	// Pop other call parameters.
-	addr, value, cid, value2, inOffset, inSize, retOffset, retSize := stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop()
-	toAddr := common.Address(addr.Bytes20())
-	coinID := common.BigToHash(cid.ToBig())
-	// Get the arguments from the memory.
-	args := scope.Memory.GetPtr(int64(inOffset.Uint64()), int64(inSize.Uint64()))
-
-	// Note: this code fails to check that value2 is zero, which was a bug when CALLEX was active.
-	// The CALLEX opcode was de-activated in ApricotPhase2 resolving this issue.
-	if interpreter.readOnly && !value.IsZero() {
-		return nil, vmerrs.ErrWriteProtection
-	}
-	var bigVal = big0
-	//TODO: use uint256.Int instead of converting with toBig()
-	// By using big0 here, we save an alloc for the most common case (non-ether-transferring contract calls),
-	// but it would make more sense to extend the usage of uint256.Int
-	if !value.IsZero() {
-		gas += params.CallStipend
-		bigVal = value.ToBig()
-	}
-
-	var bigVal2 = big0
-	//TODO: use uint256.Int instead of converting with toBig()
-	// By using big0 here, we save an alloc for the most common case (non-ether-transferring contract calls),
-	// but it would make more sense to extend the usage of uint256.Int
-	if !value2.IsZero() {
-		bigVal2 = value2.ToBig()
-	}
-
-	ret, returnGas, err := interpreter.evm.CallExpert(scope.Contract, toAddr, args, gas, bigVal, coinID, bigVal2)
-	if err != nil {
-		temp.Clear()
-	} else {
-		temp.SetOne()
-	}
-	stack.push(&temp)
-	if err == nil || err == vmerrs.ErrExecutionReverted {
-		scope.Memory.Set(retOffset.Uint64(), retSize.Uint64(), ret)
-	}
-	scope.Contract.Gas += returnGas
-
-	interpreter.returnData = ret
-	return ret, nil
-}
 func opCallCode(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	// Pop gas. The actual gas is in interpreter.evm.callGasTemp.
 	stack := scope.Stack
@@ -779,14 +701,11 @@ func opCallCode(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 	// Get arguments from the memory.
 	args := scope.Memory.GetPtr(int64(inOffset.Uint64()), int64(inSize.Uint64()))
 
-	//TODO: use uint256.Int instead of converting with toBig()
-	var bigVal = big0
 	if !value.IsZero() {
 		gas += params.CallStipend
-		bigVal = value.ToBig()
 	}
 
-	ret, returnGas, err := interpreter.evm.CallCode(scope.Contract, toAddr, args, gas, bigVal)
+	ret, returnGas, err := interpreter.evm.CallCode(scope.Contract, toAddr, args, gas, &value)
 	if err != nil {
 		temp.Clear()
 	} else {
@@ -888,9 +807,25 @@ func opSelfdestruct(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 	beneficiary := scope.Stack.pop()
 	balance := interpreter.evm.StateDB.GetBalance(scope.Contract.Address())
 	interpreter.evm.StateDB.AddBalance(beneficiary.Bytes20(), balance)
-	interpreter.evm.StateDB.Suicide(scope.Contract.Address())
+	interpreter.evm.StateDB.SelfDestruct(scope.Contract.Address())
 	if tracer := interpreter.evm.Config.Tracer; tracer != nil {
-		tracer.CaptureEnter(SELFDESTRUCT, scope.Contract.Address(), beneficiary.Bytes20(), []byte{}, 0, balance)
+		tracer.CaptureEnter(SELFDESTRUCT, scope.Contract.Address(), beneficiary.Bytes20(), []byte{}, 0, balance.ToBig())
+		tracer.CaptureExit([]byte{}, 0, nil)
+	}
+	return nil, errStopToken
+}
+
+func opSelfdestruct6780(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	if interpreter.readOnly {
+		return nil, vmerrs.ErrWriteProtection
+	}
+	beneficiary := scope.Stack.pop()
+	balance := interpreter.evm.StateDB.GetBalance(scope.Contract.Address())
+	interpreter.evm.StateDB.SubBalance(scope.Contract.Address(), balance)
+	interpreter.evm.StateDB.AddBalance(beneficiary.Bytes20(), balance)
+	interpreter.evm.StateDB.Selfdestruct6780(scope.Contract.Address())
+	if tracer := interpreter.evm.Config.Tracer; tracer != nil {
+		tracer.CaptureEnter(SELFDESTRUCT, scope.Contract.Address(), beneficiary.Bytes20(), []byte{}, 0, balance.ToBig())
 		tracer.CaptureExit([]byte{}, 0, nil)
 	}
 	return nil, errStopToken

@@ -35,9 +35,9 @@ import (
 	"time"
 
 	"github.com/ava-labs/coreth/core/rawdb"
+	"github.com/ava-labs/coreth/core/types"
 	"github.com/ava-labs/coreth/metrics"
-	"github.com/ava-labs/coreth/trie"
-	"github.com/ava-labs/coreth/utils"
+	"github.com/ava-labs/coreth/triedb"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -124,7 +124,7 @@ type Snapshot interface {
 
 	// Account directly retrieves the account associated with a particular hash in
 	// the snapshot slim data format.
-	Account(hash common.Hash) (*Account, error)
+	Account(hash common.Hash) (*types.SlimAccount, error)
 
 	// AccountRLP directly retrieves the account RLP associated with a particular
 	// hash in the snapshot slim data format.
@@ -186,7 +186,7 @@ type Config struct {
 type Tree struct {
 	config Config              // Snapshots configurations
 	diskdb ethdb.KeyValueStore // Persistent database to store the snapshot
-	triedb *trie.Database      // In-memory cache to access the trie through
+	triedb *triedb.Database    // In-memory cache to access the trie through
 	// Collection of all known layers
 	// blockHash -> snapshot
 	blockLayers map[common.Hash]snapshot
@@ -208,7 +208,7 @@ type Tree struct {
 // If the snapshot is missing or the disk layer is broken, the snapshot will be
 // reconstructed using both the existing data and the state trie.
 // The repair happens on a background thread.
-func New(config Config, diskdb ethdb.KeyValueStore, triedb *trie.Database, blockHash, root common.Hash) (*Tree, error) {
+func New(config Config, diskdb ethdb.KeyValueStore, triedb *triedb.Database, blockHash, root common.Hash) (*Tree, error) {
 	// Create a new, empty snapshot tree
 	snap := &Tree{
 		config:      config,
@@ -577,7 +577,10 @@ func (dl *diskLayer) abortGeneration() bool {
 	}
 
 	// If the disk layer is running a snapshot generator, abort it
-	if dl.genAbort != nil && dl.genStats == nil {
+	dl.lock.RLock()
+	shouldAbort := dl.genAbort != nil && dl.genStats == nil
+	dl.lock.RUnlock()
+	if shouldAbort {
 		abort := make(chan struct{})
 		dl.genAbort <- abort
 		<-abort
@@ -737,6 +740,13 @@ func diffToDisk(bottom *diffLayer) (*diskLayer, bool, error) {
 		}
 	}
 	return res, base.genMarker == nil, nil
+}
+
+// Release releases resources
+func (t *Tree) Release() {
+	if dl := t.disklayer(); dl != nil {
+		dl.Release()
+	}
 }
 
 // Rebuild wipes all available snapshot data from the persistent database and
@@ -920,51 +930,20 @@ func (t *Tree) DiskRoot() common.Hash {
 	return t.diskRoot()
 }
 
-func (t *Tree) DiskAccountIterator(seek common.Hash) AccountIterator {
-	t.lock.Lock()
-	defer t.lock.Unlock()
+// Size returns the memory usage of the diff layers above the disk layer and the
+// dirty nodes buffered in the disk layer. Currently, the implementation uses a
+// special diff layer (the first) as an aggregator simulating a dirty buffer, so
+// the second return will always be 0. However, this will be made consistent with
+// the pathdb, which will require a second return.
+func (t *Tree) Size() (diffs common.StorageSize, buf common.StorageSize) {
+	t.lock.RLock()
+	defer t.lock.RUnlock()
 
-	return t.disklayer().AccountIterator(seek)
-}
-
-func (t *Tree) DiskStorageIterator(account common.Hash, seek common.Hash) StorageIterator {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	it, _ := t.disklayer().StorageIterator(account, seek)
-	return it
-}
-
-// NewDiskLayer creates a diskLayer for direct access to the contents of the on-disk
-// snapshot. Does not perform any validation.
-func NewDiskLayer(diskdb ethdb.KeyValueStore) Snapshot {
-	return &diskLayer{
-		diskdb:  diskdb,
-		created: time.Now(),
-
-		// state sync uses iterators to access data, so this cache is not used.
-		// initializing it out of caution.
-		cache: utils.NewMeteredCache(32*1024, "", "", 0),
+	var size common.StorageSize
+	for _, layer := range t.blockLayers {
+		if layer, ok := layer.(*diffLayer); ok {
+			size += common.StorageSize(layer.memory)
+		}
 	}
-}
-
-// NewTestTree creates a *Tree with a pre-populated diskLayer
-func NewTestTree(diskdb ethdb.KeyValueStore, blockHash, root common.Hash) *Tree {
-	base := &diskLayer{
-		diskdb:    diskdb,
-		root:      root,
-		blockHash: blockHash,
-		cache:     utils.NewMeteredCache(128*256, "", "", 0),
-		created:   time.Now(),
-	}
-	return &Tree{
-		blockLayers: map[common.Hash]snapshot{
-			blockHash: base,
-		},
-		stateLayers: map[common.Hash]map[common.Hash]snapshot{
-			root: {
-				blockHash: base,
-			},
-		},
-	}
+	return size, 0
 }

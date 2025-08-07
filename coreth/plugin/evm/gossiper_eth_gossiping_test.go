@@ -8,7 +8,6 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"math/big"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -17,16 +16,16 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/set"
 
+	commonEng "github.com/ava-labs/avalanchego/snow/engine/common"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/ava-labs/coreth/core"
 	"github.com/ava-labs/coreth/core/types"
 	"github.com/ava-labs/coreth/params"
-	"github.com/ava-labs/coreth/plugin/evm/message"
 )
 
 func fundAddressByGenesis(addrs []common.Address) (string, error) {
@@ -35,9 +34,9 @@ func fundAddressByGenesis(addrs []common.Address) (string, error) {
 		Difficulty: common.Big0,
 		GasLimit:   uint64(5000000),
 	}
-	funds := make(map[common.Address]core.GenesisAccount)
+	funds := make(map[common.Address]types.GenesisAccount)
 	for _, addr := range addrs {
-		funds[addr] = core.GenesisAccount{
+		funds[addr] = types.GenesisAccount{
 			Balance: balance,
 		}
 	}
@@ -65,170 +64,15 @@ func getValidEthTxs(key *ecdsa.PrivateKey, count int, gasPrice *big.Int) []*type
 				gasPrice,
 				[]byte(strings.Repeat("aaaaaaaaaa", 100))),
 			types.HomesteadSigner{}, key)
-		tx.SetFirstSeen(time.Now().Add(-1 * time.Minute))
+		tx.SetTime(time.Now().Add(-1 * time.Minute))
 		res[i] = tx
 	}
 	return res
 }
 
-// show that locally issued eth txs are gossiped
-// Note: channel through which coreth mempool push txs to vm is injected here
-// to ease up UT, which target only VM behaviors in response to coreth mempool
-// signals
-func TestMempoolEthTxsAddedTxsGossipedAfterActivation(t *testing.T) {
-	if os.Getenv("RUN_FLAKY_TESTS") != "true" {
-		t.Skip("FLAKY")
-	}
-	assert := assert.New(t)
-
-	key, err := crypto.GenerateKey()
-	assert.NoError(err)
-
-	addr := crypto.PubkeyToAddress(key.PublicKey)
-
-	genesisJSON, err := fundAddressByGenesis([]common.Address{addr})
-	assert.NoError(err)
-
-	_, vm, _, _, sender := GenesisVM(t, true, genesisJSON, "", "")
-	defer func() {
-		err := vm.Shutdown(context.Background())
-		assert.NoError(err)
-	}()
-	vm.txPool.SetGasPrice(common.Big1)
-	vm.txPool.SetMinFee(common.Big0)
-
-	// create eth txes
-	ethTxs := getValidEthTxs(key, 3, common.Big1)
-
-	var wg sync.WaitGroup
-	wg.Add(2)
-	sender.CantSendAppGossip = false
-	signal1 := make(chan struct{})
-	seen := 0
-	sender.SendAppGossipF = func(_ context.Context, gossipedBytes []byte) error {
-		if seen == 0 {
-			notifyMsgIntf, err := message.ParseGossipMessage(vm.networkCodec, gossipedBytes)
-			assert.NoError(err)
-
-			requestMsg, ok := notifyMsgIntf.(message.EthTxsGossip)
-			assert.True(ok)
-			assert.NotEmpty(requestMsg.Txs)
-
-			txs := make([]*types.Transaction, 0)
-			assert.NoError(rlp.DecodeBytes(requestMsg.Txs, &txs))
-			assert.Len(txs, 2)
-			assert.ElementsMatch(
-				[]common.Hash{ethTxs[0].Hash(), ethTxs[1].Hash()},
-				[]common.Hash{txs[0].Hash(), txs[1].Hash()},
-			)
-			seen++
-			close(signal1)
-		} else if seen == 1 {
-			notifyMsgIntf, err := message.ParseGossipMessage(vm.networkCodec, gossipedBytes)
-			assert.NoError(err)
-
-			requestMsg, ok := notifyMsgIntf.(message.EthTxsGossip)
-			assert.True(ok)
-			assert.NotEmpty(requestMsg.Txs)
-
-			txs := make([]*types.Transaction, 0)
-			assert.NoError(rlp.DecodeBytes(requestMsg.Txs, &txs))
-			assert.Len(txs, 1)
-			assert.Equal(ethTxs[2].Hash(), txs[0].Hash())
-
-			seen++
-		} else {
-			t.Fatal("should not be seen 3 times")
-		}
-		wg.Done()
-		return nil
-	}
-
-	// Notify VM about eth txs
-	errs := vm.txPool.AddRemotesSync(ethTxs[:2])
-	for _, err := range errs {
-		assert.NoError(err, "failed adding coreth tx to mempool")
-	}
-
-	// Gossip txs again (shouldn't gossip hashes)
-	<-signal1 // wait until reorg processed
-	assert.NoError(vm.gossiper.GossipEthTxs(ethTxs[:2]))
-
-	errs = vm.txPool.AddRemotesSync(ethTxs)
-	assert.Contains(errs[0].Error(), "already known")
-	assert.Contains(errs[1].Error(), "already known")
-	assert.NoError(errs[2], "failed adding coreth tx to mempool")
-
-	attemptAwait(t, &wg, 5*time.Second)
-}
-
-// show that locally issued eth txs are chunked correctly
-func TestMempoolEthTxsAddedTxsGossipedAfterActivationChunking(t *testing.T) {
-	if os.Getenv("RUN_FLAKY_TESTS") != "true" {
-		t.Skip("FLAKY")
-	}
-	assert := assert.New(t)
-
-	key, err := crypto.GenerateKey()
-	assert.NoError(err)
-
-	addr := crypto.PubkeyToAddress(key.PublicKey)
-
-	genesisJSON, err := fundAddressByGenesis([]common.Address{addr})
-	assert.NoError(err)
-
-	_, vm, _, _, sender := GenesisVM(t, true, genesisJSON, "", "")
-	defer func() {
-		err := vm.Shutdown(context.Background())
-		assert.NoError(err)
-	}()
-	vm.txPool.SetGasPrice(common.Big1)
-	vm.txPool.SetMinFee(common.Big0)
-
-	// create eth txes
-	ethTxs := getValidEthTxs(key, 100, common.Big1)
-
-	var wg sync.WaitGroup
-	wg.Add(2)
-	sender.CantSendAppGossip = false
-	seen := map[common.Hash]struct{}{}
-	sender.SendAppGossipF = func(_ context.Context, gossipedBytes []byte) error {
-		notifyMsgIntf, err := message.ParseGossipMessage(vm.networkCodec, gossipedBytes)
-		assert.NoError(err)
-
-		requestMsg, ok := notifyMsgIntf.(message.EthTxsGossip)
-		assert.True(ok)
-		assert.NotEmpty(requestMsg.Txs)
-
-		txs := make([]*types.Transaction, 0)
-		assert.NoError(rlp.DecodeBytes(requestMsg.Txs, &txs))
-		for _, tx := range txs {
-			seen[tx.Hash()] = struct{}{}
-		}
-		wg.Done()
-		return nil
-	}
-
-	// Notify VM about eth txs
-	errs := vm.txPool.AddRemotesSync(ethTxs)
-	for _, err := range errs {
-		assert.NoError(err, "failed adding coreth tx to mempool")
-	}
-
-	attemptAwait(t, &wg, 5*time.Second)
-
-	for _, tx := range ethTxs {
-		_, ok := seen[tx.Hash()]
-		assert.True(ok, "missing hash: %v", tx.Hash())
-	}
-}
-
 // show that a geth tx discovered from gossip is requested to the same node that
 // gossiped it
 func TestMempoolEthTxsAppGossipHandling(t *testing.T) {
-	if os.Getenv("RUN_FLAKY_TESTS") != "true" {
-		t.Skip("FLAKY")
-	}
 	assert := assert.New(t)
 
 	key, err := crypto.GenerateKey()
@@ -244,7 +88,7 @@ func TestMempoolEthTxsAppGossipHandling(t *testing.T) {
 		err := vm.Shutdown(context.Background())
 		assert.NoError(err)
 	}()
-	vm.txPool.SetGasPrice(common.Big1)
+	vm.txPool.SetGasTip(common.Big1)
 	vm.txPool.SetMinFee(common.Big0)
 
 	var (
@@ -257,7 +101,7 @@ func TestMempoolEthTxsAppGossipHandling(t *testing.T) {
 		return nil
 	}
 	wg.Add(1)
-	sender.SendAppGossipF = func(context.Context, []byte) error {
+	sender.SendAppGossipF = func(context.Context, commonEng.SendConfig, []byte) error {
 		wg.Done()
 		return nil
 	}
@@ -265,17 +109,9 @@ func TestMempoolEthTxsAppGossipHandling(t *testing.T) {
 	// prepare a tx
 	tx := getValidEthTxs(key, 1, common.Big1)[0]
 
-	// show that unknown coreth hashes is requested
-	txBytes, err := rlp.EncodeToBytes([]*types.Transaction{tx})
-	assert.NoError(err)
-	msg := message.EthTxsGossip{
-		Txs: txBytes,
-	}
-	msgBytes, err := message.BuildGossipMessage(vm.networkCodec, msg)
-	assert.NoError(err)
-
-	nodeID := ids.GenerateTestNodeID()
-	err = vm.AppGossip(context.Background(), nodeID, msgBytes)
+	// Txs must be submitted over the API to be included in push gossip.
+	// (i.e., txs received via p2p are not included in push gossip)
+	err = vm.eth.APIBackend.SendTx(context.Background(), tx)
 	assert.NoError(err)
 	assert.False(txRequested, "tx should not be requested")
 
@@ -283,101 +119,20 @@ func TestMempoolEthTxsAppGossipHandling(t *testing.T) {
 	attemptAwait(t, &wg, 5*time.Second)
 }
 
-func TestMempoolEthTxsRegossipSingleAccount(t *testing.T) {
-	assert := assert.New(t)
+func attemptAwait(t *testing.T, wg *sync.WaitGroup, delay time.Duration) {
+	ticker := make(chan struct{})
 
-	key, err := crypto.GenerateKey()
-	assert.NoError(err)
-
-	addr := crypto.PubkeyToAddress(key.PublicKey)
-
-	genesisJSON, err := fundAddressByGenesis([]common.Address{addr})
-	assert.NoError(err)
-
-	_, vm, _, _, _ := GenesisVM(t, true, genesisJSON, `{"local-txs-enabled":true}`, "")
-	defer func() {
-		err := vm.Shutdown(context.Background())
-		assert.NoError(err)
+	// Wait for [wg] and then close [ticket] to indicate that
+	// the wait group has finished.
+	go func() {
+		wg.Wait()
+		close(ticker)
 	}()
-	vm.txPool.SetGasPrice(common.Big1)
-	vm.txPool.SetMinFee(common.Big0)
 
-	// create eth txes
-	ethTxs := getValidEthTxs(key, 10, big.NewInt(226*params.GWei))
-
-	// Notify VM about eth txs
-	errs := vm.txPool.AddRemotesSync(ethTxs)
-	for _, err := range errs {
-		assert.NoError(err, "failed adding coreth tx to remote mempool")
+	select {
+	case <-time.After(delay):
+		t.Fatal("Timed out waiting for wait group to complete")
+	case <-ticker:
+		// The wait group completed without issue
 	}
-
-	// Only 1 transaction will be regossiped for an address (should be lowest
-	// nonce)
-	pushNetwork := vm.gossiper.(*pushGossiper)
-	queued := pushNetwork.queueRegossipTxs()
-	assert.Len(queued, 1, "unexpected length of queued txs")
-	assert.Equal(ethTxs[0].Hash(), queued[0].Hash())
-}
-
-func TestMempoolEthTxsRegossip(t *testing.T) {
-	assert := assert.New(t)
-
-	keys := make([]*ecdsa.PrivateKey, 20)
-	addrs := make([]common.Address, 20)
-	for i := 0; i < 20; i++ {
-		key, err := crypto.GenerateKey()
-		assert.NoError(err)
-		keys[i] = key
-		addrs[i] = crypto.PubkeyToAddress(key.PublicKey)
-	}
-
-	genesisJSON, err := fundAddressByGenesis(addrs)
-	assert.NoError(err)
-
-	_, vm, _, _, _ := GenesisVM(t, true, genesisJSON, `{"local-txs-enabled":true}`, "")
-	defer func() {
-		err := vm.Shutdown(context.Background())
-		assert.NoError(err)
-	}()
-	vm.txPool.SetGasPrice(common.Big1)
-	vm.txPool.SetMinFee(common.Big0)
-
-	// create eth txes
-	ethTxs := make([]*types.Transaction, 20)
-	ethTxHashes := make([]common.Hash, 20)
-	for i := 0; i < 20; i++ {
-		txs := getValidEthTxs(keys[i], 1, big.NewInt(226*params.GWei))
-		tx := txs[0]
-		ethTxs[i] = tx
-		ethTxHashes[i] = tx.Hash()
-	}
-
-	// Notify VM about eth txs
-	errs := vm.txPool.AddRemotesSync(ethTxs[:10])
-	for _, err := range errs {
-		assert.NoError(err, "failed adding coreth tx to remote mempool")
-	}
-	errs = vm.txPool.AddLocals(ethTxs[10:])
-	for _, err := range errs {
-		assert.NoError(err, "failed adding coreth tx to local mempool")
-	}
-
-	// We expect 15 transactions (the default max number of transactions to
-	// regossip) comprised of 10 local txs and 5 remote txs (we prioritize local
-	// txs over remote).
-	pushNetwork := vm.gossiper.(*pushGossiper)
-	queued := pushNetwork.queueRegossipTxs()
-	assert.Len(queued, 15, "unexpected length of queued txs")
-
-	// Confirm queued transactions (should be ordered based on
-	// timestamp submitted, with local priorized over remote)
-	queuedTxHashes := make([]common.Hash, 15)
-	for i, tx := range queued {
-		queuedTxHashes[i] = tx.Hash()
-	}
-	assert.ElementsMatch(queuedTxHashes[:10], ethTxHashes[10:], "missing local transactions")
-
-	// NOTE: We don't care which remote transactions are included in this test
-	// (due to the non-deterministic way pending transactions are surfaced, this can be difficult
-	// to assert as well).
 }

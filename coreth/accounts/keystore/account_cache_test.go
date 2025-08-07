@@ -27,12 +27,12 @@
 package keystore
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"reflect"
-	"sort"
 	"testing"
 	"time"
 
@@ -40,6 +40,7 @@ import (
 	"github.com/cespare/cp"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/ethereum/go-ethereum/common"
+	"golang.org/x/exp/slices"
 )
 
 var (
@@ -77,14 +78,14 @@ func waitWatcherStart(ks *KeyStore) bool {
 
 func waitForAccounts(wantAccounts []accounts.Account, ks *KeyStore) error {
 	var list []accounts.Account
-	for t0 := time.Now(); time.Since(t0) < 5*time.Second; time.Sleep(200 * time.Millisecond) {
+	for t0 := time.Now(); time.Since(t0) < 5*time.Second; time.Sleep(100 * time.Millisecond) {
 		list = ks.Accounts()
 		if reflect.DeepEqual(list, wantAccounts) {
 			// ks should have also received change notifications
 			select {
 			case <-ks.changes:
 			default:
-				return fmt.Errorf("wasn't notified of new accounts")
+				return errors.New("wasn't notified of new accounts")
 			}
 			return nil
 		}
@@ -161,6 +162,7 @@ func TestWatchNoDir(t *testing.T) {
 }
 
 func TestCacheInitialReload(t *testing.T) {
+	t.Parallel()
 	cache, _ := newAccountCache(cachetestDir)
 	accounts := cache.accounts()
 	if !reflect.DeepEqual(accounts, cachetestAccounts) {
@@ -169,6 +171,7 @@ func TestCacheInitialReload(t *testing.T) {
 }
 
 func TestCacheAddDeleteOrder(t *testing.T) {
+	t.Parallel()
 	cache, _ := newAccountCache("testdata/no-such-dir")
 	cache.watcher.running = true // prevent unexpected reloads
 
@@ -212,7 +215,7 @@ func TestCacheAddDeleteOrder(t *testing.T) {
 	// Check that the account list is sorted by filename.
 	wantAccounts := make([]accounts.Account, len(accs))
 	copy(wantAccounts, accs)
-	sort.Sort(accountsByURL(wantAccounts))
+	slices.SortFunc(wantAccounts, byURL)
 	list := cache.accounts()
 	if !reflect.DeepEqual(list, wantAccounts) {
 		t.Fatalf("got accounts: %s\nwant %s", spew.Sdump(accs), spew.Sdump(wantAccounts))
@@ -253,6 +256,7 @@ func TestCacheAddDeleteOrder(t *testing.T) {
 }
 
 func TestCacheFind(t *testing.T) {
+	t.Parallel()
 	dir := filepath.Join("testdata", "dir")
 	cache, _ := newAccountCache(dir)
 	cache.watcher.running = true // prevent unexpected reloads
@@ -358,7 +362,7 @@ func TestUpdatedKeyfileContents(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	// needed so that modTime of `file` is different to its current value after forceCopyFile
+	// needed so that modTime of `file` will be greater than its current value after forceCopyFile
 	time.Sleep(time.Second)
 
 	// Now replace file contents
@@ -374,7 +378,7 @@ func TestUpdatedKeyfileContents(t *testing.T) {
 		return
 	}
 
-	// needed so that modTime of `file` is different to its current value after forceCopyFile
+	// needed so that modTime of `file` will be greater than its current value after forceCopyFile
 	time.Sleep(time.Second)
 
 	// Now replace file contents again
@@ -390,7 +394,7 @@ func TestUpdatedKeyfileContents(t *testing.T) {
 		return
 	}
 
-	// needed so that modTime of `file` is different to its current value after os.WriteFile
+	// needed so that modTime of `file` will be greater than its current value after os.WriteFile
 	time.Sleep(time.Second)
 
 	// Now replace file contents with crap

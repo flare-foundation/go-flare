@@ -33,32 +33,25 @@ type pendingAppRequest struct {
 	callback  AppResponseCallback
 }
 
-type pendingCrossChainAppRequest struct {
-	handlerID string
-	callback  CrossChainAppResponseCallback
-}
-
-// meteredHandler emits metrics for a Handler
-type meteredHandler struct {
-	*responder
-	metrics
-}
-
 type metrics struct {
-	appRequestTime                  *prometheus.CounterVec
-	appRequestCount                 *prometheus.CounterVec
-	appResponseTime                 *prometheus.CounterVec
-	appResponseCount                *prometheus.CounterVec
-	appRequestFailedTime            *prometheus.CounterVec
-	appRequestFailedCount           *prometheus.CounterVec
-	appGossipTime                   *prometheus.CounterVec
-	appGossipCount                  *prometheus.CounterVec
-	crossChainAppRequestTime        *prometheus.CounterVec
-	crossChainAppRequestCount       *prometheus.CounterVec
-	crossChainAppResponseTime       *prometheus.CounterVec
-	crossChainAppResponseCount      *prometheus.CounterVec
-	crossChainAppRequestFailedTime  *prometheus.CounterVec
-	crossChainAppRequestFailedCount *prometheus.CounterVec
+	msgTime  *prometheus.GaugeVec
+	msgCount *prometheus.CounterVec
+}
+
+func (m *metrics) observe(labels prometheus.Labels, start time.Time) error {
+	metricTime, err := m.msgTime.GetMetricWith(labels)
+	if err != nil {
+		return err
+	}
+
+	metricCount, err := m.msgCount.GetMetricWith(labels)
+	if err != nil {
+		return err
+	}
+
+	metricTime.Add(float64(time.Since(start)))
+	metricCount.Inc()
+	return nil
 }
 
 // router routes incoming application messages to the corresponding registered
@@ -69,11 +62,10 @@ type router struct {
 	sender  common.AppSender
 	metrics metrics
 
-	lock                         sync.RWMutex
-	handlers                     map[uint64]*meteredHandler
-	pendingAppRequests           map[uint32]pendingAppRequest
-	pendingCrossChainAppRequests map[uint32]pendingCrossChainAppRequest
-	requestID                    uint32
+	lock               sync.RWMutex
+	handlers           map[uint64]*responder
+	pendingAppRequests map[uint32]pendingAppRequest
+	requestID          uint32
 }
 
 // newRouter returns a new instance of Router
@@ -83,12 +75,11 @@ func newRouter(
 	metrics metrics,
 ) *router {
 	return &router{
-		log:                          log,
-		sender:                       sender,
-		metrics:                      metrics,
-		handlers:                     make(map[uint64]*meteredHandler),
-		pendingAppRequests:           make(map[uint32]pendingAppRequest),
-		pendingCrossChainAppRequests: make(map[uint32]pendingCrossChainAppRequest),
+		log:                log,
+		sender:             sender,
+		metrics:            metrics,
+		handlers:           make(map[uint64]*responder),
+		pendingAppRequests: make(map[uint32]pendingAppRequest),
 		// invariant: sdk uses odd-numbered requestIDs
 		requestID: 1,
 	}
@@ -102,14 +93,11 @@ func (r *router) addHandler(handlerID uint64, handler Handler) error {
 		return fmt.Errorf("failed to register handler id %d: %w", handlerID, ErrExistingAppProtocol)
 	}
 
-	r.handlers[handlerID] = &meteredHandler{
-		responder: &responder{
-			Handler:   handler,
-			handlerID: handlerID,
-			log:       r.log,
-			sender:    r.sender,
-		},
-		metrics: r.metrics,
+	r.handlers[handlerID] = &responder{
+		Handler:   handler,
+		handlerID: handlerID,
+		log:       r.log,
+		sender:    r.sender,
 	}
 
 	return nil
@@ -124,14 +112,18 @@ func (r *router) AppRequest(ctx context.Context, nodeID ids.NodeID, requestID ui
 	start := time.Now()
 	parsedMsg, handler, handlerID, ok := r.parse(request)
 	if !ok {
-		r.log.Debug("failed to process message",
+		r.log.Debug("received message for unregistered handler",
 			zap.Stringer("messageOp", message.AppRequestOp),
 			zap.Stringer("nodeID", nodeID),
 			zap.Uint32("requestID", requestID),
 			zap.Time("deadline", deadline),
 			zap.Binary("message", request),
 		)
-		return nil
+
+		// Send an error back to the requesting peer. Invalid requests that we
+		// cannot parse a handler id for are handled the same way as requests
+		// for which we do not have a registered handler.
+		return r.sender.SendAppError(ctx, nodeID, requestID, ErrUnregisteredHandler.Code, ErrUnregisteredHandler.Message)
 	}
 
 	// call the corresponding handler and send back a response to nodeID
@@ -139,24 +131,13 @@ func (r *router) AppRequest(ctx context.Context, nodeID ids.NodeID, requestID ui
 		return err
 	}
 
-	labels := prometheus.Labels{
-		handlerLabel: handlerID,
-	}
-
-	metricCount, err := r.metrics.appRequestCount.GetMetricWith(labels)
-	if err != nil {
-		return err
-	}
-
-	metricTime, err := r.metrics.appRequestTime.GetMetricWith(labels)
-	if err != nil {
-		return err
-	}
-
-	metricCount.Inc()
-	metricTime.Add(float64(time.Since(start)))
-
-	return nil
+	return r.metrics.observe(
+		prometheus.Labels{
+			opLabel:      message.AppRequestOp.String(),
+			handlerLabel: handlerID,
+		},
+		start,
+	)
 }
 
 // AppRequestFailed routes an AppRequestFailed message to the callback
@@ -174,24 +155,13 @@ func (r *router) AppRequestFailed(ctx context.Context, nodeID ids.NodeID, reques
 
 	pending.callback(ctx, nodeID, nil, appErr)
 
-	labels := prometheus.Labels{
-		handlerLabel: pending.handlerID,
-	}
-
-	metricCount, err := r.metrics.appRequestFailedCount.GetMetricWith(labels)
-	if err != nil {
-		return err
-	}
-
-	metricTime, err := r.metrics.appRequestFailedTime.GetMetricWith(labels)
-	if err != nil {
-		return err
-	}
-
-	metricCount.Inc()
-	metricTime.Add(float64(time.Since(start)))
-
-	return nil
+	return r.metrics.observe(
+		prometheus.Labels{
+			opLabel:      message.AppErrorOp.String(),
+			handlerLabel: pending.handlerID,
+		},
+		start,
+	)
 }
 
 // AppResponse routes an AppResponse message to the callback corresponding to
@@ -209,24 +179,13 @@ func (r *router) AppResponse(ctx context.Context, nodeID ids.NodeID, requestID u
 
 	pending.callback(ctx, nodeID, response, nil)
 
-	labels := prometheus.Labels{
-		handlerLabel: pending.handlerID,
-	}
-
-	metricCount, err := r.metrics.appResponseCount.GetMetricWith(labels)
-	if err != nil {
-		return err
-	}
-
-	metricTime, err := r.metrics.appResponseTime.GetMetricWith(labels)
-	if err != nil {
-		return err
-	}
-
-	metricCount.Inc()
-	metricTime.Add(float64(time.Since(start)))
-
-	return nil
+	return r.metrics.observe(
+		prometheus.Labels{
+			opLabel:      message.AppResponseOp.String(),
+			handlerLabel: pending.handlerID,
+		},
+		start,
+	)
 }
 
 // AppGossip routes an AppGossip message to a Handler based on the handler
@@ -238,7 +197,7 @@ func (r *router) AppGossip(ctx context.Context, nodeID ids.NodeID, gossip []byte
 	start := time.Now()
 	parsedMsg, handler, handlerID, ok := r.parse(gossip)
 	if !ok {
-		r.log.Debug("failed to process message",
+		r.log.Debug("received message for unregistered handler",
 			zap.Stringer("messageOp", message.AppGossipOp),
 			zap.Stringer("nodeID", nodeID),
 			zap.Binary("message", gossip),
@@ -248,144 +207,13 @@ func (r *router) AppGossip(ctx context.Context, nodeID ids.NodeID, gossip []byte
 
 	handler.AppGossip(ctx, nodeID, parsedMsg)
 
-	labels := prometheus.Labels{
-		handlerLabel: handlerID,
-	}
-
-	metricCount, err := r.metrics.appGossipCount.GetMetricWith(labels)
-	if err != nil {
-		return err
-	}
-
-	metricTime, err := r.metrics.appGossipTime.GetMetricWith(labels)
-	if err != nil {
-		return err
-	}
-
-	metricCount.Inc()
-	metricTime.Add(float64(time.Since(start)))
-
-	return nil
-}
-
-// CrossChainAppRequest routes a CrossChainAppRequest message to a Handler
-// based on the handler prefix. The message is dropped if no matching handler
-// can be found.
-//
-// Any error condition propagated outside Handler application logic is
-// considered fatal
-func (r *router) CrossChainAppRequest(
-	ctx context.Context,
-	chainID ids.ID,
-	requestID uint32,
-	deadline time.Time,
-	msg []byte,
-) error {
-	start := time.Now()
-	parsedMsg, handler, handlerID, ok := r.parse(msg)
-	if !ok {
-		r.log.Debug("failed to process message",
-			zap.Stringer("messageOp", message.CrossChainAppRequestOp),
-			zap.Stringer("chainID", chainID),
-			zap.Uint32("requestID", requestID),
-			zap.Time("deadline", deadline),
-			zap.Binary("message", msg),
-		)
-		return nil
-	}
-
-	if err := handler.CrossChainAppRequest(ctx, chainID, requestID, deadline, parsedMsg); err != nil {
-		return err
-	}
-
-	labels := prometheus.Labels{
-		handlerLabel: handlerID,
-	}
-
-	metricCount, err := r.metrics.crossChainAppRequestCount.GetMetricWith(labels)
-	if err != nil {
-		return err
-	}
-
-	metricTime, err := r.metrics.crossChainAppRequestTime.GetMetricWith(labels)
-	if err != nil {
-		return err
-	}
-
-	metricCount.Inc()
-	metricTime.Add(float64(time.Since(start)))
-
-	return nil
-}
-
-// CrossChainAppRequestFailed routes a CrossChainAppRequestFailed message to
-// the callback corresponding to requestID.
-//
-// Any error condition propagated outside Handler application logic is
-// considered fatal
-func (r *router) CrossChainAppRequestFailed(ctx context.Context, chainID ids.ID, requestID uint32, appErr *common.AppError) error {
-	start := time.Now()
-	pending, ok := r.clearCrossChainAppRequest(requestID)
-	if !ok {
-		// we should never receive a timeout without a corresponding requestID
-		return ErrUnrequestedResponse
-	}
-
-	pending.callback(ctx, chainID, nil, appErr)
-
-	labels := prometheus.Labels{
-		handlerLabel: pending.handlerID,
-	}
-
-	metricCount, err := r.metrics.crossChainAppRequestFailedCount.GetMetricWith(labels)
-	if err != nil {
-		return err
-	}
-
-	metricTime, err := r.metrics.crossChainAppRequestFailedTime.GetMetricWith(labels)
-	if err != nil {
-		return err
-	}
-
-	metricCount.Inc()
-	metricTime.Add(float64(time.Since(start)))
-
-	return nil
-}
-
-// CrossChainAppResponse routes a CrossChainAppResponse message to the callback
-// corresponding to requestID.
-//
-// Any error condition propagated outside Handler application logic is
-// considered fatal
-func (r *router) CrossChainAppResponse(ctx context.Context, chainID ids.ID, requestID uint32, response []byte) error {
-	start := time.Now()
-	pending, ok := r.clearCrossChainAppRequest(requestID)
-	if !ok {
-		// we should never receive a timeout without a corresponding requestID
-		return ErrUnrequestedResponse
-	}
-
-	pending.callback(ctx, chainID, response, nil)
-
-	labels := prometheus.Labels{
-		handlerLabel: pending.handlerID,
-	}
-
-	metricCount, err := r.metrics.crossChainAppResponseCount.GetMetricWith(labels)
-	if err != nil {
-		return err
-	}
-
-	metricTime, err := r.metrics.crossChainAppResponseTime.GetMetricWith(labels)
-	if err != nil {
-		return err
-	}
-
-	metricCount.Inc()
-	metricTime.Add(float64(time.Since(start)))
-
-	return nil
+	return r.metrics.observe(
+		prometheus.Labels{
+			opLabel:      message.AppGossipOp.String(),
+			handlerLabel: handlerID,
+		},
+		start,
+	)
 }
 
 // Parse parses a gossip or request message and maps it to a corresponding
@@ -398,7 +226,7 @@ func (r *router) CrossChainAppResponse(ctx context.Context, chainID ids.ID, requ
 // - A boolean indicating that parsing succeeded.
 //
 // Invariant: Assumes [r.lock] isn't held.
-func (r *router) parse(prefixedMsg []byte) ([]byte, *meteredHandler, string, bool) {
+func (r *router) parse(prefixedMsg []byte) ([]byte, *responder, string, bool) {
 	handlerID, msg, ok := ParseMessage(prefixedMsg)
 	if !ok {
 		return nil, nil, "", false
@@ -420,16 +248,6 @@ func (r *router) clearAppRequest(requestID uint32) (pendingAppRequest, bool) {
 
 	callback, ok := r.pendingAppRequests[requestID]
 	delete(r.pendingAppRequests, requestID)
-	return callback, ok
-}
-
-// Invariant: Assumes [r.lock] isn't held.
-func (r *router) clearCrossChainAppRequest(requestID uint32) (pendingCrossChainAppRequest, bool) {
-	r.lock.Lock()
-	defer r.lock.Unlock()
-
-	callback, ok := r.pendingCrossChainAppRequests[requestID]
-	delete(r.pendingCrossChainAppRequests, requestID)
 	return callback, ok
 }
 

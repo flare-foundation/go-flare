@@ -4,12 +4,11 @@
 package keystore
 
 import (
+	"errors"
 	"math"
-	"time"
 
 	"github.com/ava-labs/avalanchego/codec"
 	"github.com/ava-labs/avalanchego/codec/linearcodec"
-	"github.com/ava-labs/avalanchego/utils"
 )
 
 const CodecVersion = 0
@@ -20,12 +19,12 @@ var (
 )
 
 func init() {
-	c := linearcodec.NewDefault(time.Time{})
+	c := linearcodec.NewDefault()
 	Codec = codec.NewDefaultManager()
-	lc := linearcodec.NewDefault(time.Time{})
+	lc := linearcodec.NewDefault()
 	LegacyCodec = codec.NewManager(math.MaxInt32)
 
-	err := utils.Err(
+	err := errors.Join(
 		Codec.RegisterCodec(CodecVersion, c),
 		LegacyCodec.RegisterCodec(CodecVersion, lc),
 	)

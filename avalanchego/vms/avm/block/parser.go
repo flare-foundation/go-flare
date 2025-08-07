@@ -4,11 +4,10 @@
 package block
 
 import (
+	"errors"
 	"reflect"
-	"time"
 
 	"github.com/ava-labs/avalanchego/codec"
-	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 	"github.com/ava-labs/avalanchego/vms/avm/fxs"
@@ -31,15 +30,15 @@ type parser struct {
 	txs.Parser
 }
 
-func NewParser(cortinaTime time.Time, durangoTime time.Time, fxs []fxs.Fx) (Parser, error) {
-	p, err := txs.NewParser(cortinaTime, durangoTime, fxs)
+func NewParser(fxs []fxs.Fx) (Parser, error) {
+	p, err := txs.NewParser(fxs)
 	if err != nil {
 		return nil, err
 	}
 	c := p.CodecRegistry()
 	gc := p.GenesisCodecRegistry()
 
-	err = utils.Err(
+	err = errors.Join(
 		c.RegisterType(&StandardBlock{}),
 		gc.RegisterType(&StandardBlock{}),
 	)
@@ -49,21 +48,19 @@ func NewParser(cortinaTime time.Time, durangoTime time.Time, fxs []fxs.Fx) (Pars
 }
 
 func NewCustomParser(
-	cortinaTime time.Time,
-	durangoTime time.Time,
 	typeToFxIndex map[reflect.Type]int,
 	clock *mockable.Clock,
 	log logging.Logger,
 	fxs []fxs.Fx,
 ) (Parser, error) {
-	p, err := txs.NewCustomParser(cortinaTime, durangoTime, typeToFxIndex, clock, log, fxs)
+	p, err := txs.NewCustomParser(typeToFxIndex, clock, log, fxs)
 	if err != nil {
 		return nil, err
 	}
 	c := p.CodecRegistry()
 	gc := p.GenesisCodecRegistry()
 
-	err = utils.Err(
+	err = errors.Join(
 		c.RegisterType(&StandardBlock{}),
 		gc.RegisterType(&StandardBlock{}),
 	)

@@ -17,7 +17,10 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/network/p2p"
 	"github.com/ava-labs/avalanchego/proto/pb/sdk"
-	"github.com/ava-labs/avalanchego/snow/engine/common"
+	"github.com/ava-labs/avalanchego/snow/engine/enginetest"
+	"github.com/ava-labs/avalanchego/snow/validators"
+	"github.com/ava-labs/avalanchego/snow/validators/validatorstest"
+	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/utils/units"
@@ -102,7 +105,7 @@ func TestGossiperGossip(t *testing.T) {
 			require := require.New(t)
 			ctx := context.Background()
 
-			responseSender := &common.FakeSender{
+			responseSender := &enginetest.SenderStub{
 				SentAppResponse: make(chan []byte, 1),
 			}
 			responseNetwork, err := p2p.NewNetwork(logging.NoLog{}, responseSender, prometheus.NewRegistry(), "")
@@ -124,7 +127,6 @@ func TestGossiperGossip(t *testing.T) {
 			handler := NewHandler[*testTx](
 				logging.NoLog{},
 				marshaller,
-				NoOpAccumulator[*testTx]{},
 				responseSet,
 				metrics,
 				tt.targetResponseSize,
@@ -132,7 +134,7 @@ func TestGossiperGossip(t *testing.T) {
 			require.NoError(err)
 			require.NoError(responseNetwork.AddHandler(0x0, handler))
 
-			requestSender := &common.FakeSender{
+			requestSender := &enginetest.SenderStub{
 				SentAppRequest: make(chan []byte, 1),
 			}
 
@@ -207,7 +209,7 @@ func TestValidatorGossiper(t *testing.T) {
 
 	nodeID := ids.GenerateTestNodeID()
 
-	validators := testValidatorSet{
+	validators := &testValidatorSet{
 		validators: set.Of(nodeID),
 	}
 
@@ -230,73 +232,276 @@ func TestValidatorGossiper(t *testing.T) {
 	// we are not a validator, so we should not request gossip
 	validators.validators = set.Set[ids.NodeID]{}
 	require.NoError(gossiper.Gossip(context.Background()))
-	require.Equal(2, calls)
+	require.Equal(1, calls)
+}
+
+func TestPushGossiperNew(t *testing.T) {
+	tests := []struct {
+		name                 string
+		gossipParams         BranchingFactor
+		regossipParams       BranchingFactor
+		discardedSize        int
+		targetGossipSize     int
+		maxRegossipFrequency time.Duration
+		expected             error
+	}{
+		{
+			name: "invalid gossip num validators",
+			gossipParams: BranchingFactor{
+				Validators: -1,
+			},
+			regossipParams: BranchingFactor{
+				Peers: 1,
+			},
+			expected: ErrInvalidNumValidators,
+		},
+		{
+			name: "invalid gossip num non-validators",
+			gossipParams: BranchingFactor{
+				NonValidators: -1,
+			},
+			regossipParams: BranchingFactor{
+				Peers: 1,
+			},
+			expected: ErrInvalidNumNonValidators,
+		},
+		{
+			name: "invalid gossip num peers",
+			gossipParams: BranchingFactor{
+				Peers: -1,
+			},
+			regossipParams: BranchingFactor{
+				Peers: 1,
+			},
+			expected: ErrInvalidNumPeers,
+		},
+		{
+			name:         "invalid gossip num to gossip",
+			gossipParams: BranchingFactor{},
+			regossipParams: BranchingFactor{
+				Peers: 1,
+			},
+			expected: ErrInvalidNumToGossip,
+		},
+		{
+			name: "invalid regossip num validators",
+			gossipParams: BranchingFactor{
+				Validators: 1,
+			},
+			regossipParams: BranchingFactor{
+				Validators: -1,
+			},
+			expected: ErrInvalidNumValidators,
+		},
+		{
+			name: "invalid regossip num non-validators",
+			gossipParams: BranchingFactor{
+				Validators: 1,
+			},
+			regossipParams: BranchingFactor{
+				NonValidators: -1,
+			},
+			expected: ErrInvalidNumNonValidators,
+		},
+		{
+			name: "invalid regossip num peers",
+			gossipParams: BranchingFactor{
+				Validators: 1,
+			},
+			regossipParams: BranchingFactor{
+				Peers: -1,
+			},
+			expected: ErrInvalidNumPeers,
+		},
+		{
+			name: "invalid regossip num to gossip",
+			gossipParams: BranchingFactor{
+				Validators: 1,
+			},
+			regossipParams: BranchingFactor{},
+			expected:       ErrInvalidNumToGossip,
+		},
+		{
+			name: "invalid discarded size",
+			gossipParams: BranchingFactor{
+				Validators: 1,
+			},
+			regossipParams: BranchingFactor{
+				Validators: 1,
+			},
+			discardedSize: -1,
+			expected:      ErrInvalidDiscardedSize,
+		},
+		{
+			name: "invalid target gossip size",
+			gossipParams: BranchingFactor{
+				Validators: 1,
+			},
+			regossipParams: BranchingFactor{
+				Validators: 1,
+			},
+			targetGossipSize: -1,
+			expected:         ErrInvalidTargetGossipSize,
+		},
+		{
+			name: "invalid max re-gossip frequency",
+			gossipParams: BranchingFactor{
+				Validators: 1,
+			},
+			regossipParams: BranchingFactor{
+				Validators: 1,
+			},
+			maxRegossipFrequency: -1,
+			expected:             ErrInvalidRegossipFrequency,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewPushGossiper[*testTx](
+				nil,
+				nil,
+				nil,
+				nil,
+				Metrics{},
+				tt.gossipParams,
+				tt.regossipParams,
+				tt.discardedSize,
+				tt.targetGossipSize,
+				tt.maxRegossipFrequency,
+			)
+			require.ErrorIs(t, err, tt.expected)
+		})
+	}
 }
 
 // Tests that the outgoing gossip is equivalent to what was accumulated
 func TestPushGossiper(t *testing.T) {
+	type cycle struct {
+		toAdd    []*testTx
+		expected [][]*testTx
+	}
 	tests := []struct {
-		name   string
-		cycles [][]*testTx
+		name           string
+		cycles         []cycle
+		shouldRegossip bool
 	}{
 		{
-			name: "single cycle",
-			cycles: [][]*testTx{
+			name: "single cycle with regossip",
+			cycles: []cycle{
 				{
-					&testTx{
-						id: ids.ID{0},
+					toAdd: []*testTx{
+						{
+							id: ids.ID{0},
+						},
+						{
+							id: ids.ID{1},
+						},
+						{
+							id: ids.ID{2},
+						},
 					},
-					&testTx{
-						id: ids.ID{1},
-					},
-					&testTx{
-						id: ids.ID{2},
+					expected: [][]*testTx{
+						{
+							{
+								id: ids.ID{0},
+							},
+							{
+								id: ids.ID{1},
+							},
+							{
+								id: ids.ID{2},
+							},
+						},
 					},
 				},
 			},
+			shouldRegossip: true,
 		},
 		{
-			name: "multiple cycles",
-			cycles: [][]*testTx{
+			name: "multiple cycles with regossip",
+			cycles: []cycle{
 				{
-					&testTx{
-						id: ids.ID{0},
+					toAdd: []*testTx{
+						{
+							id: ids.ID{0},
+						},
+					},
+					expected: [][]*testTx{
+						{
+							{
+								id: ids.ID{0},
+							},
+						},
 					},
 				},
 				{
-					&testTx{
-						id: ids.ID{1},
+					toAdd: []*testTx{
+						{
+							id: ids.ID{1},
+						},
 					},
-					&testTx{
-						id: ids.ID{2},
+					expected: [][]*testTx{
+						{
+							{
+								id: ids.ID{1},
+							},
+						},
+						{
+							{
+								id: ids.ID{0},
+							},
+						},
 					},
 				},
 				{
-					&testTx{
-						id: ids.ID{3},
+					toAdd: []*testTx{
+						{
+							id: ids.ID{2},
+						},
 					},
-					&testTx{
-						id: ids.ID{4},
-					},
-					&testTx{
-						id: ids.ID{5},
-					},
-				},
-				{
-					&testTx{
-						id: ids.ID{6},
-					},
-					&testTx{
-						id: ids.ID{7},
-					},
-					&testTx{
-						id: ids.ID{8},
-					},
-					&testTx{
-						id: ids.ID{9},
+					expected: [][]*testTx{
+						{
+							{
+								id: ids.ID{2},
+							},
+						},
+						{
+							{
+								id: ids.ID{1},
+							},
+							{
+								id: ids.ID{0},
+							},
+						},
 					},
 				},
 			},
+			shouldRegossip: true,
+		},
+		{
+			name: "verify that we don't gossip empty messages",
+			cycles: []cycle{
+				{
+					toAdd: []*testTx{
+						{
+							id: ids.ID{0},
+						},
+					},
+					expected: [][]*testTx{
+						{
+							{
+								id: ids.ID{0},
+							},
+						},
+					},
+				},
+				{
+					toAdd:    []*testTx{},
+					expected: [][]*testTx{},
+				},
+			},
+			shouldRegossip: false,
 		},
 	}
 
@@ -305,8 +510,8 @@ func TestPushGossiper(t *testing.T) {
 			require := require.New(t)
 			ctx := context.Background()
 
-			sender := &common.FakeSender{
-				SentAppGossip: make(chan []byte, 1),
+			sender := &enginetest.SenderStub{
+				SentAppGossip: make(chan []byte, 2),
 			}
 			network, err := p2p.NewNetwork(
 				logging.NoLog{},
@@ -316,144 +521,87 @@ func TestPushGossiper(t *testing.T) {
 			)
 			require.NoError(err)
 			client := network.NewClient(0)
+			validators := p2p.NewValidators(
+				&p2p.Peers{},
+				logging.NoLog{},
+				constants.PrimaryNetworkID,
+				&validatorstest.State{
+					GetCurrentHeightF: func(context.Context) (uint64, error) {
+						return 1, nil
+					},
+					GetValidatorSetF: func(context.Context, uint64, ids.ID) (map[ids.NodeID]*validators.GetValidatorOutput, error) {
+						return nil, nil
+					},
+				},
+				time.Hour,
+			)
 			metrics, err := NewMetrics(prometheus.NewRegistry(), "")
 			require.NoError(err)
 			marshaller := testMarshaller{}
-			gossiper := NewPushGossiper[*testTx](
+
+			regossipTime := time.Hour
+			if tt.shouldRegossip {
+				regossipTime = time.Nanosecond
+			}
+
+			gossiper, err := NewPushGossiper[*testTx](
 				marshaller,
+				FullSet[*testTx]{},
+				validators,
 				client,
 				metrics,
+				BranchingFactor{
+					Validators: 1,
+				},
+				BranchingFactor{
+					Validators: 1,
+				},
+				0, // the discarded cache size doesn't matter for this test
 				units.MiB,
+				regossipTime,
 			)
+			require.NoError(err)
 
-			for _, gossipables := range tt.cycles {
-				gossiper.Add(gossipables...)
+			for _, cycle := range tt.cycles {
+				gossiper.Add(cycle.toAdd...)
 				require.NoError(gossiper.Gossip(ctx))
 
-				want := &sdk.PushGossip{
-					Gossip: make([][]byte, 0, len(tt.cycles)),
+				for _, expected := range cycle.expected {
+					want := &sdk.PushGossip{
+						Gossip: make([][]byte, 0, len(expected)),
+					}
+
+					for _, gossipable := range expected {
+						bytes, err := marshaller.MarshalGossip(gossipable)
+						require.NoError(err)
+
+						want.Gossip = append(want.Gossip, bytes)
+					}
+
+					if len(want.Gossip) > 0 {
+						// remove the handler prefix
+						sentMsg := <-sender.SentAppGossip
+						got := &sdk.PushGossip{}
+						require.NoError(proto.Unmarshal(sentMsg[1:], got))
+
+						require.Equal(want.Gossip, got.Gossip)
+					} else {
+						select {
+						case <-sender.SentAppGossip:
+							require.FailNow("unexpectedly sent gossip message")
+						default:
+						}
+					}
 				}
 
-				for _, gossipable := range gossipables {
-					bytes, err := marshaller.MarshalGossip(gossipable)
-					require.NoError(err)
-
-					want.Gossip = append(want.Gossip, bytes)
+				if tt.shouldRegossip {
+					// Ensure that subsequent calls to `time.Now()` are
+					// sufficient for regossip.
+					time.Sleep(regossipTime + time.Nanosecond)
 				}
-
-				// remove the handler prefix
-				sentMsg := <-sender.SentAppGossip
-				got := &sdk.PushGossip{}
-				require.NoError(proto.Unmarshal(sentMsg[1:], got))
-
-				require.Equal(want.Gossip, got.Gossip)
 			}
 		})
 	}
-}
-
-// Tests that gossip to a peer should forward the gossip if it was not
-// previously known
-func TestPushGossipE2E(t *testing.T) {
-	t.SkipNow()
-
-	require := require.New(t)
-
-	// tx known by both the sender and the receiver which should not be
-	// forwarded
-	knownTx := &testTx{id: ids.GenerateTestID()}
-
-	log := logging.NoLog{}
-	bloom, err := NewBloomFilter(prometheus.NewRegistry(), "", 100, 0.01, 0.05)
-	require.NoError(err)
-	set := &testSet{
-		txs:   make(map[ids.ID]*testTx),
-		bloom: bloom,
-	}
-	require.NoError(set.Add(knownTx))
-
-	forwarder := &common.FakeSender{
-		SentAppGossip: make(chan []byte, 1),
-	}
-	forwarderNetwork, err := p2p.NewNetwork(log, forwarder, prometheus.NewRegistry(), "")
-	require.NoError(err)
-	handlerID := uint64(123)
-	client := forwarderNetwork.NewClient(handlerID)
-
-	metrics, err := NewMetrics(prometheus.NewRegistry(), "")
-	require.NoError(err)
-	marshaller := testMarshaller{}
-	forwarderGossiper := NewPushGossiper[*testTx](
-		marshaller,
-		client,
-		metrics,
-		units.MiB,
-	)
-
-	handler := NewHandler[*testTx](
-		log,
-		marshaller,
-		forwarderGossiper,
-		set,
-		metrics,
-		0,
-	)
-	require.NoError(err)
-	require.NoError(forwarderNetwork.AddHandler(handlerID, handler))
-
-	issuer := &common.FakeSender{
-		SentAppGossip: make(chan []byte, 1),
-	}
-	issuerNetwork, err := p2p.NewNetwork(log, issuer, prometheus.NewRegistry(), "")
-	require.NoError(err)
-	issuerClient := issuerNetwork.NewClient(handlerID)
-	require.NoError(err)
-	issuerGossiper := NewPushGossiper[*testTx](
-		marshaller,
-		issuerClient,
-		metrics,
-		units.MiB,
-	)
-
-	want := []*testTx{
-		{id: ids.GenerateTestID()},
-		{id: ids.GenerateTestID()},
-		{id: ids.GenerateTestID()},
-	}
-
-	// gossip both some unseen txs and one the receiver already knows about
-	var gossiped []*testTx
-	gossiped = append(gossiped, want...)
-	gossiped = append(gossiped, knownTx)
-
-	issuerGossiper.Add(gossiped...)
-	addedToSet := make([]*testTx, 0, len(want))
-	set.onAdd = func(tx *testTx) {
-		addedToSet = append(addedToSet, tx)
-	}
-
-	ctx := context.Background()
-	require.NoError(issuerGossiper.Gossip(ctx))
-
-	// make sure that we only add new txs someone gossips to us
-	require.NoError(forwarderNetwork.AppGossip(ctx, ids.EmptyNodeID, <-issuer.SentAppGossip))
-	require.Equal(want, addedToSet)
-
-	// make sure that we only forward txs we have not already seen before
-	forwardedBytes := <-forwarder.SentAppGossip
-	forwardedMsg := &sdk.PushGossip{}
-	require.NoError(proto.Unmarshal(forwardedBytes[1:], forwardedMsg))
-	require.Len(forwardedMsg.Gossip, len(want))
-
-	gotForwarded := make([]*testTx, 0, len(addedToSet))
-
-	for _, bytes := range forwardedMsg.Gossip {
-		tx, err := marshaller.UnmarshalGossip(bytes)
-		require.NoError(err)
-		gotForwarded = append(gotForwarded, tx)
-	}
-
-	require.Equal(want, gotForwarded)
 }
 
 type testValidatorSet struct {

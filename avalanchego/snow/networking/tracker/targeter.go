@@ -4,8 +4,6 @@
 package tracker
 
 import (
-	"go.uber.org/zap"
-
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/validators"
 	"github.com/ava-labs/avalanchego/utils/constants"
@@ -70,14 +68,9 @@ func (t *targeter) TargetUsage(nodeID ids.NodeID) float64 {
 		return baseAlloc
 	}
 
-	totalWeight, err := t.vdrs.TotalWeight(constants.PrimaryNetworkID)
-	if err != nil {
-		t.log.Error("couldn't get total weight of primary network",
-			zap.Error(err),
-		)
-		return baseAlloc
-	}
+	totalWeight := t.vdrs.TotalWeight(constants.PrimaryNetworkID)
+	totalWeightFloat, _ := totalWeight.Float64()
 
-	vdrAlloc := t.vdrAlloc * float64(weight) / float64(totalWeight)
+	vdrAlloc := t.vdrAlloc * float64(weight) / totalWeightFloat
 	return vdrAlloc + baseAlloc
 }

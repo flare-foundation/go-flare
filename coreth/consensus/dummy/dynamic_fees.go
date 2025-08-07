@@ -16,10 +16,12 @@ import (
 )
 
 var (
-	ApricotPhase3MinBaseFee = big.NewInt(params.ApricotPhase3MinBaseFee)
-	ApricotPhase3MaxBaseFee = big.NewInt(params.ApricotPhase3MaxBaseFee)
-	ApricotPhase4MinBaseFee = big.NewInt(params.ApricotPhase4MinBaseFee)
-	ApricotPhase4MaxBaseFee = big.NewInt(params.ApricotPhase4MaxBaseFee)
+	ApricotPhase3MinBaseFee     = big.NewInt(params.ApricotPhase3MinBaseFee)
+	ApricotPhase3MaxBaseFee     = big.NewInt(params.ApricotPhase3MaxBaseFee)
+	ApricotPhase4MinBaseFee     = big.NewInt(params.ApricotPhase4MinBaseFee)
+	ApricotPhase4MaxBaseFee     = big.NewInt(params.ApricotPhase4MaxBaseFee)
+	ApricotPhase3InitialBaseFee = big.NewInt(params.ApricotPhase3InitialBaseFee)
+	EtnaMinBaseFee              = big.NewInt(params.EtnaMinBaseFee)
 
 	ApricotPhase4BaseFeeChangeDenominator = new(big.Int).SetUint64(params.ApricotPhase4BaseFeeChangeDenominator)
 	ApricotPhase5BaseFeeChangeDenominator = new(big.Int).SetUint64(params.ApricotPhase5BaseFeeChangeDenominator)
@@ -45,6 +47,7 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header, timestamp uin
 		isApricotPhase3 = config.IsApricotPhase3(parent.Time)
 		isApricotPhase4 = config.IsApricotPhase4(parent.Time)
 		isApricotPhase5 = config.IsApricotPhase5(parent.Time)
+		isEtna          = config.IsEtna(parent.Time)
 	)
 	if !isApricotPhase3 || parent.Number.Cmp(common.Big0) == 0 {
 		initialSlice := make([]byte, params.DynamicFeeExtraDataSize)
@@ -154,40 +157,39 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header, timestamp uin
 		return newRollupWindow, baseFee, nil
 	}
 
+	num := new(big.Int)
+
 	if totalGas > parentGasTarget {
 		// If the parent block used more gas than its target, the baseFee should increase.
-		gasUsedDelta := new(big.Int).SetUint64(totalGas - parentGasTarget)
-		x := new(big.Int).Mul(parent.BaseFee, gasUsedDelta)
-		y := x.Div(x, parentGasTargetBig)
-		baseFeeDelta := math.BigMax(
-			x.Div(y, baseFeeChangeDenominator),
-			common.Big1,
-		)
+		num.SetUint64(totalGas - parentGasTarget)
+		num.Mul(num, parent.BaseFee)
+		num.Div(num, parentGasTargetBig)
+		num.Div(num, baseFeeChangeDenominator)
+		baseFeeDelta := math.BigMax(num, common.Big1)
 
 		baseFee.Add(baseFee, baseFeeDelta)
 	} else {
 		// Otherwise if the parent block used less gas than its target, the baseFee should decrease.
-		gasUsedDelta := new(big.Int).SetUint64(parentGasTarget - totalGas)
-		x := new(big.Int).Mul(parent.BaseFee, gasUsedDelta)
-		y := x.Div(x, parentGasTargetBig)
-		baseFeeDelta := math.BigMax(
-			x.Div(y, baseFeeChangeDenominator),
-			common.Big1,
-		)
-
+		num.SetUint64(parentGasTarget - totalGas)
+		num.Mul(num, parent.BaseFee)
+		num.Div(num, parentGasTargetBig)
+		num.Div(num, baseFeeChangeDenominator)
+		baseFeeDelta := math.BigMax(num, common.Big1)
 		// If [roll] is greater than [rollupWindow], apply the state transition to the base fee to account
 		// for the interval during which no blocks were produced.
 		// We use roll/rollupWindow, so that the transition is applied for every [rollupWindow] seconds
 		// that has elapsed between the parent and this block.
 		if roll > rollupWindow {
 			// Note: roll/rollupWindow must be greater than 1 since we've checked that roll > rollupWindow
-			baseFeeDelta = baseFeeDelta.Mul(baseFeeDelta, new(big.Int).SetUint64(roll/rollupWindow))
+			baseFeeDelta = new(big.Int).Mul(baseFeeDelta, new(big.Int).SetUint64(roll/rollupWindow))
 		}
 		baseFee.Sub(baseFee, baseFeeDelta)
 	}
 
 	// Ensure that the base fee does not increase/decrease outside of the bounds
 	switch {
+	case isEtna:
+		baseFee = selectBigWithinBounds(EtnaMinBaseFee, baseFee, nil)
 	case isApricotPhase5:
 		baseFee = selectBigWithinBounds(ApricotPhase4MinBaseFee, baseFee, nil)
 	case isApricotPhase4:
@@ -199,7 +201,7 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header, timestamp uin
 	return newRollupWindow, baseFee, nil
 }
 
-// EstiamteNextBaseFee attempts to estimate the next base fee based on a block with [parent] being built at
+// EstimateNextBaseFee attempts to estimate the next base fee based on a block with [parent] being built at
 // [timestamp].
 // If [timestamp] is less than the timestamp of [parent], then it uses the same timestamp as parent.
 // Warning: This function should only be used in estimation and should not be used when calculating the canonical

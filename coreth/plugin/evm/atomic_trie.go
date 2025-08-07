@@ -19,6 +19,8 @@ import (
 	"github.com/ava-labs/coreth/core/types"
 	"github.com/ava-labs/coreth/trie"
 	"github.com/ava-labs/coreth/trie/trienode"
+	"github.com/ava-labs/coreth/triedb"
+	"github.com/ava-labs/coreth/triedb/hashdb"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -37,7 +39,6 @@ var (
 	_                            AtomicTrie = &atomicTrie{}
 	lastCommittedKey                        = []byte("atomicTrieLastCommittedBlock")
 	appliedSharedMemoryCursorKey            = []byte("atomicTrieLastAppliedToSharedMemory")
-	heightMapRepairKey                      = []byte("atomicTrieHeightMapRepair")
 )
 
 // AtomicTrie maintains an index of atomic operations by blockchainIDs for every block
@@ -61,7 +62,7 @@ type AtomicTrie interface {
 	LastCommitted() (common.Hash, uint64)
 
 	// TrieDB returns the underlying trie database
-	TrieDB() *trie.Database
+	TrieDB() *triedb.Database
 
 	// Root returns hash if it exists at specified height
 	// if trie was not committed at provided height, it returns
@@ -84,10 +85,6 @@ type AtomicTrie interface {
 
 	// RejectTrie dereferences root from the trieDB, freeing memory.
 	RejectTrie(root common.Hash) error
-
-	// RepairHeightMap repairs the height map of the atomic trie by iterating
-	// over all leaves in the trie and committing the trie at every commit interval.
-	RepairHeightMap(to uint64) (bool, error)
 }
 
 // AtomicTrieIterator is a stateful iterator that iterates the leafs of an AtomicTrie
@@ -121,7 +118,7 @@ type AtomicTrieIterator interface {
 type atomicTrie struct {
 	commitInterval      uint64            // commit interval, same as commitHeightInterval by default
 	metadataDB          database.Database // Underlying database containing the atomic trie metadata
-	trieDB              *trie.Database    // Trie database
+	trieDB              *triedb.Database  // Trie database
 	lastCommittedRoot   common.Hash       // trie root of the most recent commit
 	lastCommittedHeight uint64            // index height of the most recent commit
 	lastAcceptedRoot    common.Hash       // most recent trie root passed to accept trie or the root of the atomic trie on intialization.
@@ -154,10 +151,12 @@ func newAtomicTrie(
 		}
 	}
 
-	trieDB := trie.NewDatabaseWithConfig(
+	trieDB := triedb.NewDatabase(
 		rawdb.NewDatabase(Database{atomicTrieDB}),
-		&trie.Config{
-			Cache: 64, // Allocate 64MB of memory for clean cache
+		&triedb.Config{
+			HashDB: &hashdb.Config{
+				CleanCacheSize: 64 * units.MiB, // Allocate 64MB of memory for clean cache
+			},
 		},
 	)
 
@@ -276,11 +275,15 @@ func (a *atomicTrie) Iterator(root common.Hash, cursor []byte) (AtomicTrieIterat
 		return nil, err
 	}
 
-	iter := trie.NewIterator(t.NodeIterator(cursor))
+	nodeIt, err := t.NodeIterator(cursor)
+	if err != nil {
+		return nil, err
+	}
+	iter := trie.NewIterator(nodeIt)
 	return NewAtomicTrieIterator(iter, a.codec), iter.Err
 }
 
-func (a *atomicTrie) TrieDB() *trie.Database {
+func (a *atomicTrie) TrieDB() *triedb.Database {
 	return a.trieDB
 }
 
@@ -318,7 +321,7 @@ func (a *atomicTrie) LastAcceptedRoot() common.Hash {
 
 func (a *atomicTrie) InsertTrie(nodes *trienode.NodeSet, root common.Hash) error {
 	if nodes != nil {
-		if err := a.trieDB.Update(root, types.EmptyRootHash, trienode.NewWithNodeSet(nodes)); err != nil {
+		if err := a.trieDB.Update(root, types.EmptyRootHash, 0, trienode.NewWithNodeSet(nodes), nil); err != nil {
 			return err
 		}
 	}
@@ -326,7 +329,7 @@ func (a *atomicTrie) InsertTrie(nodes *trienode.NodeSet, root common.Hash) error
 
 	// The use of [Cap] in [insertTrie] prevents exceeding the configured memory
 	// limit (and OOM) in case there is a large backlog of processing (unaccepted) blocks.
-	if nodeSize, _ := a.trieDB.Size(); nodeSize <= a.memoryCap {
+	if _, nodeSize, _ := a.trieDB.Size(); nodeSize <= a.memoryCap {
 		return nil
 	}
 	if err := a.trieDB.Cap(a.memoryCap - ethdb.IdealBatchSize); err != nil {

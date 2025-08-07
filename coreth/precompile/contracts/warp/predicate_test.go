@@ -13,6 +13,7 @@ import (
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/snow/engine/snowman/block"
 	"github.com/ava-labs/avalanchego/snow/validators"
+	"github.com/ava-labs/avalanchego/snow/validators/validatorstest"
 	agoUtils "github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/crypto/bls"
@@ -24,7 +25,6 @@ import (
 	"github.com/ava-labs/coreth/predicate"
 	"github.com/ava-labs/coreth/utils"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 )
 
 const pChainHeight uint64 = 1337
@@ -48,7 +48,6 @@ var (
 	numTestVdrs = 10_000
 	testVdrs    []*testValidator
 	vdrs        map[ids.NodeID]*validators.GetValidatorOutput
-	tests       []signatureTest
 
 	predicateTests = make(map[string]testutils.PredicateTest)
 )
@@ -131,15 +130,6 @@ func newTestValidator() *testValidator {
 	}
 }
 
-type signatureTest struct {
-	name      string
-	stateF    func(*gomock.Controller) validators.State
-	quorumNum uint64
-	quorumDen uint64
-	msgF      func(*require.Assertions) *avalancheWarp.Message
-	err       error
-}
-
 // createWarpMessage constructs a signed warp message using the global variable [unsignedMsg]
 // and the first [numKeys] signatures from [blsSignatures]
 func createWarpMessage(numKeys int) *avalancheWarp.Message {
@@ -197,7 +187,7 @@ func createSnowCtx(validatorRanges []validatorRange) *snow.Context {
 	}
 
 	snowCtx := utils.TestSnowContext()
-	state := &validators.TestState{
+	state := &validatorstest.State{
 		GetSubnetIDF: func(ctx context.Context, chainID ids.ID) (ids.ID, error) {
 			return sourceSubnetID, nil
 		},
@@ -227,6 +217,12 @@ func createValidPredicateTest(snowCtx *snow.Context, numKeys uint64, predicateBy
 }
 
 func TestWarpMessageFromPrimaryNetwork(t *testing.T) {
+	for _, requirePrimaryNetworkSigners := range []bool{true, false} {
+		testWarpMessageFromPrimaryNetwork(t, requirePrimaryNetworkSigners)
+	}
+}
+
+func testWarpMessageFromPrimaryNetwork(t *testing.T, requirePrimaryNetworkSigners bool) {
 	require := require.New(t)
 	numKeys := 10
 	cChainID := ids.GenerateTestID()
@@ -266,19 +262,23 @@ func TestWarpMessageFromPrimaryNetwork(t *testing.T) {
 	snowCtx.ChainID = ids.GenerateTestID()
 	snowCtx.CChainID = cChainID
 	snowCtx.NetworkID = networkID
-	snowCtx.ValidatorState = &validators.TestState{
+	snowCtx.ValidatorState = &validatorstest.State{
 		GetSubnetIDF: func(ctx context.Context, chainID ids.ID) (ids.ID, error) {
 			require.Equal(chainID, cChainID)
 			return constants.PrimaryNetworkID, nil // Return Primary Network SubnetID
 		},
 		GetValidatorSetF: func(ctx context.Context, height uint64, subnetID ids.ID) (map[ids.NodeID]*validators.GetValidatorOutput, error) {
-			require.Equal(snowCtx.SubnetID, subnetID)
+			expectedSubnetID := snowCtx.SubnetID
+			if requirePrimaryNetworkSigners {
+				expectedSubnetID = constants.PrimaryNetworkID
+			}
+			require.Equal(expectedSubnetID, subnetID)
 			return getValidatorsOutput, nil
 		},
 	}
 
 	test := testutils.PredicateTest{
-		Config: NewDefaultConfig(utils.NewUint64(0)),
+		Config: NewConfig(utils.NewUint64(0), 0, requirePrimaryNetworkSigners),
 		PredicateContext: &precompileconfig.PredicateContext{
 			SnowCtx: snowCtx,
 			ProposerVMBlockCtx: &block.Context{
@@ -575,7 +575,7 @@ func TestWarpSignatureWeightsNonDefaultQuorumNumerator(t *testing.T) {
 
 		name := fmt.Sprintf("non-default quorum %d signature(s)", numSigners)
 		tests[name] = testutils.PredicateTest{
-			Config: NewConfig(utils.NewUint64(0), uint64(nonDefaultQuorumNumerator)),
+			Config: NewConfig(utils.NewUint64(0), uint64(nonDefaultQuorumNumerator), false),
 			PredicateContext: &precompileconfig.PredicateContext{
 				SnowCtx: snowCtx,
 				ProposerVMBlockCtx: &block.Context{
@@ -666,7 +666,7 @@ func initWarpPredicateTests() {
 
 		snowCtx := utils.TestSnowContext()
 		snowCtx.NetworkID = networkID
-		state := &validators.TestState{
+		state := &validatorstest.State{
 			GetSubnetIDF: func(ctx context.Context, chainID ids.ID) (ids.ID, error) {
 				return sourceSubnetID, nil
 			},

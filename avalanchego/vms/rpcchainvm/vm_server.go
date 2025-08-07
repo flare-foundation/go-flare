@@ -11,7 +11,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -29,6 +28,7 @@ import (
 	"github.com/ava-labs/avalanchego/snow/engine/common/appsender"
 	"github.com/ava-labs/avalanchego/snow/engine/snowman/block"
 	"github.com/ava-labs/avalanchego/snow/validators/gvalidators"
+	"github.com/ava-labs/avalanchego/upgrade"
 	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/crypto/bls"
 	"github.com/ava-labs/avalanchego/utils/logging"
@@ -58,6 +58,7 @@ var (
 	originalStderr = os.Stderr
 
 	errExpectedBlockWithVerifyContext = errors.New("expected block.WithVerifyContext")
+	errNilNetworkUpgradesPB           = errors.New("network upgrades protobuf is nil")
 )
 
 // VMServer is a VM that is managed over RPC.
@@ -72,9 +73,9 @@ type VMServer struct {
 
 	allowShutdown *utils.Atomic[bool]
 
-	processMetrics prometheus.Gatherer
-	db             database.Database
-	log            logging.Logger
+	metrics metrics.MultiGatherer
+	db      database.Database
+	log     logging.Logger
 
 	serverCloser grpcutils.ServerCloser
 	connCloser   wrappers.Closer
@@ -87,12 +88,14 @@ type VMServer struct {
 func NewServer(vm block.ChainVM, allowShutdown *utils.Atomic[bool]) *VMServer {
 	bVM, _ := vm.(block.BuildBlockWithContextChainVM)
 	ssVM, _ := vm.(block.StateSyncableVM)
-	return &VMServer{
+	vmSrv := &VMServer{
+		metrics:       metrics.NewPrefixGatherer(),
 		vm:            vm,
 		bVM:           bVM,
 		ssVM:          ssVM,
 		allowShutdown: allowShutdown,
 	}
+	return vmSrv
 }
 
 func (vm *VMServer) Initialize(ctx context.Context, req *vmpb.InitializeRequest) (*vmpb.InitializeResponse, error) {
@@ -108,10 +111,16 @@ func (vm *VMServer) Initialize(ctx context.Context, req *vmpb.InitializeRequest)
 	if err != nil {
 		return nil, err
 	}
-	publicKey, err := bls.PublicKeyFromBytes(req.PublicKey)
+	publicKey, err := bls.PublicKeyFromCompressedBytes(req.PublicKey)
 	if err != nil {
 		return nil, err
 	}
+
+	networkUpgrades, err := convertNetworkUpgrades(req.NetworkUpgrades)
+	if err != nil {
+		return nil, err
+	}
+
 	xChainID, err := ids.ToID(req.XChainId)
 	if err != nil {
 		return nil, err
@@ -125,28 +134,44 @@ func (vm *VMServer) Initialize(ctx context.Context, req *vmpb.InitializeRequest)
 		return nil, err
 	}
 
-	registerer := prometheus.NewRegistry()
+	processMetrics, err := metrics.MakeAndRegister(
+		vm.metrics,
+		"process",
+	)
+	if err != nil {
+		return nil, err
+	}
 
 	// Current state of process metrics
 	processCollector := collectors.NewProcessCollector(collectors.ProcessCollectorOpts{})
-	if err := registerer.Register(processCollector); err != nil {
+	if err := processMetrics.Register(processCollector); err != nil {
 		return nil, err
 	}
 
 	// Go process metrics using debug.GCStats
 	goCollector := collectors.NewGoCollector()
-	if err := registerer.Register(goCollector); err != nil {
+	if err := processMetrics.Register(goCollector); err != nil {
+		return nil, err
+	}
+
+	grpcMetrics, err := metrics.MakeAndRegister(
+		vm.metrics,
+		"grpc",
+	)
+	if err != nil {
 		return nil, err
 	}
 
 	// gRPC client metrics
 	grpcClientMetrics := grpc_prometheus.NewClientMetrics()
-	if err := registerer.Register(grpcClientMetrics); err != nil {
+	if err := grpcMetrics.Register(grpcClientMetrics); err != nil {
 		return nil, err
 	}
 
-	// Register metrics for each Go plugin processes
-	vm.processMetrics = registerer
+	vmMetrics := metrics.NewPrefixGatherer()
+	if err := vm.metrics.Register("vm", vmMetrics); err != nil {
+		return nil, err
+	}
 
 	// Dial the database
 	dbClientConn, err := grpcutils.Dial(
@@ -211,11 +236,12 @@ func (vm *VMServer) Initialize(ctx context.Context, req *vmpb.InitializeRequest)
 	}()
 
 	vm.ctx = &snow.Context{
-		NetworkID: req.NetworkId,
-		SubnetID:  subnetID,
-		ChainID:   chainID,
-		NodeID:    nodeID,
-		PublicKey: publicKey,
+		NetworkID:       req.NetworkId,
+		SubnetID:        subnetID,
+		ChainID:         chainID,
+		NodeID:          nodeID,
+		PublicKey:       publicKey,
+		NetworkUpgrades: networkUpgrades,
 
 		XChainID:    xChainID,
 		CChainID:    cChainID,
@@ -225,7 +251,7 @@ func (vm *VMServer) Initialize(ctx context.Context, req *vmpb.InitializeRequest)
 		Keystore:     keystoreClient,
 		SharedMemory: sharedMemoryClient,
 		BCLookup:     bcLookupClient,
-		Metrics:      metrics.NewOptionalGatherer(),
+		Metrics:      vmMetrics,
 
 		// Signs warp messages
 		WarpSigner: warpSignerClient,
@@ -419,7 +445,6 @@ func (vm *VMServer) ParseBlock(ctx context.Context, req *vmpb.ParseBlockRequest)
 	return &vmpb.ParseBlockResponse{
 		Id:                blkID[:],
 		ParentId:          parentID[:],
-		Status:            vmpb.Status(blk.Status()),
 		Height:            blk.Height(),
 		Timestamp:         grpcutils.TimestampFromTime(blk.Timestamp()),
 		VerifyWithContext: verifyWithCtx,
@@ -450,7 +475,6 @@ func (vm *VMServer) GetBlock(ctx context.Context, req *vmpb.GetBlockRequest) (*v
 	return &vmpb.GetBlockResponse{
 		ParentId:          parentID[:],
 		Bytes:             blk.Bytes(),
-		Status:            vmpb.Status(blk.Status()),
 		Height:            blk.Height(),
 		Timestamp:         grpcutils.TimestampFromTime(blk.Timestamp()),
 		VerifyWithContext: verifyWithCtx,
@@ -490,39 +514,6 @@ func (vm *VMServer) Version(ctx context.Context, _ *emptypb.Empty) (*vmpb.Versio
 	return &vmpb.VersionResponse{
 		Version: version,
 	}, err
-}
-
-func (vm *VMServer) CrossChainAppRequest(ctx context.Context, msg *vmpb.CrossChainAppRequestMsg) (*emptypb.Empty, error) {
-	chainID, err := ids.ToID(msg.ChainId)
-	if err != nil {
-		return nil, err
-	}
-	deadline, err := grpcutils.TimestampAsTime(msg.Deadline)
-	if err != nil {
-		return nil, err
-	}
-	return &emptypb.Empty{}, vm.vm.CrossChainAppRequest(ctx, chainID, msg.RequestId, deadline, msg.Request)
-}
-
-func (vm *VMServer) CrossChainAppRequestFailed(ctx context.Context, msg *vmpb.CrossChainAppRequestFailedMsg) (*emptypb.Empty, error) {
-	chainID, err := ids.ToID(msg.ChainId)
-	if err != nil {
-		return nil, err
-	}
-
-	appErr := &common.AppError{
-		Code:    msg.ErrorCode,
-		Message: msg.ErrorMessage,
-	}
-	return &emptypb.Empty{}, vm.vm.CrossChainAppRequestFailed(ctx, chainID, msg.RequestId, appErr)
-}
-
-func (vm *VMServer) CrossChainAppResponse(ctx context.Context, msg *vmpb.CrossChainAppResponseMsg) (*emptypb.Empty, error) {
-	chainID, err := ids.ToID(msg.ChainId)
-	if err != nil {
-		return nil, err
-	}
-	return &emptypb.Empty{}, vm.vm.CrossChainAppResponse(ctx, chainID, msg.RequestId, msg.Response)
 }
 
 func (vm *VMServer) AppRequest(ctx context.Context, req *vmpb.AppRequestMsg) (*emptypb.Empty, error) {
@@ -567,22 +558,8 @@ func (vm *VMServer) AppGossip(ctx context.Context, req *vmpb.AppGossipMsg) (*emp
 }
 
 func (vm *VMServer) Gather(context.Context, *emptypb.Empty) (*vmpb.GatherResponse, error) {
-	// Gather metrics registered to snow context Gatherer. These
-	// metrics are defined by the underlying vm implementation.
-	mfs, err := vm.ctx.Metrics.Gather()
-	if err != nil {
-		return nil, err
-	}
-
-	// Gather metrics registered by rpcchainvm server Gatherer. These
-	// metrics are collected for each Go plugin process.
-	pluginMetrics, err := vm.processMetrics.Gather()
-	if err != nil {
-		return nil, err
-	}
-	mfs = append(mfs, pluginMetrics...)
-
-	return &vmpb.GatherResponse{MetricFamilies: mfs}, err
+	metrics, err := vm.metrics.Gather()
+	return &vmpb.GatherResponse{MetricFamilies: metrics}, err
 }
 
 func (vm *VMServer) GetAncestors(ctx context.Context, req *vmpb.GetAncestorsRequest) (*vmpb.GetAncestorsResponse, error) {
@@ -625,13 +602,6 @@ func (vm *VMServer) BatchedParseBlock(
 	return &vmpb.BatchedParseBlockResponse{
 		Response: blocks,
 	}, nil
-}
-
-func (vm *VMServer) VerifyHeightIndex(ctx context.Context, _ *emptypb.Empty) (*vmpb.VerifyHeightIndexResponse, error) {
-	err := vm.vm.VerifyHeightIndex(ctx)
-	return &vmpb.VerifyHeightIndexResponse{
-		Err: errorToErrEnum[err],
-	}, errorToRPCError(err)
 }
 
 func (vm *VMServer) GetBlockIDAtHeight(
@@ -846,4 +816,81 @@ func (vm *VMServer) StateSummaryAccept(
 		Mode: vmpb.StateSummaryAcceptResponse_Mode(mode),
 		Err:  errorToErrEnum[err],
 	}, errorToRPCError(err)
+}
+
+func convertNetworkUpgrades(pbUpgrades *vmpb.NetworkUpgrades) (upgrade.Config, error) {
+	if pbUpgrades == nil {
+		return upgrade.Config{}, errNilNetworkUpgradesPB
+	}
+
+	ap1, err := grpcutils.TimestampAsTime(pbUpgrades.ApricotPhase_1Time)
+	if err != nil {
+		return upgrade.Config{}, err
+	}
+	ap2, err := grpcutils.TimestampAsTime(pbUpgrades.ApricotPhase_2Time)
+	if err != nil {
+		return upgrade.Config{}, err
+	}
+	ap3, err := grpcutils.TimestampAsTime(pbUpgrades.ApricotPhase_3Time)
+	if err != nil {
+		return upgrade.Config{}, err
+	}
+	ap4, err := grpcutils.TimestampAsTime(pbUpgrades.ApricotPhase_4Time)
+	if err != nil {
+		return upgrade.Config{}, err
+	}
+	ap5, err := grpcutils.TimestampAsTime(pbUpgrades.ApricotPhase_5Time)
+	if err != nil {
+		return upgrade.Config{}, err
+	}
+	apPre6, err := grpcutils.TimestampAsTime(pbUpgrades.ApricotPhasePre_6Time)
+	if err != nil {
+		return upgrade.Config{}, err
+	}
+	ap6, err := grpcutils.TimestampAsTime(pbUpgrades.ApricotPhase_6Time)
+	if err != nil {
+		return upgrade.Config{}, err
+	}
+	apPost6, err := grpcutils.TimestampAsTime(pbUpgrades.ApricotPhasePost_6Time)
+	if err != nil {
+		return upgrade.Config{}, err
+	}
+	banff, err := grpcutils.TimestampAsTime(pbUpgrades.BanffTime)
+	if err != nil {
+		return upgrade.Config{}, err
+	}
+	cortina, err := grpcutils.TimestampAsTime(pbUpgrades.CortinaTime)
+	if err != nil {
+		return upgrade.Config{}, err
+	}
+	durango, err := grpcutils.TimestampAsTime(pbUpgrades.DurangoTime)
+	if err != nil {
+		return upgrade.Config{}, err
+	}
+	etna, err := grpcutils.TimestampAsTime(pbUpgrades.EtnaTime)
+	if err != nil {
+		return upgrade.Config{}, err
+	}
+
+	cortinaXChainStopVertexID, err := ids.ToID(pbUpgrades.CortinaXChainStopVertexId)
+	if err != nil {
+		return upgrade.Config{}, err
+	}
+
+	return upgrade.Config{
+		ApricotPhase1Time:            ap1,
+		ApricotPhase2Time:            ap2,
+		ApricotPhase3Time:            ap3,
+		ApricotPhase4Time:            ap4,
+		ApricotPhase4MinPChainHeight: pbUpgrades.ApricotPhase_4MinPChainHeight,
+		ApricotPhase5Time:            ap5,
+		ApricotPhasePre6Time:         apPre6,
+		ApricotPhase6Time:            ap6,
+		ApricotPhasePost6Time:        apPost6,
+		BanffTime:                    banff,
+		CortinaTime:                  cortina,
+		CortinaXChainStopVertexID:    cortinaXChainStopVertexID,
+		DurangoTime:                  durango,
+		EtnaTime:                     etna,
+	}, nil
 }

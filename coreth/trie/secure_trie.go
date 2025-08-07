@@ -29,6 +29,7 @@ package trie
 import (
 	"github.com/ava-labs/coreth/core/types"
 	"github.com/ava-labs/coreth/trie/trienode"
+	"github.com/ava-labs/coreth/triedb/database"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/rlp"
 )
@@ -39,7 +40,7 @@ type SecureTrie = StateTrie
 
 // NewSecure creates a new StateTrie.
 // Deprecated: use NewStateTrie.
-func NewSecure(stateRoot common.Hash, owner common.Hash, root common.Hash, db *Database) (*SecureTrie, error) {
+func NewSecure(stateRoot common.Hash, owner common.Hash, root common.Hash, db database.Database) (*SecureTrie, error) {
 	id := &ID{
 		StateRoot: stateRoot,
 		Owner:     owner,
@@ -60,7 +61,7 @@ func NewSecure(stateRoot common.Hash, owner common.Hash, root common.Hash, db *D
 // StateTrie is not safe for concurrent use.
 type StateTrie struct {
 	trie             Trie
-	preimages        *preimageStore
+	db               database.Database
 	hashKeyBuf       [common.HashLength]byte
 	secKeyCache      map[string][]byte
 	secKeyCacheOwner *StateTrie // Pointer to self, replace the key cache on mismatch
@@ -71,7 +72,7 @@ type StateTrie struct {
 // If root is the zero hash or the sha3 hash of an empty string, the
 // trie is initially empty. Otherwise, New will panic if db is nil
 // and returns MissingNodeError if the root node cannot be found.
-func NewStateTrie(id *ID, db *Database) (*StateTrie, error) {
+func NewStateTrie(id *ID, db database.Database) (*StateTrie, error) {
 	if db == nil {
 		panic("trie.NewStateTrie called without a database")
 	}
@@ -79,7 +80,7 @@ func NewStateTrie(id *ID, db *Database) (*StateTrie, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &StateTrie{trie: *trie, preimages: db.preimages}, nil
+	return &StateTrie{trie: *trie, db: db}, nil
 }
 
 // MustGet returns the value for key stored in the trie.
@@ -96,7 +97,12 @@ func (t *StateTrie) MustGet(key []byte) []byte {
 // If the specified storage slot is not in the trie, nil will be returned.
 // If a trie node is not found in the database, a MissingNodeError is returned.
 func (t *StateTrie) GetStorage(_ common.Address, key []byte) ([]byte, error) {
-	return t.trie.Get(t.hashKey(key))
+	enc, err := t.trie.Get(t.hashKey(key))
+	if err != nil || len(enc) == 0 {
+		return nil, err
+	}
+	_, content, _, err := rlp.Split(enc)
+	return content, err
 }
 
 // GetAccount attempts to retrieve an account with provided account address.
@@ -158,7 +164,8 @@ func (t *StateTrie) MustUpdate(key, value []byte) {
 // If a node is not found in the database, a MissingNodeError is returned.
 func (t *StateTrie) UpdateStorage(_ common.Address, key, value []byte) error {
 	hk := t.hashKey(key)
-	err := t.trie.Update(hk, value)
+	v, _ := rlp.EncodeToBytes(value)
+	err := t.trie.Update(hk, v)
 	if err != nil {
 		return err
 	}
@@ -177,6 +184,10 @@ func (t *StateTrie) UpdateAccount(address common.Address, acc *types.StateAccoun
 		return err
 	}
 	t.getSecKeyCache()[string(hk)] = address.Bytes()
+	return nil
+}
+
+func (t *StateTrie) UpdateContractCode(_ common.Address, _ common.Hash, _ []byte) error {
 	return nil
 }
 
@@ -210,10 +221,7 @@ func (t *StateTrie) GetKey(shaKey []byte) []byte {
 	if key, ok := t.getSecKeyCache()[string(shaKey)]; ok {
 		return key
 	}
-	if t.preimages == nil {
-		return nil
-	}
-	return t.preimages.preimage(common.BytesToHash(shaKey))
+	return t.db.Preimage(common.BytesToHash(shaKey))
 }
 
 // Commit collects all dirty nodes in the trie and replaces them with the
@@ -223,16 +231,14 @@ func (t *StateTrie) GetKey(shaKey []byte) []byte {
 // All cached preimages will be also flushed if preimages recording is enabled.
 // Once the trie is committed, it's not usable anymore. A new trie must
 // be created with new root and updated trie database for following usage
-func (t *StateTrie) Commit(collectLeaf bool) (common.Hash, *trienode.NodeSet) {
+func (t *StateTrie) Commit(collectLeaf bool) (common.Hash, *trienode.NodeSet, error) {
 	// Write all the pre-images to the actual disk database
 	if len(t.getSecKeyCache()) > 0 {
-		if t.preimages != nil {
-			preimages := make(map[common.Hash][]byte)
-			for hk, key := range t.secKeyCache {
-				preimages[common.BytesToHash([]byte(hk))] = key
-			}
-			t.preimages.insertPreimage(preimages)
+		preimages := make(map[common.Hash][]byte)
+		for hk, key := range t.secKeyCache {
+			preimages[common.BytesToHash([]byte(hk))] = key
 		}
+		t.db.InsertPreimage(preimages)
 		t.secKeyCache = make(map[string][]byte)
 	}
 	// Commit the trie and return its modified nodeset.
@@ -249,15 +255,21 @@ func (t *StateTrie) Hash() common.Hash {
 func (t *StateTrie) Copy() *StateTrie {
 	return &StateTrie{
 		trie:        *t.trie.Copy(),
-		preimages:   t.preimages,
+		db:          t.db,
 		secKeyCache: t.secKeyCache,
 	}
 }
 
-// NodeIterator returns an iterator that returns nodes of the underlying trie. Iteration
-// starts at the key after the given start key.
-func (t *StateTrie) NodeIterator(start []byte) NodeIterator {
+// NodeIterator returns an iterator that returns nodes of the underlying trie.
+// Iteration starts at the key after the given start key.
+func (t *StateTrie) NodeIterator(start []byte) (NodeIterator, error) {
 	return t.trie.NodeIterator(start)
+}
+
+// MustNodeIterator is a wrapper of NodeIterator and will omit any encountered
+// error but just print out an error message.
+func (t *StateTrie) MustNodeIterator(start []byte) NodeIterator {
+	return t.trie.MustNodeIterator(start)
 }
 
 // hashKey returns the hash of key as an ephemeral buffer.

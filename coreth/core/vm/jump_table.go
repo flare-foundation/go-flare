@@ -66,6 +66,7 @@ var (
 	apricotPhase2InstructionSet    = newApricotPhase2InstructionSet()
 	apricotPhase3InstructionSet    = newApricotPhase3InstructionSet()
 	durangoInstructionSet          = newDurangoInstructionSet()
+	cancunInstructionSet           = newCancunInstructionSet()
 )
 
 // JumpTable contains the EVM opcodes supported at a given fork.
@@ -89,12 +90,23 @@ func validate(jt JumpTable) JumpTable {
 	return jt
 }
 
+func newCancunInstructionSet() JumpTable {
+	instructionSet := newDurangoInstructionSet()
+	enable4844(&instructionSet) // EIP-4844 (BLOBHASH opcode)
+	enable7516(&instructionSet) // EIP-7516 (BLOBBASEFEE opcode)
+	enable1153(&instructionSet) // EIP-1153 "Transient Storage"
+	enable5656(&instructionSet) // EIP-5656 (MCOPY opcode)
+	enable6780(&instructionSet) // EIP-6780 SELFDESTRUCT only in same transaction
+	return validate(instructionSet)
+}
+
 // newDurangoInstructionSet returns the frontier, homestead, byzantium,
-// constantinople, istanbul, petersburg, subnet-evm, durango instructions.
+// constantinople, istanbul, petersburg, apricotPhase1, 2, and 3, durango instructions.
 func newDurangoInstructionSet() JumpTable {
 	instructionSet := newApricotPhase3InstructionSet()
 	enable3855(&instructionSet) // PUSH0 instruction
 	enable3860(&instructionSet) // Limit and meter initcode
+
 	return validate(instructionSet)
 }
 
@@ -106,14 +118,13 @@ func newApricotPhase3InstructionSet() JumpTable {
 	return validate(instructionSet)
 }
 
-// newApricotPhase1InstructionSet returns the frontier,
+// newApricotPhase2InstructionSet returns the frontier,
 // homestead, byzantium, constantinople petersburg,
 // istanbul, and apricotPhase1 instructions.
 func newApricotPhase2InstructionSet() JumpTable {
 	instructionSet := newApricotPhase1InstructionSet()
 
 	enable2929(&instructionSet)
-	enableAP2(&instructionSet)
 
 	return validate(instructionSet)
 }
@@ -231,7 +242,6 @@ func newTangerineWhistleInstructionSet() JumpTable {
 	instructionSet[SLOAD].constantGas = params.SloadGasEIP150
 	instructionSet[EXTCODECOPY].constantGas = params.ExtcodeCopyBaseEIP150
 	instructionSet[CALL].constantGas = params.CallGasEIP150
-	instructionSet[CALLEX].constantGas = params.CallGasEIP150
 	instructionSet[CALLCODE].constantGas = params.CallGasEIP150
 	instructionSet[DELEGATECALL].constantGas = params.CallGasEIP150
 	return validate(instructionSet)
@@ -413,12 +423,6 @@ func newFrontierInstructionSet() JumpTable {
 			constantGas: params.BalanceGasFrontier,
 			minStack:    minStack(1, 1),
 			maxStack:    maxStack(1, 1),
-		},
-		BALANCEMC: {
-			execute:     opBalanceMultiCoin,
-			constantGas: params.BalanceGasFrontier,
-			minStack:    minStack(2, 1),
-			maxStack:    maxStack(2, 1),
 		},
 		ORIGIN: {
 			execute:     opOrigin,
@@ -1040,14 +1044,6 @@ func newFrontierInstructionSet() JumpTable {
 			minStack:    minStack(7, 1),
 			maxStack:    maxStack(7, 1),
 			memorySize:  memoryCall,
-		},
-		CALLEX: {
-			execute:     opCallExpert,
-			constantGas: params.CallGasFrontier,
-			dynamicGas:  gasCall,
-			minStack:    minStack(9, 1),
-			maxStack:    maxStack(9, 1),
-			memorySize:  memoryCallExpert,
 		},
 		CALLCODE: {
 			execute:     opCallCode,

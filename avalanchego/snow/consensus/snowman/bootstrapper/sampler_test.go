@@ -11,8 +11,6 @@ import (
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/set"
-
-	safemath "github.com/ava-labs/avalanchego/utils/math"
 )
 
 func TestSample(t *testing.T) {
@@ -53,14 +51,14 @@ func TestSample(t *testing.T) {
 			expectedErr:     nil,
 		},
 		{
-			name: "overflow",
+			name: "overflow handling",
 			elements: map[ids.NodeID]uint64{
 				nodeID0: math.MaxUint64,
 				nodeID1: 1,
 			},
 			maxSize:         1,
-			expectedSampled: nil,
-			expectedErr:     safemath.ErrOverflow,
+			expectedSampled: set.Of(nodeID0),
+			expectedErr:     nil,
 		},
 	}
 	for _, test := range tests {

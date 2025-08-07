@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ava-labs/coreth/constants"
 	"github.com/ava-labs/coreth/core/rawdb"
 	"github.com/ava-labs/coreth/core/state"
 	"github.com/ava-labs/coreth/core/state/snapshot"
@@ -12,6 +13,7 @@ import (
 	"github.com/ava-labs/coreth/core/vm"
 	"github.com/ava-labs/coreth/eth/tracers/logger"
 	"github.com/ava-labs/coreth/params"
+	"github.com/holiman/uint256"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -20,7 +22,12 @@ import (
 
 // Test prioritized contract (Submitter) being partially refunded when fee is high
 func TestStateTransitionPrioritizedContract(t *testing.T) {
-	configs := []*params.ChainConfig{params.CostonChainConfig, params.CostwoChainConfig, params.SongbirdChainConfig, params.FlareChainConfig}
+	configs := []*params.ChainConfig{
+		params.GetChainConfig(constants.CostonID, params.CostonChainID),
+		params.GetChainConfig(constants.CostwoID, params.CostwoChainID),
+		params.GetChainConfig(constants.SongbirdID, params.SongbirdChainID),
+		params.GetChainConfig(constants.FlareID, params.FlareChainID),
+	}
 
 	for _, config := range configs {
 		key, _ := crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
@@ -96,8 +103,8 @@ func TestStateTransitionPrioritizedContract(t *testing.T) {
 
 		// max fee (funds above which are returned) depends on the chain used
 		_, limit, _, _, _ := stateTransitionVariants.GetValue(config.ChainID)(st)
-		maxFee := new(big.Int).Mul(new(big.Int).SetUint64(params.TxGas), new(big.Int).SetUint64(limit))
-		diff := new(big.Int).Sub(balanceBefore, balanceAfter)
+		maxFee := new(uint256.Int).Mul(uint256.NewInt(params.TxGas), uint256.NewInt(limit))
+		diff := new(uint256.Int).Sub(balanceBefore, balanceAfter)
 
 		if maxFee.Cmp(diff) != 0 {
 			t.Fatalf("want %v, have %v", maxFee, diff)
@@ -107,7 +114,12 @@ func TestStateTransitionPrioritizedContract(t *testing.T) {
 
 // Test that daemon contract is invoked after a transaction is successfully executed
 func TestStateTransitionDaemon(t *testing.T) {
-	configs := []*params.ChainConfig{params.CostonChainConfig, params.CostwoChainConfig, params.SongbirdChainConfig, params.FlareChainConfig}
+	configs := []*params.ChainConfig{
+		params.GetChainConfig(constants.CostonID, params.CostonChainID),
+		params.GetChainConfig(constants.CostwoID, params.CostwoChainID),
+		params.GetChainConfig(constants.SongbirdID, params.SongbirdChainID),
+		params.GetChainConfig(constants.FlareID, params.FlareChainID),
+	}
 
 	for _, config := range configs {
 		key, _ := crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
@@ -194,13 +206,13 @@ func makePreState(db ethdb.Database, accounts GenesisAlloc, snapshotter bool) (*
 	for addr, a := range accounts {
 		statedb.SetCode(addr, a.Code)
 		statedb.SetNonce(addr, a.Nonce)
-		statedb.SetBalance(addr, a.Balance)
+		statedb.SetBalance(addr, uint256.MustFromBig(a.Balance))
 		for k, v := range a.Storage {
 			statedb.SetState(addr, k, v)
 		}
 	}
 	// Commit and re-open to start with a clean state.
-	root, _ := statedb.Commit(false, false)
+	root, _ := statedb.Commit(0, false)
 
 	snapConfig := snapshot.Config{
 		CacheSize:  64,

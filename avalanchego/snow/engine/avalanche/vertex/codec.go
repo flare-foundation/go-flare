@@ -4,12 +4,11 @@
 package vertex
 
 import (
-	"time"
+	"errors"
 
 	"github.com/ava-labs/avalanchego/codec"
 	"github.com/ava-labs/avalanchego/codec/linearcodec"
 	"github.com/ava-labs/avalanchego/codec/reflectcodec"
-	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/units"
 )
 
@@ -24,11 +23,11 @@ const (
 var Codec codec.Manager
 
 func init() {
-	lc0 := linearcodec.New(time.Time{}, []string{reflectcodec.DefaultTagName + "V0"}, maxSize)
-	lc1 := linearcodec.New(time.Time{}, []string{reflectcodec.DefaultTagName + "V1"}, maxSize)
+	lc0 := linearcodec.New([]string{reflectcodec.DefaultTagName + "V0"})
+	lc1 := linearcodec.New([]string{reflectcodec.DefaultTagName + "V1"})
 
 	Codec = codec.NewManager(maxSize)
-	err := utils.Err(
+	err := errors.Join(
 		Codec.RegisterCodec(CodecVersion, lc0),
 		Codec.RegisterCodec(CodecVersionWithStopVtx, lc1),
 	)

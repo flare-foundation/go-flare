@@ -23,6 +23,7 @@ import (
 	handlerstats "github.com/ava-labs/coreth/sync/handlers/stats"
 	"github.com/ava-labs/coreth/sync/syncutils"
 	"github.com/ava-labs/coreth/trie"
+	"github.com/ava-labs/coreth/triedb"
 	"github.com/ethereum/go-ethereum/common"
 )
 
@@ -37,7 +38,7 @@ type atomicSyncTestCheckpoint struct {
 
 // testAtomicSyncer creates a leaf handler with [serverTrieDB] and tests to ensure that the atomic syncer can sync correctly
 // starting at [targetRoot], and stopping and resuming at each of the [checkpoints].
-func testAtomicSyncer(t *testing.T, serverTrieDB *trie.Database, targetHeight uint64, targetRoot common.Hash, checkpoints []atomicSyncTestCheckpoint, finalExpectedNumLeaves int64) {
+func testAtomicSyncer(t *testing.T, serverTrieDB *triedb.Database, targetHeight uint64, targetRoot common.Hash, checkpoints []atomicSyncTestCheckpoint, finalExpectedNumLeaves int64) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -50,7 +51,7 @@ func testAtomicSyncer(t *testing.T, serverTrieDB *trie.Database, targetHeight ui
 	)
 
 	clientDB := versiondb.New(memdb.New())
-	repo, err := NewAtomicTxRepository(clientDB, message.Codec, 0, nil)
+	repo, err := NewAtomicTxRepository(clientDB, message.Codec, 0)
 	if err != nil {
 		t.Fatal("could not initialize atomix tx repository", err)
 	}
@@ -116,13 +117,17 @@ func testAtomicSyncer(t *testing.T, serverTrieDB *trie.Database, targetHeight ui
 	syncutils.AssertTrieConsistency(t, targetRoot, serverTrieDB, clientTrieDB, nil)
 
 	// check all commit heights are created correctly
-	hasher := trie.NewEmpty(trie.NewDatabase(rawdb.NewMemoryDatabase()))
+	hasher := trie.NewEmpty(triedb.NewDatabase(rawdb.NewMemoryDatabase(), nil))
 	assert.NoError(t, err)
 
 	serverTrie, err := trie.New(trie.TrieID(targetRoot), serverTrieDB)
 	assert.NoError(t, err)
 	addAllKeysWithPrefix := func(prefix []byte) error {
-		it := trie.NewIterator(serverTrie.NodeIterator(prefix))
+		nodeIt, err := serverTrie.NodeIterator(prefix)
+		if err != nil {
+			return err
+		}
+		it := trie.NewIterator(nodeIt)
 		for it.Next() {
 			if !bytes.HasPrefix(it.Key, prefix) {
 				return it.Err
@@ -149,7 +154,7 @@ func testAtomicSyncer(t *testing.T, serverTrieDB *trie.Database, targetHeight ui
 func TestAtomicSyncer(t *testing.T) {
 	rand.Seed(1)
 	targetHeight := 10 * uint64(commitInterval)
-	serverTrieDB := trie.NewDatabase(rawdb.NewMemoryDatabase())
+	serverTrieDB := triedb.NewDatabase(rawdb.NewMemoryDatabase(), nil)
 	root, _, _ := syncutils.GenerateTrie(t, serverTrieDB, int(targetHeight), atomicKeyLength)
 
 	testAtomicSyncer(t, serverTrieDB, targetHeight, root, nil, int64(targetHeight))
@@ -158,7 +163,7 @@ func TestAtomicSyncer(t *testing.T) {
 func TestAtomicSyncerResume(t *testing.T) {
 	rand.Seed(1)
 	targetHeight := 10 * uint64(commitInterval)
-	serverTrieDB := trie.NewDatabase(rawdb.NewMemoryDatabase())
+	serverTrieDB := triedb.NewDatabase(rawdb.NewMemoryDatabase(), nil)
 	numTrieKeys := int(targetHeight) - 1 // no atomic ops for genesis
 	root, _, _ := syncutils.GenerateTrie(t, serverTrieDB, numTrieKeys, atomicKeyLength)
 
@@ -175,14 +180,15 @@ func TestAtomicSyncerResume(t *testing.T) {
 func TestAtomicSyncerResumeNewRootCheckpoint(t *testing.T) {
 	rand.Seed(1)
 	targetHeight1 := 10 * uint64(commitInterval)
-	serverTrieDB := trie.NewDatabase(rawdb.NewMemoryDatabase())
+	serverTrieDB := triedb.NewDatabase(rawdb.NewMemoryDatabase(), nil)
 	numTrieKeys1 := int(targetHeight1) - 1 // no atomic ops for genesis
 	root1, _, _ := syncutils.GenerateTrie(t, serverTrieDB, numTrieKeys1, atomicKeyLength)
 
-	rand.Seed(1) // seed rand again to get the same leafs in GenerateTrie
 	targetHeight2 := 20 * uint64(commitInterval)
 	numTrieKeys2 := int(targetHeight2) - 1 // no atomic ops for genesis
-	root2, _, _ := syncutils.GenerateTrie(t, serverTrieDB, numTrieKeys2, atomicKeyLength)
+	root2, _, _ := syncutils.FillTrie(
+		t, numTrieKeys1, numTrieKeys2, atomicKeyLength, serverTrieDB, root1,
+	)
 
 	testAtomicSyncer(t, serverTrieDB, targetHeight1, root1, []atomicSyncTestCheckpoint{
 		{

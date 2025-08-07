@@ -31,7 +31,7 @@ type InflationSettings struct {
 }
 
 // The value of currentTimestamp is used to return new inflation settings over time
-func GetCurrentInflationSettings(currentTimestamp time.Time, networkID uint32, config *config.Config) (uint64, uint64, uint64, uint32, time.Duration, time.Duration, time.Duration, time.Duration, uint64, time.Time) {
+func GetCurrentInflationSettings(currentTimestamp time.Time, networkID uint32, config *config.Internal) (uint64, uint64, uint64, uint32, time.Duration, time.Duration, time.Duration, time.Duration, uint64, time.Time) {
 	s := inflationSettingsVariants.GetValue(networkID)(currentTimestamp, config)
 	return s.MinValidatorStake, s.MaxValidatorStake, s.MinDelegatorStake, s.MinDelegationFee, s.MinStakeDuration, s.MinDelegateDuration, s.MaxStakeDuration, s.MinFutureStartTimeOffset, s.MaxValidatorWeightFactor, s.MinStakeStartTime
 }
@@ -63,7 +63,7 @@ func getCurrentDelegatorRules(currentTimestamp time.Time, backend *Backend) *add
 	}
 }
 
-func getFlareInflationSettings(currentTimestamp time.Time, _ *config.Config) InflationSettings {
+func getFlareInflationSettings(currentTimestamp time.Time, _ *config.Internal) InflationSettings {
 	switch {
 	case currentTimestamp.Before(time.Date(2023, time.October, 1, 0, 0, 0, 0, time.UTC)):
 		// Phase 1
@@ -96,7 +96,7 @@ func getFlareInflationSettings(currentTimestamp time.Time, _ *config.Config) Inf
 	}
 }
 
-func getCostwoInflationSettings(currentTimestamp time.Time, _ *config.Config) InflationSettings {
+func getCostwoInflationSettings(currentTimestamp time.Time, _ *config.Internal) InflationSettings {
 	switch {
 	case currentTimestamp.Before(time.Date(2023, time.September, 7, 0, 0, 0, 0, time.UTC)):
 		// Phase 1
@@ -129,7 +129,7 @@ func getCostwoInflationSettings(currentTimestamp time.Time, _ *config.Config) In
 	}
 }
 
-func getLocalFlareInflationSettings(currentTimestamp time.Time, _ *config.Config) InflationSettings {
+func getLocalFlareInflationSettings(currentTimestamp time.Time, _ *config.Internal) InflationSettings {
 	switch {
 	case currentTimestamp.Before(time.Date(2023, time.August, 1, 0, 0, 0, 0, time.UTC)):
 		// Phase 1
@@ -149,11 +149,11 @@ func getLocalFlareInflationSettings(currentTimestamp time.Time, _ *config.Config
 		// Phase 2
 		return InflationSettings{
 			MinValidatorStake:        10 * units.KiloAvax,
-			MaxValidatorStake:        50 * units.MegaAvax,
+			MaxValidatorStake:        9_000 * units.MegaAvax,
 			MinDelegatorStake:        10 * units.KiloAvax,
 			MinDelegationFee:         0,
-			MinStakeDuration:         2 * 7 * 24 * time.Hour,
-			MinDelegateDuration:      1 * time.Hour,
+			MinStakeDuration:         1 * time.Hour,
+			MinDelegateDuration:      30 * time.Minute,
 			MaxStakeDuration:         365 * 24 * time.Hour,
 			MinFutureStartTimeOffset: MaxFutureStartTime,
 			MaxValidatorWeightFactor: MaxValidatorWeightFactor,
@@ -162,7 +162,7 @@ func getLocalFlareInflationSettings(currentTimestamp time.Time, _ *config.Config
 	}
 }
 
-func getSongbirdInflationSettings(currentTimestamp time.Time, config *config.Config) InflationSettings {
+func getSongbirdInflationSettings(currentTimestamp time.Time, config *config.Internal) InflationSettings {
 	switch {
 	case currentTimestamp.Before(time.Date(2000, time.March, 1, 0, 0, 0, 0, time.UTC)):
 		return getDefaultInflationSettings(currentTimestamp, config)
@@ -183,7 +183,7 @@ func getSongbirdInflationSettings(currentTimestamp time.Time, config *config.Con
 	}
 }
 
-func getCostonInflationSettings(currentTimestamp time.Time, config *config.Config) InflationSettings {
+func getCostonInflationSettings(currentTimestamp time.Time, config *config.Internal) InflationSettings {
 	switch {
 	case currentTimestamp.Before(time.Date(2000, time.March, 1, 0, 0, 0, 0, time.UTC)):
 		return getDefaultInflationSettings(currentTimestamp, config)
@@ -203,7 +203,7 @@ func getCostonInflationSettings(currentTimestamp time.Time, config *config.Confi
 	}
 }
 
-func getLocalInflationSettings(currentTimestamp time.Time, config *config.Config) InflationSettings {
+func getLocalInflationSettings(currentTimestamp time.Time, config *config.Internal) InflationSettings {
 	switch {
 	case currentTimestamp.Before(time.Date(2000, time.March, 1, 0, 0, 0, 0, time.UTC)):
 		return getDefaultInflationSettings(currentTimestamp, config)
@@ -223,7 +223,7 @@ func getLocalInflationSettings(currentTimestamp time.Time, config *config.Config
 	}
 }
 
-func getDefaultInflationSettings(_ time.Time, config *config.Config) InflationSettings {
+func getDefaultInflationSettings(_ time.Time, config *config.Internal) InflationSettings {
 	return InflationSettings{
 		MinValidatorStake:        config.MinValidatorStake,
 		MaxValidatorStake:        config.MaxValidatorStake,

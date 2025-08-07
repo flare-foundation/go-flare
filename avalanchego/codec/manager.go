@@ -13,7 +13,9 @@ import (
 )
 
 const (
-	// default max size, in bytes, of something being marshalled by Marshal()
+	VersionSize = wrappers.ShortLen
+
+	// default max size, in bytes, of something being marshaled by Marshal()
 	defaultMaxSize = 256 * units.KiB
 
 	// initial capacity of byte slice that values are marshaled into.
@@ -30,6 +32,7 @@ var (
 	ErrCantPackVersion   = errors.New("couldn't pack codec version")
 	ErrCantUnpackVersion = errors.New("couldn't unpack codec version")
 	ErrDuplicatedVersion = errors.New("duplicated codec version")
+	ErrExtraSpace        = errors.New("trailing buffer space")
 )
 
 var _ Manager = (*manager)(nil)
@@ -102,8 +105,8 @@ func (m *manager) Size(version uint16, value interface{}) (int, error) {
 
 	res, err := c.Size(value)
 
-	// Add [wrappers.ShortLen] for the codec version
-	return wrappers.ShortLen + res, err
+	// Add [VersionSize] for the codec version
+	return VersionSize + res, err
 }
 
 // To marshal an interface, [value] must be a pointer to the interface.
@@ -155,5 +158,17 @@ func (m *manager) Unmarshal(bytes []byte, dest interface{}) (uint16, error) {
 	if !exists {
 		return version, ErrUnknownVersion
 	}
-	return version, c.Unmarshal(p.Bytes[p.Offset:], dest)
+
+	if err := c.UnmarshalFrom(&p, dest); err != nil {
+		return version, err
+	}
+	if p.Offset != len(bytes) {
+		return version, fmt.Errorf("%w: read %d provided %d",
+			ErrExtraSpace,
+			p.Offset,
+			len(bytes),
+		)
+	}
+
+	return version, nil
 }

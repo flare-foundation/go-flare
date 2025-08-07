@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ava-labs/coreth/core/txpool"
+	"github.com/ava-labs/coreth/core/txpool/legacypool"
 	"github.com/ava-labs/coreth/eth"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -16,35 +16,40 @@ import (
 )
 
 const (
-	defaultAcceptorQueueLimit                         = 64 // Provides 2 minutes of buffer (2s block target) for a commit delay
-	defaultPruningEnabled                             = true
-	defaultCommitInterval                             = 4096
-	defaultTrieCleanCache                             = 512
-	defaultTrieDirtyCache                             = 512
-	defaultTrieDirtyCommitTarget                      = 20
-	defaultTriePrefetcherParallelism                  = 16
-	defaultSnapshotCache                              = 256
-	defaultSyncableCommitInterval                     = defaultCommitInterval * 4
-	defaultSnapshotWait                               = false
-	defaultRpcGasCap                                  = 50_000_000 // Default to 50M Gas Limit
-	defaultRpcTxFeeCap                                = 100        // 100 AVAX
-	defaultMetricsExpensiveEnabled                    = true
-	defaultApiMaxDuration                             = 0 // Default to no maximum API call duration
-	defaultWsCpuRefillRate                            = 0 // Default to no maximum WS CPU usage
-	defaultWsCpuMaxStored                             = 0 // Default to no maximum WS CPU usage
-	defaultMaxBlocksPerRequest                        = 0 // Default to no maximum on the number of blocks per getLogs request
-	defaultContinuousProfilerFrequency                = 15 * time.Minute
-	defaultContinuousProfilerMaxFiles                 = 5
-	defaultTxRegossipFrequency                        = 1 * time.Minute
-	defaultTxRegossipMaxSize                          = 15
-	defaultOfflinePruningBloomFilterSize       uint64 = 512 // Default size (MB) for the offline pruner to use
-	defaultLogLevel                                   = "info"
-	defaultLogJSONFormat                              = false
-	defaultMaxOutboundActiveRequests                  = 16
-	defaultMaxOutboundActiveCrossChainRequests        = 64
-	defaultPopulateMissingTriesParallelism            = 1024
-	defaultStateSyncServerTrieCache                   = 64 // MB
-	defaultAcceptedCacheSize                          = 32 // blocks
+	defaultAcceptorQueueLimit                     = 64 // Provides 2 minutes of buffer (2s block target) for a commit delay
+	defaultPruningEnabled                         = true
+	defaultCommitInterval                         = 4096
+	defaultTrieCleanCache                         = 512
+	defaultTrieDirtyCache                         = 512
+	defaultTrieDirtyCommitTarget                  = 20
+	defaultTriePrefetcherParallelism              = 16
+	defaultSnapshotCache                          = 256
+	defaultSyncableCommitInterval                 = defaultCommitInterval * 4
+	defaultSnapshotWait                           = false
+	defaultRpcGasCap                              = 50_000_000 // Default to 50M Gas Limit
+	defaultRpcTxFeeCap                            = 100        // 100 AVAX
+	defaultMetricsExpensiveEnabled                = true
+	defaultApiMaxDuration                         = 0 // Default to no maximum API call duration
+	defaultWsCpuRefillRate                        = 0 // Default to no maximum WS CPU usage
+	defaultWsCpuMaxStored                         = 0 // Default to no maximum WS CPU usage
+	defaultMaxBlocksPerRequest                    = 0 // Default to no maximum on the number of blocks per getLogs request
+	defaultContinuousProfilerFrequency            = 15 * time.Minute
+	defaultContinuousProfilerMaxFiles             = 5
+	defaultPushGossipPercentStake                 = .9
+	defaultPushGossipNumValidators                = 100
+	defaultPushGossipNumPeers                     = 0
+	defaultPushRegossipNumValidators              = 10
+	defaultPushRegossipNumPeers                   = 0
+	defaultPushGossipFrequency                    = 100 * time.Millisecond
+	defaultPullGossipFrequency                    = 1 * time.Second
+	defaultTxRegossipFrequency                    = 30 * time.Second
+	defaultOfflinePruningBloomFilterSize   uint64 = 512 // Default size (MB) for the offline pruner to use
+	defaultLogLevel                               = "info"
+	defaultLogJSONFormat                          = false
+	defaultMaxOutboundActiveRequests              = 16
+	defaultPopulateMissingTriesParallelism        = 1024
+	defaultStateSyncServerTrieCache               = 64 // MB
+	defaultAcceptedCacheSize                      = 32 // blocks
 
 	// defaultStateSyncMinBlocks is the minimum number of blocks the blockchain
 	// should be ahead of local last accepted to perform state sync.
@@ -100,13 +105,11 @@ type Config struct {
 	RPCTxFeeCap float64 `json:"rpc-tx-fee-cap"`
 
 	// Cache settings
-	TrieCleanCache            int      `json:"trie-clean-cache"`            // Size of the trie clean cache (MB)
-	TrieCleanJournal          string   `json:"trie-clean-journal"`          // Directory to use to save the trie clean cache (must be populated to enable journaling the trie clean cache)
-	TrieCleanRejournal        Duration `json:"trie-clean-rejournal"`        // Frequency to re-journal the trie clean cache to disk (minimum 1 minute, must be populated to enable journaling the trie clean cache)
-	TrieDirtyCache            int      `json:"trie-dirty-cache"`            // Size of the trie dirty cache (MB)
-	TrieDirtyCommitTarget     int      `json:"trie-dirty-commit-target"`    // Memory limit to target in the dirty cache before performing a commit (MB)
-	TriePrefetcherParallelism int      `json:"trie-prefetcher-parallelism"` // Max concurrent disk reads trie prefetcher should perform at once
-	SnapshotCache             int      `json:"snapshot-cache"`              // Size of the snapshot disk layer clean cache (MB)
+	TrieCleanCache            int `json:"trie-clean-cache"`            // Size of the trie clean cache (MB)
+	TrieDirtyCache            int `json:"trie-dirty-cache"`            // Size of the trie dirty cache (MB)
+	TrieDirtyCommitTarget     int `json:"trie-dirty-commit-target"`    // Memory limit to target in the dirty cache before performing a commit (MB)
+	TriePrefetcherParallelism int `json:"trie-prefetcher-parallelism"` // Max concurrent disk reads trie prefetcher should perform at once
+	SnapshotCache             int `json:"snapshot-cache"`              // Size of the snapshot disk layer clean cache (MB)
 
 	// Eth Settings
 	Preimages      bool `json:"preimages-enabled"`
@@ -128,14 +131,13 @@ type Config struct {
 	// API Settings
 	LocalTxsEnabled bool `json:"local-txs-enabled"`
 
-	TxPoolJournal      string   `json:"tx-pool-journal"`
-	TxPoolRejournal    Duration `json:"tx-pool-rejournal"`
 	TxPoolPriceLimit   uint64   `json:"tx-pool-price-limit"`
 	TxPoolPriceBump    uint64   `json:"tx-pool-price-bump"`
 	TxPoolAccountSlots uint64   `json:"tx-pool-account-slots"`
 	TxPoolGlobalSlots  uint64   `json:"tx-pool-global-slots"`
 	TxPoolAccountQueue uint64   `json:"tx-pool-account-queue"`
 	TxPoolGlobalQueue  uint64   `json:"tx-pool-global-queue"`
+	TxPoolLifetime     Duration `json:"tx-pool-lifetime"`
 
 	APIMaxDuration           Duration      `json:"api-max-duration"`
 	WSCPURefillRate          Duration      `json:"ws-cpu-refill-rate"`
@@ -151,12 +153,15 @@ type Config struct {
 	KeystoreInsecureUnlockAllowed bool   `json:"keystore-insecure-unlock-allowed"`
 
 	// Gossip Settings
-	RemoteGossipOnlyEnabled   bool     `json:"remote-gossip-only-enabled"`
+	PushGossipPercentStake    float64  `json:"push-gossip-percent-stake"`
+	PushGossipNumValidators   int      `json:"push-gossip-num-validators"`
+	PushGossipNumPeers        int      `json:"push-gossip-num-peers"`
+	PushRegossipNumValidators int      `json:"push-regossip-num-validators"`
+	PushRegossipNumPeers      int      `json:"push-regossip-num-peers"`
+	PushGossipFrequency       Duration `json:"push-gossip-frequency"`
+	PullGossipFrequency       Duration `json:"pull-gossip-frequency"`
 	RegossipFrequency         Duration `json:"regossip-frequency"`
-	RegossipMaxTxs            int      `json:"regossip-max-txs"`
-	RemoteTxGossipOnlyEnabled bool     `json:"remote-tx-gossip-only-enabled"` // Deprecated: use RemoteGossipOnlyEnabled instead
-	TxRegossipFrequency       Duration `json:"tx-regossip-frequency"`         // Deprecated: use RegossipFrequency instead
-	TxRegossipMaxSize         int      `json:"tx-regossip-max-size"`          // Deprecated: use RegossipMaxTxs instead
+	TxRegossipFrequency       Duration `json:"tx-regossip-frequency"` // Deprecated: use RegossipFrequency instead
 
 	// Log
 	LogLevel      string `json:"log-level"`
@@ -168,8 +173,7 @@ type Config struct {
 	OfflinePruningDataDirectory   string `json:"offline-pruning-data-directory"`
 
 	// VM2VM network
-	MaxOutboundActiveRequests           int64 `json:"max-outbound-active-requests"`
-	MaxOutboundActiveCrossChainRequests int64 `json:"max-outbound-active-cross-chain-requests"`
+	MaxOutboundActiveRequests int64 `json:"max-outbound-active-requests"`
 
 	// Sync settings
 	StateSyncEnabled         *bool  `json:"state-sync-enabled"`     // Pointer distinguishes false (no state sync) and not set (state sync only at genesis).
@@ -196,10 +200,12 @@ type Config struct {
 	// on RPC nodes.
 	AcceptedCacheSize int `json:"accepted-cache-size"`
 
-	// TxLookupLimit is the maximum number of blocks from head whose tx indices
+	// TransactionHistory is the maximum number of blocks from head whose tx indices
 	// are reserved:
 	//  * 0:   means no limit
 	//  * N:   means N block limit [HEAD-N+1, HEAD] and delete extra indexes
+	TransactionHistory uint64 `json:"transaction-history"`
+	// Deprecated, use 'TransactionHistory' instead.
 	TxLookupLimit uint64 `json:"tx-lookup-limit"`
 
 	// SkipTxIndexing skips indexing transactions.
@@ -212,6 +218,9 @@ type Config struct {
 	// Note: only supports AddressedCall payloads as defined here:
 	// https://github.com/ava-labs/avalanchego/tree/7623ffd4be915a5185c9ed5e11fa9be15a6e1f00/vms/platformvm/warp/payload#addressedcall
 	WarpOffChainMessages []hexutil.Bytes `json:"warp-off-chain-messages"`
+
+	// RPC settings
+	HttpBodyLimit uint64 `json:"http-body-limit"`
 }
 
 // EthAPIs returns an array of strings representing the Eth APIs that should be enabled
@@ -229,14 +238,13 @@ func (c *Config) SetDefaults() {
 	c.RPCTxFeeCap = defaultRpcTxFeeCap
 	c.MetricsExpensiveEnabled = defaultMetricsExpensiveEnabled
 
-	c.TxPoolJournal = txpool.DefaultConfig.Journal
-	c.TxPoolRejournal = Duration{txpool.DefaultConfig.Rejournal}
-	c.TxPoolPriceLimit = txpool.DefaultConfig.PriceLimit
-	c.TxPoolPriceBump = txpool.DefaultConfig.PriceBump
-	c.TxPoolAccountSlots = txpool.DefaultConfig.AccountSlots
-	c.TxPoolGlobalSlots = txpool.DefaultConfig.GlobalSlots
-	c.TxPoolAccountQueue = txpool.DefaultConfig.AccountQueue
-	c.TxPoolGlobalQueue = txpool.DefaultConfig.GlobalQueue
+	c.TxPoolPriceLimit = legacypool.DefaultConfig.PriceLimit
+	c.TxPoolPriceBump = legacypool.DefaultConfig.PriceBump
+	c.TxPoolAccountSlots = legacypool.DefaultConfig.AccountSlots
+	c.TxPoolGlobalSlots = legacypool.DefaultConfig.GlobalSlots
+	c.TxPoolAccountQueue = legacypool.DefaultConfig.AccountQueue
+	c.TxPoolGlobalQueue = legacypool.DefaultConfig.GlobalQueue
+	c.TxPoolLifetime.Duration = legacypool.DefaultConfig.Lifetime
 
 	c.APIMaxDuration.Duration = defaultApiMaxDuration
 	c.WSCPURefillRate.Duration = defaultWsCpuRefillRate
@@ -253,13 +261,18 @@ func (c *Config) SetDefaults() {
 	c.AcceptorQueueLimit = defaultAcceptorQueueLimit
 	c.CommitInterval = defaultCommitInterval
 	c.SnapshotWait = defaultSnapshotWait
+	c.PushGossipPercentStake = defaultPushGossipPercentStake
+	c.PushGossipNumValidators = defaultPushGossipNumValidators
+	c.PushGossipNumPeers = defaultPushGossipNumPeers
+	c.PushRegossipNumValidators = defaultPushRegossipNumValidators
+	c.PushRegossipNumPeers = defaultPushRegossipNumPeers
+	c.PushGossipFrequency.Duration = defaultPushGossipFrequency
+	c.PullGossipFrequency.Duration = defaultPullGossipFrequency
 	c.RegossipFrequency.Duration = defaultTxRegossipFrequency
-	c.RegossipMaxTxs = defaultTxRegossipMaxSize
 	c.OfflinePruningBloomFilterSize = defaultOfflinePruningBloomFilterSize
 	c.LogLevel = defaultLogLevel
 	c.LogJSONFormat = defaultLogJSONFormat
 	c.MaxOutboundActiveRequests = defaultMaxOutboundActiveRequests
-	c.MaxOutboundActiveCrossChainRequests = defaultMaxOutboundActiveCrossChainRequests
 	c.PopulateMissingTriesParallelism = defaultPopulateMissingTriesParallelism
 	c.StateSyncServerTrieCache = defaultStateSyncServerTrieCache
 	c.StateSyncCommitInterval = defaultSyncableCommitInterval
@@ -305,6 +318,9 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("cannot use commit interval of 0 with pruning enabled")
 	}
 
+	if c.PushGossipPercentStake < 0 || c.PushGossipPercentStake > 1 {
+		return fmt.Errorf("push-gossip-percent-stake is %f but must be in the range [0, 1]", c.PushGossipPercentStake)
+	}
 	return nil
 }
 
@@ -319,17 +335,13 @@ func (c *Config) Deprecate() string {
 		msg += "coreth-admin-api-dir is deprecated, use admin-api-dir instead. "
 		c.AdminAPIDir = c.CorethAdminAPIDir
 	}
-	if c.RemoteTxGossipOnlyEnabled {
-		msg += "remote-tx-gossip-only-enabled is deprecated, use tx-gossip-enabled instead. "
-		c.RemoteGossipOnlyEnabled = c.RemoteTxGossipOnlyEnabled
-	}
 	if c.TxRegossipFrequency != (Duration{}) {
 		msg += "tx-regossip-frequency is deprecated, use regossip-frequency instead. "
 		c.RegossipFrequency = c.TxRegossipFrequency
 	}
-	if c.TxRegossipMaxSize != 0 {
-		msg += "tx-regossip-max-size is deprecated, use regossip-max-txs instead. "
-		c.RegossipMaxTxs = c.TxRegossipMaxSize
+	if c.TxLookupLimit != 0 {
+		msg += "tx-lookup-limit is deprecated, use transaction-history instead. "
+		c.TransactionHistory = c.TxLookupLimit
 	}
 
 	return msg

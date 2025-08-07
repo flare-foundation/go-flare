@@ -12,6 +12,7 @@ import (
 
 	"github.com/ava-labs/coreth/core/state"
 	"github.com/ava-labs/coreth/params"
+	"github.com/holiman/uint256"
 
 	"github.com/ava-labs/avalanchego/chains/atomic"
 	"github.com/ava-labs/avalanchego/ids"
@@ -36,7 +37,7 @@ var (
 
 // UnsignedImportTx is an unsigned ImportTx
 type UnsignedImportTx struct {
-	avax.Metadata
+	Metadata
 	// ID of the network on which this tx was issued
 	NetworkID uint32 `serialize:"true" json:"networkID"`
 	// ID of this blockchain.
@@ -224,7 +225,7 @@ func (utx *UnsignedImportTx) SemanticVerify(
 		return fmt.Errorf("import tx contained mismatched number of inputs/credentials (%d vs. %d)", len(utx.ImportedInputs), len(stx.Creds))
 	}
 
-	if !vm.bootstrapped {
+	if !vm.bootstrapped.Get() {
 		// Allow for force committing during bootstrapping
 		return nil
 	}
@@ -435,14 +436,13 @@ func (vm *VM) newImportTxWithUTXOs(
 func (utx *UnsignedImportTx) EVMStateTransfer(ctx *snow.Context, state *state.StateDB) error {
 	for _, to := range utx.Outs {
 		if to.AssetID == ctx.AVAXAssetID {
-			log.Debug("crosschain", "src", utx.SourceChain, "addr", to.Address, "amount", to.Amount, "assetID", "AVAX")
+			log.Debug("import_tx", "src", utx.SourceChain, "addr", to.Address, "amount", to.Amount, "assetID", "AVAX")
 			// If the asset is AVAX, convert the input amount in nAVAX to gWei by
 			// multiplying by the x2c rate.
-			amount := new(big.Int).Mul(
-				new(big.Int).SetUint64(to.Amount), x2cRate)
+			amount := new(uint256.Int).Mul(uint256.NewInt(to.Amount), x2cRate)
 			state.AddBalance(to.Address, amount)
 		} else {
-			log.Debug("crosschain", "src", utx.SourceChain, "addr", to.Address, "amount", to.Amount, "assetID", to.AssetID)
+			log.Debug("import_tx", "src", utx.SourceChain, "addr", to.Address, "amount", to.Amount, "assetID", to.AssetID)
 			amount := new(big.Int).SetUint64(to.Amount)
 			state.AddBalanceMultiCoin(to.Address, common.Hash(to.AssetID), amount)
 		}

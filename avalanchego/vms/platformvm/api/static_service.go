@@ -121,7 +121,7 @@ type PermissionlessValidator struct {
 	DelegationFee          json.Float32              `json:"delegationFee"`
 	ExactDelegationFee     *json.Uint32              `json:"exactDelegationFee,omitempty"`
 	Uptime                 *json.Float32             `json:"uptime,omitempty"`
-	Connected              bool                      `json:"connected"`
+	Connected              *bool                     `json:"connected,omitempty"`
 	Staked                 []UTXO                    `json:"staked,omitempty"`
 	Signer                 *signer.ProofOfPossession `json:"signer,omitempty"`
 
@@ -145,7 +145,7 @@ type GenesisPermissionlessValidator struct {
 type PermissionedValidator struct {
 	Staker
 	// The owner the staking reward, if applicable, will go to
-	Connected bool          `json:"connected"`
+	Connected *bool         `json:"connected,omitempty"`
 	Uptime    *json.Float32 `json:"uptime,omitempty"`
 }
 
@@ -196,7 +196,7 @@ type BuildGenesisReply struct {
 	Encoding formatting.Encoding `json:"encoding"`
 }
 
-// beck32ToID takes bech32 address and produces a shortID
+// bech32ToID takes bech32 address and produces a shortID
 func bech32ToID(addrStr string) (ids.ShortID, error) {
 	_, addrBytes, err := address.ParseBech32(addrStr)
 	if err != nil {
@@ -280,7 +280,7 @@ func (*StaticService) BuildGenesis(_ *http.Request, args *BuildGenesisArgs, repl
 			}
 			stake[i] = utxo
 
-			newWeight, err := math.Add64(weight, uint64(apiUTXO.Amount))
+			newWeight, err := math.Add(weight, uint64(apiUTXO.Amount))
 			if err != nil {
 				return errStakeOverflow
 			}

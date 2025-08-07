@@ -9,7 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,6 +55,16 @@ type NodeRuntimeConfig struct {
 
 // Node supports configuring and running a node participating in a temporary network.
 type Node struct {
+	// Uniquely identifies the network the node is part of to enable monitoring.
+	NetworkUUID string
+
+	// Identify the entity associated with this network. This is
+	// intended to be used to label metrics to enable filtering
+	// results for a test run between the primary/shared network used
+	// by the majority of tests and private networks used by
+	// individual tests.
+	NetworkOwner string
+
 	// Set by EnsureNodeID which is also called when the node is read.
 	NodeID ids.NodeID
 
@@ -68,7 +80,7 @@ type Node struct {
 
 	// Runtime state, intended to be set by NodeRuntime
 	URI            string
-	StakingAddress string
+	StakingAddress netip.AddrPort
 
 	// Initialized on demand
 	runtime NodeRuntime
@@ -83,11 +95,24 @@ func NewNode(dataDir string) *Node {
 	}
 }
 
+// Initializes an ephemeral node using the provided config flags
+func NewEphemeralNode(flags FlagsMap) *Node {
+	node := NewNode("")
+	node.Flags = flags
+	node.IsEphemeral = true
+
+	return node
+}
+
 // Initializes the specified number of nodes.
-func NewNodes(count int) []*Node {
+func NewNodesOrPanic(count int) []*Node {
 	nodes := make([]*Node, count)
 	for i := range nodes {
-		nodes[i] = NewNode("")
+		node := NewNode("")
+		if err := node.EnsureKeys(); err != nil {
+			panic(err)
+		}
+		nodes[i] = node
 	}
 	return nodes
 }
@@ -166,7 +191,7 @@ func (n *Node) readState() error {
 	return n.getRuntime().readState()
 }
 
-func (n *Node) getDataDir() string {
+func (n *Node) GetDataDir() string {
 	return cast.ToString(n.Flags[config.DataDirKey])
 }
 
@@ -204,13 +229,14 @@ func (n *Node) Stop(ctx context.Context) error {
 // Sets networking configuration for the node.
 // Convenience method for setting networking flags.
 func (n *Node) SetNetworkingConfig(bootstrapIDs []string, bootstrapIPs []string) {
-	var (
-		// Use dynamic port allocation.
-		httpPort    uint16 = 0
-		stakingPort uint16 = 0
-	)
-	n.Flags[config.HTTPPortKey] = httpPort
-	n.Flags[config.StakingPortKey] = stakingPort
+	if _, ok := n.Flags[config.HTTPPortKey]; !ok {
+		// Default to dynamic port allocation
+		n.Flags[config.HTTPPortKey] = 0
+	}
+	if _, ok := n.Flags[config.StakingPortKey]; !ok {
+		// Default to dynamic port allocation
+		n.Flags[config.StakingPortKey] = 0
+	}
 	n.Flags[config.BootstrapIDsKey] = strings.Join(bootstrapIDs, ",")
 	n.Flags[config.BootstrapIPsKey] = strings.Join(bootstrapIPs, ",")
 }
@@ -244,7 +270,7 @@ func (n *Node) EnsureBLSSigningKey() error {
 	if err != nil {
 		return fmt.Errorf("failed to generate staking signer key: %w", err)
 	}
-	n.Flags[config.StakingSignerKeyContentKey] = base64.StdEncoding.EncodeToString(bls.SerializeSecretKey(newKey))
+	n.Flags[config.StakingSignerKeyContentKey] = base64.StdEncoding.EncodeToString(bls.SecretKeyToBytes(newKey))
 	return nil
 }
 
@@ -330,8 +356,28 @@ func (n *Node) EnsureNodeID() error {
 	if err != nil {
 		return fmt.Errorf("failed to ensure node ID: failed to load tls cert: %w", err)
 	}
-	stakingCert := staking.CertificateFromX509(tlsCert.Leaf)
+	stakingCert, err := staking.ParseCertificate(tlsCert.Leaf.Raw)
+	if err != nil {
+		return fmt.Errorf("failed to ensure node ID: failed to parse staking cert: %w", err)
+	}
 	n.NodeID = ids.NodeIDFromCert(stakingCert)
 
+	return nil
+}
+
+// Saves the currently allocated API port to the node's configuration
+// for use across restarts. Reusing the port ensures consistent
+// labeling of metrics.
+func (n *Node) SaveAPIPort() error {
+	hostPort := strings.TrimPrefix(n.URI, "http://")
+	if len(hostPort) == 0 {
+		// Without an API URI there is nothing to save
+		return nil
+	}
+	_, port, err := net.SplitHostPort(hostPort)
+	if err != nil {
+		return err
+	}
+	n.Flags[config.HTTPPortKey] = port
 	return nil
 }

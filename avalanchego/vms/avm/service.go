@@ -213,7 +213,7 @@ func (s *Service) IssueTx(_ *http.Request, args *api.FormattedTx, reply *api.JSO
 		return err
 	}
 
-	reply.TxID, err = s.vm.issueTx(tx)
+	reply.TxID, err = s.vm.issueTxFromRPC(tx)
 	return err
 }
 
@@ -433,7 +433,9 @@ func (s *Service) GetUTXOs(_ *http.Request, args *api.GetUTXOsArgs, reply *api.G
 			limit,
 		)
 	} else {
-		utxos, endAddr, endUTXOID, err = s.vm.GetAtomicUTXOs(
+		utxos, endAddr, endUTXOID, err = avax.GetAtomicUTXOs(
+			s.vm.ctx.SharedMemory,
+			s.vm.parser.Codec(),
 			sourceChain,
 			addrSet,
 			startAddr,
@@ -577,7 +579,7 @@ func (s *Service) GetBalance(_ *http.Request, args *GetBalanceArgs, reply *GetBa
 		if !args.IncludePartial && (len(owners.Addrs) != 1 || owners.Locktime > now) {
 			continue
 		}
-		amt, err := safemath.Add64(transferable.Amount(), uint64(reply.Balance))
+		amt, err := safemath.Add(transferable.Amount(), uint64(reply.Balance))
 		if err != nil {
 			return err
 		}
@@ -648,7 +650,7 @@ func (s *Service) GetAllBalances(_ *http.Request, args *GetAllBalancesArgs, repl
 		assetID := utxo.AssetID()
 		assetIDs.Add(assetID)
 		balance := balances[assetID] // 0 if key doesn't exist
-		balance, err := safemath.Add64(transferable.Amount(), balance)
+		balance, err := safemath.Add(transferable.Amount(), balance)
 		if err != nil {
 			balances[assetID] = math.MaxUint64
 		} else {
@@ -714,7 +716,7 @@ func (s *Service) CreateAsset(_ *http.Request, args *CreateAssetArgs, reply *Ass
 		return err
 	}
 
-	assetID, err := s.vm.issueTx(tx)
+	assetID, err := s.vm.issueTxFromRPC(tx)
 	if err != nil {
 		return fmt.Errorf("problem issuing transaction: %w", err)
 	}
@@ -879,7 +881,7 @@ func (s *Service) CreateNFTAsset(_ *http.Request, args *CreateNFTAssetArgs, repl
 		return err
 	}
 
-	assetID, err := s.vm.issueTx(tx)
+	assetID, err := s.vm.issueTxFromRPC(tx)
 	if err != nil {
 		return fmt.Errorf("problem issuing transaction: %w", err)
 	}
@@ -1199,7 +1201,7 @@ func (s *Service) SendMultiple(_ *http.Request, args *SendMultipleArgs, reply *a
 		return err
 	}
 
-	txID, err := s.vm.issueTx(tx)
+	txID, err := s.vm.issueTxFromRPC(tx)
 	if err != nil {
 		return fmt.Errorf("problem issuing transaction: %w", err)
 	}
@@ -1262,7 +1264,7 @@ func (s *Service) buildSendMultiple(args *SendMultipleArgs) (*txs.Tx, ids.ShortI
 			assetIDs[output.AssetID] = assetID
 		}
 		currentAmount := amounts[assetID]
-		newAmount, err := safemath.Add64(currentAmount, uint64(output.Amount))
+		newAmount, err := safemath.Add(currentAmount, uint64(output.Amount))
 		if err != nil {
 			return nil, ids.ShortEmpty, fmt.Errorf("problem calculating required spend amount: %w", err)
 		}
@@ -1293,7 +1295,7 @@ func (s *Service) buildSendMultiple(args *SendMultipleArgs) (*txs.Tx, ids.ShortI
 		amountsWithFee[assetID] = amount
 	}
 
-	amountWithFee, err := safemath.Add64(amounts[s.vm.feeAssetID], s.vm.TxFee)
+	amountWithFee, err := safemath.Add(amounts[s.vm.feeAssetID], s.vm.TxFee)
 	if err != nil {
 		return nil, ids.ShortEmpty, fmt.Errorf("problem calculating required spend amount: %w", err)
 	}
@@ -1361,7 +1363,7 @@ func (s *Service) Mint(_ *http.Request, args *MintArgs, reply *api.JSONTxIDChang
 		return err
 	}
 
-	txID, err := s.vm.issueTx(tx)
+	txID, err := s.vm.issueTxFromRPC(tx)
 	if err != nil {
 		return fmt.Errorf("problem issuing transaction: %w", err)
 	}
@@ -1494,7 +1496,7 @@ func (s *Service) SendNFT(_ *http.Request, args *SendNFTArgs, reply *api.JSONTxI
 		return err
 	}
 
-	txID, err := s.vm.issueTx(tx)
+	txID, err := s.vm.issueTxFromRPC(tx)
 	if err != nil {
 		return fmt.Errorf("problem issuing transaction: %w", err)
 	}
@@ -1617,7 +1619,7 @@ func (s *Service) MintNFT(_ *http.Request, args *MintNFTArgs, reply *api.JSONTxI
 		return err
 	}
 
-	txID, err := s.vm.issueTx(tx)
+	txID, err := s.vm.issueTxFromRPC(tx)
 	if err != nil {
 		return fmt.Errorf("problem issuing transaction: %w", err)
 	}
@@ -1754,7 +1756,7 @@ func (s *Service) Import(_ *http.Request, args *ImportArgs, reply *api.JSONTxID)
 		return err
 	}
 
-	txID, err := s.vm.issueTx(tx)
+	txID, err := s.vm.issueTxFromRPC(tx)
 	if err != nil {
 		return fmt.Errorf("problem issuing transaction: %w", err)
 	}
@@ -1782,7 +1784,15 @@ func (s *Service) buildImport(args *ImportArgs) (*txs.Tx, error) {
 		return nil, err
 	}
 
-	atomicUTXOs, _, _, err := s.vm.GetAtomicUTXOs(chainID, kc.Addrs, ids.ShortEmpty, ids.Empty, int(maxPageSize))
+	atomicUTXOs, _, _, err := avax.GetAtomicUTXOs(
+		s.vm.ctx.SharedMemory,
+		s.vm.parser.Codec(),
+		chainID,
+		kc.Addrs,
+		ids.ShortEmpty,
+		ids.Empty,
+		int(maxPageSize),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("problem retrieving user's atomic UTXOs: %w", err)
 	}
@@ -1808,7 +1818,7 @@ func (s *Service) buildImport(args *ImportArgs) (*txs.Tx, error) {
 			return nil, err
 		}
 		for asset, amount := range localAmountsSpent {
-			newAmount, err := safemath.Add64(amountsSpent[asset], amount)
+			newAmount, err := safemath.Add(amountsSpent[asset], amount)
 			if err != nil {
 				return nil, fmt.Errorf("problem calculating required spend amount: %w", err)
 			}
@@ -1885,7 +1895,7 @@ func (s *Service) Export(_ *http.Request, args *ExportArgs, reply *api.JSONTxIDC
 		return err
 	}
 
-	txID, err := s.vm.issueTx(tx)
+	txID, err := s.vm.issueTxFromRPC(tx)
 	if err != nil {
 		return fmt.Errorf("problem issuing transaction: %w", err)
 	}
@@ -1945,7 +1955,7 @@ func (s *Service) buildExport(args *ExportArgs) (*txs.Tx, ids.ShortID, error) {
 
 	amounts := map[ids.ID]uint64{}
 	if assetID == s.vm.feeAssetID {
-		amountWithFee, err := safemath.Add64(uint64(args.Amount), s.vm.TxFee)
+		amountWithFee, err := safemath.Add(uint64(args.Amount), s.vm.TxFee)
 		if err != nil {
 			return nil, ids.ShortEmpty, fmt.Errorf("problem calculating required spend amount: %w", err)
 		}

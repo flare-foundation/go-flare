@@ -67,7 +67,7 @@ func (s *weightedHeap) Initialize(weights []uint64) error {
 		// Explicitly performing a shift here allows the compiler to avoid
 		// checking for negative numbers, which saves a couple cycles
 		parentIndex := (i - 1) >> 1
-		newWeight, err := math.Add64(
+		newWeight, err := math.Add(
 			s.heap[parentIndex].cumulativeWeight,
 			s.heap[i].cumulativeWeight,
 		)
@@ -80,9 +80,9 @@ func (s *weightedHeap) Initialize(weights []uint64) error {
 	return nil
 }
 
-func (s *weightedHeap) Sample(value uint64) (int, error) {
+func (s *weightedHeap) Sample(value uint64) (int, bool) {
 	if len(s.heap) == 0 || s.heap[0].cumulativeWeight <= value {
-		return 0, ErrOutOfRange
+		return 0, false
 	}
 
 	index := 0
@@ -90,7 +90,7 @@ func (s *weightedHeap) Sample(value uint64) (int, error) {
 		currentElement := s.heap[index]
 		currentWeight := currentElement.weight
 		if value < currentWeight {
-			return currentElement.index, nil
+			return currentElement.index, true
 		}
 		value -= currentWeight
 

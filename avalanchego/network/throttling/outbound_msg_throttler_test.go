@@ -12,6 +12,7 @@ import (
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/message"
+	"github.com/ava-labs/avalanchego/message/messagemock"
 	"github.com/ava-labs/avalanchego/snow/validators"
 	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/logging"
@@ -32,7 +33,6 @@ func TestSybilOutboundMsgThrottler(t *testing.T) {
 	require.NoError(vdrs.AddStaker(constants.PrimaryNetworkID, vdr2ID, nil, ids.Empty, 1))
 	throttlerIntf, err := NewSybilOutboundMsgThrottler(
 		logging.NoLog{},
-		"",
 		prometheus.NewRegistry(),
 		vdrs,
 		config,
@@ -174,7 +174,6 @@ func TestSybilOutboundMsgThrottlerMaxNonVdr(t *testing.T) {
 	require.NoError(vdrs.AddStaker(constants.PrimaryNetworkID, vdr1ID, nil, ids.Empty, 1))
 	throttlerIntf, err := NewSybilOutboundMsgThrottler(
 		logging.NoLog{},
-		"",
 		prometheus.NewRegistry(),
 		vdrs,
 		config,
@@ -221,7 +220,6 @@ func TestBypassThrottling(t *testing.T) {
 	require.NoError(vdrs.AddStaker(constants.PrimaryNetworkID, vdr1ID, nil, ids.Empty, 1))
 	throttlerIntf, err := NewSybilOutboundMsgThrottler(
 		logging.NoLog{},
-		"",
 		prometheus.NewRegistry(),
 		vdrs,
 		config,
@@ -229,7 +227,7 @@ func TestBypassThrottling(t *testing.T) {
 	require.NoError(err)
 	throttler := throttlerIntf.(*outboundMsgThrottler)
 	nonVdrNodeID1 := ids.GenerateTestNodeID()
-	msg := message.NewMockOutboundMessage(ctrl)
+	msg := messagemock.NewOutboundMessage(ctrl)
 	msg.EXPECT().BypassThrottling().Return(true).AnyTimes()
 	msg.EXPECT().Op().Return(message.AppGossipOp).AnyTimes()
 	msg.EXPECT().Bytes().Return(make([]byte, config.NodeMaxAtLargeBytes)).AnyTimes()
@@ -237,7 +235,7 @@ func TestBypassThrottling(t *testing.T) {
 	require.True(acquired)
 
 	// Acquiring more should not fail
-	msg = message.NewMockOutboundMessage(ctrl)
+	msg = messagemock.NewOutboundMessage(ctrl)
 	msg.EXPECT().BypassThrottling().Return(true).AnyTimes()
 	msg.EXPECT().Op().Return(message.AppGossipOp).AnyTimes()
 	msg.EXPECT().Bytes().Return(make([]byte, 1)).AnyTimes()
@@ -250,7 +248,7 @@ func TestBypassThrottling(t *testing.T) {
 	require.True(acquired)
 
 	// Validator should only be able to take [MaxAtLargeBytes]
-	msg = message.NewMockOutboundMessage(ctrl)
+	msg = messagemock.NewOutboundMessage(ctrl)
 	msg.EXPECT().BypassThrottling().Return(true).AnyTimes()
 	msg.EXPECT().Op().Return(message.AppGossipOp).AnyTimes()
 	msg.EXPECT().Bytes().Return(make([]byte, config.NodeMaxAtLargeBytes+1)).AnyTimes()
@@ -262,7 +260,7 @@ func TestBypassThrottling(t *testing.T) {
 }
 
 func testMsgWithSize(ctrl *gomock.Controller, size uint64) message.OutboundMessage {
-	msg := message.NewMockOutboundMessage(ctrl)
+	msg := messagemock.NewOutboundMessage(ctrl)
 	msg.EXPECT().BypassThrottling().Return(false).AnyTimes()
 	msg.EXPECT().Op().Return(message.AppGossipOp).AnyTimes()
 	msg.EXPECT().Bytes().Return(make([]byte, size)).AnyTimes()

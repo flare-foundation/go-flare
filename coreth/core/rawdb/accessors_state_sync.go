@@ -81,7 +81,7 @@ func WriteSyncSegment(db ethdb.KeyValueWriter, root common.Hash, start []byte) e
 	return db.Put(packSyncSegmentKey(root, start), []byte{0x01})
 }
 
-// ClearSegment removes segment markers for root from db
+// ClearSyncSegments removes segment markers for root from db
 func ClearSyncSegments(db ethdb.KeyValueStore, root common.Hash) error {
 	segmentsPrefix := make([]byte, len(syncSegmentsPrefix)+common.HashLength)
 	copy(segmentsPrefix, syncSegmentsPrefix)
@@ -175,4 +175,19 @@ func NewSyncPerformedIterator(db ethdb.Iteratee) ethdb.Iterator {
 // from NewSyncPerformedIterator.
 func UnpackSyncPerformedKey(key []byte) uint64 {
 	return binary.BigEndian.Uint64(key[len(syncPerformedPrefix):])
+}
+
+// GetLatestSyncPerformed returns the latest block number state synced performed to.
+func GetLatestSyncPerformed(db ethdb.Iteratee) uint64 {
+	it := NewSyncPerformedIterator(db)
+	defer it.Release()
+
+	var latestSyncPerformed uint64
+	for it.Next() {
+		syncPerformed := UnpackSyncPerformedKey(it.Key())
+		if syncPerformed > latestSyncPerformed {
+			latestSyncPerformed = syncPerformed
+		}
+	}
+	return latestSyncPerformed
 }

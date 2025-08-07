@@ -47,8 +47,7 @@ func (r *tracedRouter) Initialize(
 	trackedSubnets set.Set[ids.ID],
 	onFatal func(exitCode int),
 	healthConfig HealthConfig,
-	metricsNamespace string,
-	metricsRegisterer prometheus.Registerer,
+	reg prometheus.Registerer,
 ) error {
 	return r.router.Initialize(
 		nodeID,
@@ -60,16 +59,14 @@ func (r *tracedRouter) Initialize(
 		trackedSubnets,
 		onFatal,
 		healthConfig,
-		metricsNamespace,
-		metricsRegisterer,
+		reg,
 	)
 }
 
 func (r *tracedRouter) RegisterRequest(
 	ctx context.Context,
 	nodeID ids.NodeID,
-	requestingChainID ids.ID,
-	respondingChainID ids.ID,
+	chainID ids.ID,
 	requestID uint32,
 	op message.Op,
 	failedMsg message.InboundMessage,
@@ -78,8 +75,7 @@ func (r *tracedRouter) RegisterRequest(
 	r.router.RegisterRequest(
 		ctx,
 		nodeID,
-		requestingChainID,
-		respondingChainID,
+		chainID,
 		requestID,
 		op,
 		failedMsg,
@@ -89,13 +85,7 @@ func (r *tracedRouter) RegisterRequest(
 
 func (r *tracedRouter) HandleInbound(ctx context.Context, msg message.InboundMessage) {
 	m := msg.Message()
-	destinationChainID, err := message.GetChainID(m)
-	if err != nil {
-		r.router.HandleInbound(ctx, msg)
-		return
-	}
-
-	sourceChainID, err := message.GetSourceChainID(m)
+	chainID, err := message.GetChainID(m)
 	if err != nil {
 		r.router.HandleInbound(ctx, msg)
 		return
@@ -104,8 +94,7 @@ func (r *tracedRouter) HandleInbound(ctx context.Context, msg message.InboundMes
 	ctx, span := r.tracer.Start(ctx, "tracedRouter.HandleInbound", oteltrace.WithAttributes(
 		attribute.Stringer("nodeID", msg.NodeID()),
 		attribute.Stringer("messageOp", msg.Op()),
-		attribute.Stringer("chainID", destinationChainID),
-		attribute.Stringer("sourceChainID", sourceChainID),
+		attribute.Stringer("chainID", chainID),
 	))
 	defer span.End()
 

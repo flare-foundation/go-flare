@@ -29,7 +29,6 @@ package snapshot
 import (
 	crand "crypto/rand"
 	"fmt"
-	"math/big"
 	"math/rand"
 	"testing"
 	"time"
@@ -38,6 +37,7 @@ import (
 	"github.com/ava-labs/coreth/core/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/holiman/uint256"
 )
 
 // randomHash generates a random blob of data and returns it as a hash.
@@ -51,11 +51,10 @@ func randomHash() common.Hash {
 
 // randomAccount generates a random account and returns it RLP encoded.
 func randomAccount() []byte {
-	root := randomHash()
-	a := Account{
-		Balance:  big.NewInt(rand.Int63()),
+	a := &types.StateAccount{
+		Balance:  uint256.NewInt(rand.Uint64()),
 		Nonce:    rand.Uint64(),
-		Root:     root[:],
+		Root:     randomHash(),
 		CodeHash: types.EmptyCodeHash[:],
 	}
 	data, _ := rlp.EncodeToBytes(a)
@@ -233,7 +232,7 @@ func TestDiffLayerExternalInvalidationPartialFlatten(t *testing.T) {
 	}
 }
 
-// TestPostCapBasicDataAccess tests some functionality regarding capping/flattening.
+// TestPostFlattenBasicDataAccess tests some functionality regarding capping/flattening.
 func TestPostFlattenBasicDataAccess(t *testing.T) {
 	// setAccount is a helper to construct a random account entry and assign it to
 	// an account slot in a snapshot
@@ -611,19 +610,19 @@ func TestRebloomOnFlatten(t *testing.T) {
 			t.Fatal("snapshot should be a diffLayer")
 		}
 
-		if hitsA != dl.diffed.Contains(accountBloomHasher(addrA)) {
+		if hitsA != dl.diffed.ContainsHash(accountBloomHash(addrA)) {
 			t.Errorf("expected bloom filter to return %t but got %t", hitsA, !hitsA)
 		}
 
-		if hitsB != dl.diffed.Contains(accountBloomHasher(addrB)) {
+		if hitsB != dl.diffed.ContainsHash(accountBloomHash(addrB)) {
 			t.Errorf("expected bloom filter to return %t but got %t", hitsB, !hitsB)
 		}
 
-		if hitsC != dl.diffed.Contains(accountBloomHasher(addrC)) {
+		if hitsC != dl.diffed.ContainsHash(accountBloomHash(addrC)) {
 			t.Errorf("expected bloom filter to return %t but got %t", hitsC, !hitsC)
 		}
 
-		if hitsD != dl.diffed.Contains(accountBloomHasher(addrD)) {
+		if hitsD != dl.diffed.ContainsHash(accountBloomHash(addrD)) {
 			t.Errorf("expected bloom filter to return %t but got %t", hitsD, !hitsD)
 		}
 	}
@@ -696,7 +695,7 @@ func TestReadStateDuringFlattening(t *testing.T) {
 	snap := snaps.Snapshot(diffRootC)
 
 	// Register the testing hook to access the state after flattening
-	var result = make(chan *Account)
+	var result = make(chan *types.SlimAccount)
 	snaps.onFlatten = func() {
 		// Spin up a thread to read the account from the pre-created
 		// snapshot handler. It's expected to be blocked.

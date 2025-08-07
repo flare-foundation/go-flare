@@ -4,8 +4,6 @@
 package message
 
 import (
-	"time"
-
 	"github.com/ava-labs/avalanchego/codec"
 	"github.com/ava-labs/avalanchego/codec/linearcodec"
 	"github.com/ava-labs/avalanchego/utils/units"
@@ -18,13 +16,12 @@ const (
 )
 
 var (
-	Codec           codec.Manager
-	CrossChainCodec codec.Manager
+	Codec codec.Manager
 )
 
 func init() {
 	Codec = codec.NewManager(maxMessageSize)
-	c := linearcodec.NewDefault(time.Time{})
+	c := linearcodec.NewDefault()
 
 	errs := wrappers.Errs{}
 	errs.Add(
@@ -49,22 +46,6 @@ func init() {
 		c.RegisterType(SignatureResponse{}),
 
 		Codec.RegisterCodec(Version, c),
-	)
-
-	if errs.Errored() {
-		panic(errs.Err)
-	}
-
-	CrossChainCodec = codec.NewManager(maxMessageSize)
-	ccc := linearcodec.NewDefault(time.Time{})
-
-	errs = wrappers.Errs{}
-	errs.Add(
-		// CrossChainRequest Types
-		ccc.RegisterType(EthCallRequest{}),
-		ccc.RegisterType(EthCallResponse{}),
-
-		CrossChainCodec.RegisterCodec(Version, ccc),
 	)
 
 	if errs.Errored() {

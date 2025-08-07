@@ -5,13 +5,13 @@ package bootstrapper
 
 import (
 	"context"
+	"math/big"
 
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/logging"
-	"github.com/ava-labs/avalanchego/utils/math"
 	"github.com/ava-labs/avalanchego/utils/set"
 )
 
@@ -35,7 +35,7 @@ type Majority struct {
 
 	// received maps the blockID to the total sum of weight that has reported
 	// that block as accepted.
-	received map[ids.ID]uint64
+	received map[ids.ID]*big.Int
 	accepted []ids.ID
 }
 
@@ -51,7 +51,7 @@ func NewMajority(
 		},
 		log:         log,
 		nodeWeights: nodeWeights,
-		received:    make(map[ids.ID]uint64),
+		received:    make(map[ids.ID]*big.Int),
 	}
 }
 
@@ -66,33 +66,28 @@ func (m *Majority) RecordOpinion(_ context.Context, nodeID ids.NodeID, blkIDs se
 		return nil
 	}
 
-	weight := m.nodeWeights[nodeID]
+	weight := new(big.Int).SetUint64(m.nodeWeights[nodeID])
 	for blkID := range blkIDs {
-		newWeight, err := math.Add64(m.received[blkID], weight)
-		if err != nil {
-			return err
+		if received, ok := m.received[blkID]; ok {
+			m.received[blkID] = new(big.Int).Add(received, weight)
+		} else {
+			m.received[blkID] = new(big.Int).Set(weight)
 		}
-		m.received[blkID] = newWeight
 	}
 
 	if !m.finished() {
 		return nil
 	}
 
-	var (
-		totalWeight uint64
-		err         error
-	)
+	totalWeight := big.NewInt(0)
 	for _, weight := range m.nodeWeights {
-		totalWeight, err = math.Add64(totalWeight, weight)
-		if err != nil {
-			return err
-		}
+		totalWeight.Add(totalWeight, big.NewInt(int64(weight)))
 	}
 
-	requiredWeight := totalWeight/2 + 1
+	// requiredWeight := totalWeight/2 + 1
+	requiredWeight := new(big.Int).Add(new(big.Int).Div(totalWeight, big.NewInt(2)), big.NewInt(1))
 	for blkID, weight := range m.received {
-		if weight >= requiredWeight {
+		if weight.Cmp(requiredWeight) >= 0 {
 			m.accepted = append(m.accepted, blkID)
 		}
 	}

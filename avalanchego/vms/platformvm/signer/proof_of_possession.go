@@ -14,7 +14,7 @@ import (
 var (
 	_ Signer = (*ProofOfPossession)(nil)
 
-	errInvalidProofOfPossession = errors.New("invalid proof of possession")
+	ErrInvalidProofOfPossession = errors.New("invalid proof of possession")
 )
 
 type ProofOfPossession struct {
@@ -30,7 +30,7 @@ type ProofOfPossession struct {
 
 func NewProofOfPossession(sk *bls.SecretKey) *ProofOfPossession {
 	pk := bls.PublicFromSecretKey(sk)
-	pkBytes := bls.PublicKeyToBytes(pk)
+	pkBytes := bls.PublicKeyToCompressedBytes(pk)
 	sig := bls.SignProofOfPossession(sk, pkBytes)
 	sigBytes := bls.SignatureToBytes(sig)
 
@@ -43,7 +43,7 @@ func NewProofOfPossession(sk *bls.SecretKey) *ProofOfPossession {
 }
 
 func (p *ProofOfPossession) Verify() error {
-	publicKey, err := bls.PublicKeyFromBytes(p.PublicKey[:])
+	publicKey, err := bls.PublicKeyFromCompressedBytes(p.PublicKey[:])
 	if err != nil {
 		return err
 	}
@@ -52,7 +52,7 @@ func (p *ProofOfPossession) Verify() error {
 		return err
 	}
 	if !bls.VerifyProofOfPossession(publicKey, signature, p.PublicKey[:]) {
-		return errInvalidProofOfPossession
+		return ErrInvalidProofOfPossession
 	}
 
 	p.publicKey = publicKey
@@ -94,7 +94,7 @@ func (p *ProofOfPossession) UnmarshalJSON(b []byte) error {
 	if err != nil {
 		return err
 	}
-	pk, err := bls.PublicKeyFromBytes(pkBytes)
+	pk, err := bls.PublicKeyFromCompressedBytes(pkBytes)
 	if err != nil {
 		return err
 	}

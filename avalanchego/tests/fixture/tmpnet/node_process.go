@@ -4,54 +4,37 @@
 package tmpnet
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
-	"github.com/ava-labs/avalanchego/api/health"
 	"github.com/ava-labs/avalanchego/config"
 	"github.com/ava-labs/avalanchego/node"
+	"github.com/ava-labs/avalanchego/utils/perms"
 )
 
 const (
-	AvalancheGoPathEnvName = "AVALANCHEGO_PATH"
+	AvalancheGoPathEnvName      = "AVALANCHEGO_PATH"
+	AvalancheGoPluginDirEnvName = "AVALANCHEGO_PLUGIN_DIR"
 
 	defaultNodeInitTimeout = 10 * time.Second
 )
 
-var errNodeAlreadyRunning = errors.New("failed to start node: node is already running")
-
-func checkNodeHealth(ctx context.Context, uri string) (bool, error) {
-	// Check that the node is reporting healthy
-	health, err := health.NewClient(uri).Health(ctx, nil)
-	if err == nil {
-		return health.Healthy, nil
-	}
-
-	switch t := err.(type) {
-	case *net.OpError:
-		if t.Op == "read" {
-			// Connection refused - potentially recoverable
-			return false, nil
-		}
-	case syscall.Errno:
-		if t == syscall.ECONNREFUSED {
-			// Connection refused - potentially recoverable
-			return false, nil
-		}
-	}
-	// Assume all other errors are not recoverable
-	return false, fmt.Errorf("failed to query node health: %w", err)
-}
+var (
+	errNodeAlreadyRunning = errors.New("failed to start node: node is already running")
+	errNotRunning         = errors.New("node is not running")
+)
 
 // Defines local-specific node configuration. Supports setting default
 // and node-specific values.
@@ -62,7 +45,7 @@ type NodeProcess struct {
 	pid int
 }
 
-func (p *NodeProcess) setProcessContext(processContext node.NodeProcessContext) {
+func (p *NodeProcess) setProcessContext(processContext node.ProcessContext) {
 	p.pid = processContext.PID
 	p.node.URI = processContext.URI
 	p.node.StakingAddress = processContext.StakingAddress
@@ -70,17 +53,15 @@ func (p *NodeProcess) setProcessContext(processContext node.NodeProcessContext) 
 
 func (p *NodeProcess) readState() error {
 	path := p.getProcessContextPath()
-	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
-		// The absence of the process context file indicates the node is not running
-		p.setProcessContext(node.NodeProcessContext{})
-		return nil
-	}
-
 	bytes, err := os.ReadFile(path)
-	if err != nil {
+	if errors.Is(err, fs.ErrNotExist) {
+		// The absence of the process context file indicates the node is not running
+		p.setProcessContext(node.ProcessContext{})
+		return nil
+	} else if err != nil {
 		return fmt.Errorf("failed to read node process context: %w", err)
 	}
-	processContext := node.NodeProcessContext{}
+	processContext := node.ProcessContext{}
 	if err := json.Unmarshal(bytes, &processContext); err != nil {
 		return fmt.Errorf("failed to unmarshal node process context: %w", err)
 	}
@@ -109,13 +90,26 @@ func (p *NodeProcess) Start(w io.Writer) error {
 		return fmt.Errorf("failed to remove stale process context file: %w", err)
 	}
 
+	// All arguments are provided in the flags file
 	cmd := exec.Command(p.node.RuntimeConfig.AvalancheGoPath, "--config-file", p.node.getFlagsPath()) // #nosec G204
+	// Ensure process is detached from the parent process so that an error in the parent will not affect the child
+	configureDetachedProcess(cmd)
+
 	if err := cmd.Start(); err != nil {
 		return err
 	}
 
+	// Watch the node's main.log file in the background for FATAL log entries that indicate
+	// a configuration error preventing startup. Such a log entry will be provided to the
+	// cancelWithCause function so that waitForProcessContext can exit early with an error
+	// that includes the log entry.
+	ctx, cancelWithCause := context.WithCancelCause(context.Background())
+	defer cancelWithCause(nil)
+	logPath := p.node.GetDataDir() + "/logs/main.log"
+	go watchLogFileForFatal(ctx, cancelWithCause, w, logPath)
+
 	// Determine appropriate level of node description detail
-	dataDir := p.node.getDataDir()
+	dataDir := p.node.GetDataDir()
 	nodeDescription := fmt.Sprintf("node %q", p.node.NodeID)
 	if p.node.IsEphemeral {
 		nodeDescription = "ephemeral " + nodeDescription
@@ -126,24 +120,19 @@ func (p *NodeProcess) Start(w io.Writer) error {
 		nodeDescription = fmt.Sprintf("%s with path: %s", nodeDescription, dataDir)
 	}
 
-	go func() {
-		if err := cmd.Wait(); err != nil {
-			if err.Error() != "signal: killed" {
-				_, _ = fmt.Fprintf(w, "%s finished with error: %v\n", nodeDescription, err)
-			}
-		}
-		_, _ = fmt.Fprintf(w, "%s exited\n", nodeDescription)
-	}()
-
 	// A node writes a process context file on start. If the file is not
 	// found in a reasonable amount of time, the node is unlikely to have
 	// started successfully.
-	if err := p.waitForProcessContext(context.Background()); err != nil {
+	if err := p.waitForProcessContext(ctx); err != nil {
 		return fmt.Errorf("failed to start local node: %w", err)
 	}
 
-	_, err = fmt.Fprintf(w, "Started %s\n", nodeDescription)
-	return err
+	if _, err = fmt.Fprintf(w, "Started %s\n", nodeDescription); err != nil {
+		return err
+	}
+
+	// Configure collection of metrics and logs
+	return p.writeMonitoringConfig()
 }
 
 // Signals the node process to stop.
@@ -154,7 +143,7 @@ func (p *NodeProcess) InitiateStop() error {
 	}
 	if proc == nil {
 		// Already stopped
-		return nil
+		return p.removeMonitoringConfig()
 	}
 	if err := proc.Signal(syscall.SIGTERM); err != nil {
 		return fmt.Errorf("failed to send SIGTERM to pid %d: %w", p.pid, err)
@@ -172,7 +161,7 @@ func (p *NodeProcess) WaitForStopped(ctx context.Context) error {
 			return fmt.Errorf("failed to retrieve process: %w", err)
 		}
 		if proc == nil {
-			return nil
+			return p.removeMonitoringConfig()
 		}
 
 		select {
@@ -192,14 +181,18 @@ func (p *NodeProcess) IsHealthy(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("failed to determine process status: %w", err)
 	}
 	if proc == nil {
-		return false, ErrNotRunning
+		return false, errNotRunning
 	}
 
-	return checkNodeHealth(ctx, p.node.URI)
+	healthReply, err := CheckNodeHealth(ctx, p.node.URI)
+	if err != nil {
+		return false, err
+	}
+	return healthReply.Healthy, nil
 }
 
 func (p *NodeProcess) getProcessContextPath() string {
-	return filepath.Join(p.node.getDataDir(), config.DefaultProcessContextFilename)
+	return filepath.Join(p.node.GetDataDir(), config.DefaultProcessContextFilename)
 }
 
 func (p *NodeProcess) waitForProcessContext(ctx context.Context) error {
@@ -216,7 +209,7 @@ func (p *NodeProcess) waitForProcessContext(ctx context.Context) error {
 
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("failed to load process context for node %q before timeout: %w", p.node.NodeID, ctx.Err())
+			return fmt.Errorf("failed to load process context for node %q: %w", p.node.NodeID, context.Cause(ctx))
 		case <-ticker.C:
 		}
 	}
@@ -255,4 +248,157 @@ func (p *NodeProcess) getProcess() (*os.Process, error) {
 		return nil, nil
 	}
 	return nil, fmt.Errorf("failed to determine process status: %w", err)
+}
+
+// Write monitoring configuration enabling collection of metrics and logs from the node.
+func (p *NodeProcess) writeMonitoringConfig() error {
+	// Ensure labeling that uniquely identifies the node and its network
+	commonLabels := FlagsMap{
+		"network_uuid":      p.node.NetworkUUID,
+		"node_id":           p.node.NodeID,
+		"is_ephemeral_node": strconv.FormatBool(p.node.IsEphemeral),
+		"network_owner":     p.node.NetworkOwner,
+		// prometheus/promtail ignore empty values so including these
+		// labels with empty values outside of a github worker (where
+		// the env vars will not be set) should not be a problem.
+		"gh_repo":        os.Getenv("GH_REPO"),
+		"gh_workflow":    os.Getenv("GH_WORKFLOW"),
+		"gh_run_id":      os.Getenv("GH_RUN_ID"),
+		"gh_run_number":  os.Getenv("GH_RUN_NUMBER"),
+		"gh_run_attempt": os.Getenv("GH_RUN_ATTEMPT"),
+		"gh_job_id":      os.Getenv("GH_JOB_ID"),
+	}
+
+	tmpnetDir, err := getTmpnetPath()
+	if err != nil {
+		return err
+	}
+
+	prometheusConfig := []FlagsMap{
+		{
+			"targets": []string{strings.TrimPrefix(p.node.URI, "http://")},
+			"labels":  commonLabels,
+		},
+	}
+	if err := p.writeMonitoringConfigFile(tmpnetDir, "prometheus", prometheusConfig); err != nil {
+		return err
+	}
+
+	promtailLabels := FlagsMap{
+		"__path__": filepath.Join(p.node.GetDataDir(), "logs", "*.log"),
+	}
+	promtailLabels.SetDefaults(commonLabels)
+	promtailConfig := []FlagsMap{
+		{
+			"targets": []string{"localhost"},
+			"labels":  promtailLabels,
+		},
+	}
+	return p.writeMonitoringConfigFile(tmpnetDir, "promtail", promtailConfig)
+}
+
+// Return the path for this node's prometheus configuration.
+func (p *NodeProcess) getMonitoringConfigPath(tmpnetDir string, name string) string {
+	// Ensure a unique filename to allow config files to be added and removed
+	// by multiple nodes without conflict.
+	return filepath.Join(tmpnetDir, name, "file_sd_configs", fmt.Sprintf("%s_%s.json", p.node.NetworkUUID, p.node.NodeID))
+}
+
+// Ensure the removal of the prometheus configuration file for this node.
+func (p *NodeProcess) removeMonitoringConfig() error {
+	tmpnetDir, err := getTmpnetPath()
+	if err != nil {
+		return err
+	}
+
+	for _, name := range []string{"promtail", "prometheus"} {
+		configPath := p.getMonitoringConfigPath(tmpnetDir, name)
+		if err := os.Remove(configPath); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("failed to remove %s config: %w", name, err)
+		}
+	}
+
+	return nil
+}
+
+// Write the configuration for a type of monitoring (e.g. prometheus, promtail).
+func (p *NodeProcess) writeMonitoringConfigFile(tmpnetDir string, name string, config []FlagsMap) error {
+	configPath := p.getMonitoringConfigPath(tmpnetDir, name)
+
+	dir := filepath.Dir(configPath)
+	if err := os.MkdirAll(dir, perms.ReadWriteExecute); err != nil {
+		return fmt.Errorf("failed to create %s service discovery dir: %w", name, err)
+	}
+
+	bytes, err := DefaultJSONMarshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to marshal %s config: %w", name, err)
+	}
+
+	if err := os.WriteFile(configPath, bytes, perms.ReadWrite); err != nil {
+		return fmt.Errorf("failed to write %s config: %w", name, err)
+	}
+
+	return nil
+}
+
+// watchLogFileForFatal waits for the specified file path to exist and then checks each of
+// its lines for the string 'FATAL' until such a line is observed or the provided context
+// is canceled. If line containing 'FATAL' is encountered, it will be provided as an error
+// to the provided cancelWithCause function.
+//
+// Errors encountered while looking for FATAL log entries are considered potential rather
+// than positive indications of failure and are printed to the provided writer instead of
+// being provided to the cancelWithCause function.
+func watchLogFileForFatal(ctx context.Context, cancelWithCause context.CancelCauseFunc, w io.Writer, path string) {
+	waitInterval := 100 * time.Millisecond
+	// Wait for the file to exist
+	fileExists := false
+	for !fileExists {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			if _, err := os.Stat(path); os.IsNotExist(err) {
+				// File does not exist yet - wait and try again
+				time.Sleep(waitInterval)
+			} else {
+				fileExists = true
+			}
+		}
+	}
+
+	// Open the file
+	file, err := os.Open(path)
+	if err != nil {
+		_, _ = fmt.Fprintf(w, "failed to open %s: %v", path, err)
+		return
+	}
+	defer file.Close()
+
+	// Scan for lines in the file containing 'FATAL'
+	reader := bufio.NewReader(file)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			// Read a line from the file
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					// If end of file is reached, wait and try again
+					time.Sleep(waitInterval)
+					continue
+				} else {
+					_, _ = fmt.Fprintf(w, "error reading %s: %v\n", path, err)
+					return
+				}
+			}
+			if strings.Contains(line, "FATAL") {
+				cancelWithCause(errors.New(line))
+				return
+			}
+		}
+	}
 }

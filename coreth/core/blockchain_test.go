@@ -8,8 +8,8 @@ import (
 	"math/big"
 	"os"
 	"testing"
-	"time"
 
+	"github.com/ava-labs/avalanchego/upgrade"
 	"github.com/ava-labs/coreth/consensus/dummy"
 	"github.com/ava-labs/coreth/core/rawdb"
 	"github.com/ava-labs/coreth/core/state"
@@ -21,9 +21,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
-	"github.com/fsnotify/fsnotify"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/holiman/uint256"
 )
 
 var (
@@ -81,100 +79,6 @@ func TestArchiveBlockChain(t *testing.T) {
 			tt.testFunc(t, createArchiveBlockChain)
 		})
 	}
-}
-
-// awaitWatcherEventsSubside waits for at least one event on [watcher] and then waits
-// for at least [subsideTimeout] before returning
-func awaitWatcherEventsSubside(watcher *fsnotify.Watcher, subsideTimeout time.Duration) {
-	done := make(chan struct{})
-
-	go func() {
-		defer func() {
-			close(done)
-		}()
-
-		select {
-		case <-watcher.Events:
-		case <-watcher.Errors:
-			return
-		}
-
-		for {
-			select {
-			case <-watcher.Events:
-			case <-watcher.Errors:
-				return
-			case <-time.After(subsideTimeout):
-				return
-			}
-		}
-	}()
-	<-done
-}
-
-func TestTrieCleanJournal(t *testing.T) {
-	if os.Getenv("RUN_FLAKY_TESTS") != "true" {
-		t.Skip("FLAKY")
-	}
-	require := require.New(t)
-	assert := assert.New(t)
-
-	trieCleanJournal := t.TempDir()
-	trieCleanJournalWatcher, err := fsnotify.NewWatcher()
-	require.NoError(err)
-	defer func() {
-		assert.NoError(trieCleanJournalWatcher.Close())
-	}()
-	require.NoError(trieCleanJournalWatcher.Add(trieCleanJournal))
-
-	create := func(db ethdb.Database, gspec *Genesis, lastAcceptedHash common.Hash) (*BlockChain, error) {
-		config := *archiveConfig
-		config.TrieCleanJournal = trieCleanJournal
-		config.TrieCleanRejournal = 100 * time.Millisecond
-		return createBlockChain(db, &config, gspec, lastAcceptedHash)
-	}
-
-	var (
-		key1, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
-		key2, _ = crypto.HexToECDSA("8a1f9a8f95be41cd7ccb6168179afb4504aefe388d1e14474d32c45c72ce7b7a")
-		addr1   = crypto.PubkeyToAddress(key1.PublicKey)
-		addr2   = crypto.PubkeyToAddress(key2.PublicKey)
-		chainDB = rawdb.NewMemoryDatabase()
-	)
-
-	// Ensure that key1 has some funds in the genesis block.
-	genesisBalance := big.NewInt(1000000)
-	gspec := &Genesis{
-		Config: &params.ChainConfig{HomesteadBlock: new(big.Int)},
-		Alloc:  GenesisAlloc{addr1: {Balance: genesisBalance}},
-	}
-
-	blockchain, err := create(chainDB, gspec, common.Hash{})
-	require.NoError(err)
-	defer blockchain.Stop()
-
-	// This call generates a chain of 3 blocks.
-	signer := types.HomesteadSigner{}
-	_, chain, _, err := GenerateChainWithGenesis(gspec, blockchain.engine, 3, 10, func(i int, gen *BlockGen) {
-		tx, _ := types.SignTx(types.NewTransaction(gen.TxNonce(addr1), addr2, big.NewInt(10000), params.TxGas, nil, nil), signer, key1)
-		gen.AddTx(tx)
-	})
-	require.NoError(err)
-
-	// Insert and accept the generated chain
-	_, err = blockchain.InsertChain(chain)
-	require.NoError(err)
-
-	for _, block := range chain {
-		require.NoError(blockchain.Accept(block))
-	}
-	blockchain.DrainAcceptorQueue()
-
-	awaitWatcherEventsSubside(trieCleanJournalWatcher, time.Second)
-	// Assert that a new file is created in the trie clean journal
-	dirEntries, err := os.ReadDir(trieCleanJournal)
-	require.NoError(err)
-	require.NotEmpty(dirEntries)
 }
 
 func TestArchiveBlockChainSnapsDisabled(t *testing.T) {
@@ -372,7 +276,6 @@ func TestBlockChainOfflinePruningUngracefulShutdown(t *testing.T) {
 		prunerConfig := pruner.Config{
 			Datadir:   tempDir,
 			BloomSize: 256,
-			Cachedir:  pruningConfig.TrieCleanJournal,
 		}
 
 		pruner, err := pruner.NewPruner(db, prunerConfig)
@@ -408,7 +311,7 @@ func testRepopulateMissingTriesParallel(t *testing.T, parallelism int) {
 	genesisBalance := big.NewInt(1000000)
 	gspec := &Genesis{
 		Config: &params.ChainConfig{HomesteadBlock: new(big.Int)},
-		Alloc:  GenesisAlloc{addr1: {Balance: genesisBalance}},
+		Alloc:  types.GenesisAlloc{addr1: {Balance: genesisBalance}},
 	}
 
 	blockchain, err := createBlockChain(chainDB, pruningConfig, gspec, common.Hash{})
@@ -521,7 +424,7 @@ func TestUngracefulAsyncShutdown(t *testing.T) {
 	genesisBalance := big.NewInt(1000000)
 	gspec := &Genesis{
 		Config: &params.ChainConfig{HomesteadBlock: new(big.Int)},
-		Alloc:  GenesisAlloc{addr1: {Balance: genesisBalance}},
+		Alloc:  types.GenesisAlloc{addr1: {Balance: genesisBalance}},
 	}
 
 	blockchain, err := create(chainDB, gspec, common.Hash{})
@@ -575,13 +478,13 @@ func TestUngracefulAsyncShutdown(t *testing.T) {
 	// After inserting all blocks, we should confirm that txs added after the
 	// async worker shutdown cannot be found.
 	for _, tx := range foundTxs {
-		txLookup := blockchain.GetTransactionLookup(tx)
+		txLookup, _, _ := blockchain.GetTransactionLookup(tx)
 		if txLookup == nil {
 			t.Fatalf("missing transaction: %v", tx)
 		}
 	}
 	for _, tx := range missingTxs {
-		txLookup := blockchain.GetTransactionLookup(tx)
+		txLookup, _, _ := blockchain.GetTransactionLookup(tx)
 		if txLookup != nil {
 			t.Fatalf("transaction should be missing: %v", tx)
 		}
@@ -593,9 +496,10 @@ func TestUngracefulAsyncShutdown(t *testing.T) {
 		if nonce != 10 {
 			return fmt.Errorf("expected nonce addr1: 10, found nonce: %d", nonce)
 		}
-		transferredFunds := big.NewInt(100000)
+		transferredFunds := uint256.MustFromBig(big.NewInt(100000))
 		balance1 := sdb.GetBalance(addr1)
-		expectedBalance1 := new(big.Int).Sub(genesisBalance, transferredFunds)
+		genesisBalance := uint256.MustFromBig(genesisBalance)
+		expectedBalance1 := new(uint256.Int).Sub(genesisBalance, transferredFunds)
 		if balance1.Cmp(expectedBalance1) != 0 {
 			return fmt.Errorf("expected addr1 balance: %d, found balance: %d", expectedBalance1, balance1)
 		}
@@ -624,7 +528,7 @@ func TestUngracefulAsyncShutdown(t *testing.T) {
 
 		// We should confirm all transactions can now be queried
 		for _, tx := range allTxs {
-			txLookup := bc.GetTransactionLookup(tx)
+			txLookup, _, _ := bc.GetTransactionLookup(tx)
 			if txLookup == nil {
 				t.Fatalf("missing transaction: %v", tx)
 			}
@@ -632,269 +536,14 @@ func TestUngracefulAsyncShutdown(t *testing.T) {
 	}
 }
 
-// TODO: simplify the unindexer logic and this test.
-func TestTransactionIndices(t *testing.T) {
-	// Configure and generate a sample block chain
-	require := require.New(t)
-	var (
-		key1, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
-		key2, _ = crypto.HexToECDSA("8a1f9a8f95be41cd7ccb6168179afb4504aefe388d1e14474d32c45c72ce7b7a")
-		addr1   = crypto.PubkeyToAddress(key1.PublicKey)
-		addr2   = crypto.PubkeyToAddress(key2.PublicKey)
-		funds   = big.NewInt(10000000000000)
-		gspec   = &Genesis{
-			Config: &params.ChainConfig{HomesteadBlock: new(big.Int)},
-			Alloc:  GenesisAlloc{addr1: {Balance: funds}},
-		}
-		signer = types.LatestSigner(gspec.Config)
-	)
-	genDb, blocks, _, err := GenerateChainWithGenesis(gspec, dummy.NewFakerWithCallbacks(TestCallbacks), 128, 10, func(i int, block *BlockGen) {
-		tx, err := types.SignTx(types.NewTransaction(block.TxNonce(addr1), addr2, big.NewInt(10000), params.TxGas, nil, nil), signer, key1)
-		require.NoError(err)
-		block.AddTx(tx)
-	})
-	require.NoError(err)
-
-	blocks2, _, err := GenerateChain(gspec.Config, blocks[len(blocks)-1], dummy.NewFakerWithCallbacks(TestCallbacks), genDb, 10, 10, func(i int, block *BlockGen) {
-		tx, err := types.SignTx(types.NewTransaction(block.TxNonce(addr1), addr2, big.NewInt(10000), params.TxGas, nil, nil), signer, key1)
-		require.NoError(err)
-		block.AddTx(tx)
-	})
-	require.NoError(err)
-
-	check := func(tail *uint64, chain *BlockChain) {
-		stored := rawdb.ReadTxIndexTail(chain.db)
-		var tailValue uint64
-		if tail == nil {
-			require.Nil(stored)
-			tailValue = 0
-		} else {
-			require.EqualValues(*tail, *stored, "expected tail %d, got %d", *tail, *stored)
-			tailValue = *tail
-		}
-
-		for i := tailValue; i <= chain.CurrentBlock().Number.Uint64(); i++ {
-			block := rawdb.ReadBlock(chain.db, rawdb.ReadCanonicalHash(chain.db, i), i)
-			if block.Transactions().Len() == 0 {
-				continue
-			}
-			for _, tx := range block.Transactions() {
-				index := rawdb.ReadTxLookupEntry(chain.db, tx.Hash())
-				require.NotNilf(index, "Miss transaction indices, number %d hash %s", i, tx.Hash().Hex())
-			}
-		}
-
-		for i := uint64(0); i < tailValue; i++ {
-			block := rawdb.ReadBlock(chain.db, rawdb.ReadCanonicalHash(chain.db, i), i)
-			if block.Transactions().Len() == 0 {
-				continue
-			}
-			for _, tx := range block.Transactions() {
-				index := rawdb.ReadTxLookupEntry(chain.db, tx.Hash())
-				require.Nilf(index, "Transaction indices should be deleted, number %d hash %s", i, tx.Hash().Hex())
-			}
-		}
-	}
-
-	conf := &CacheConfig{
-		TrieCleanLimit:            256,
-		TrieDirtyLimit:            256,
-		TrieDirtyCommitTarget:     20,
-		TriePrefetcherParallelism: 4,
-		Pruning:                   true,
-		CommitInterval:            4096,
-		SnapshotLimit:             256,
-		SnapshotNoBuild:           true, // Ensure the test errors if snapshot initialization fails
-		AcceptorQueueLimit:        64,
-	}
-
-	// Init block chain and check all needed indices has been indexed.
-	chainDB := rawdb.NewMemoryDatabase()
-	chain, err := createBlockChain(chainDB, conf, gspec, common.Hash{})
-	require.NoError(err)
-
-	_, err = chain.InsertChain(blocks)
-	require.NoError(err)
-
-	for _, block := range blocks {
-		err := chain.Accept(block)
-		require.NoError(err)
-	}
-	chain.DrainAcceptorQueue()
-
-	chain.Stop()
-	check(nil, chain) // check all indices has been indexed
-
-	lastAcceptedHash := chain.CurrentHeader().Hash()
-
-	// Reconstruct a block chain which only reserves limited tx indices
-	// 128 blocks were previously indexed. Now we add a new block at each test step.
-	limits := []uint64{
-		0,   /* tip: 129 reserve all (don't run) */
-		131, /* tip: 130 reserve all */
-		140, /* tip: 131 reserve all */
-		64,  /* tip: 132, limit:64 */
-		32,  /* tip: 133, limit:32  */
-	}
-	for i, l := range limits {
-		t.Run(fmt.Sprintf("test-%d, limit: %d", i+1, l), func(t *testing.T) {
-			conf.TxLookupLimit = l
-
-			chain, err := createBlockChain(chainDB, conf, gspec, lastAcceptedHash)
-			require.NoError(err)
-
-			newBlks := blocks2[i : i+1]
-			_, err = chain.InsertChain(newBlks) // Feed chain a higher block to trigger indices updater.
-			require.NoError(err)
-
-			err = chain.Accept(newBlks[0]) // Accept the block to trigger indices updater.
-			require.NoError(err)
-
-			chain.DrainAcceptorQueue()
-			time.Sleep(50 * time.Millisecond) // Wait for indices initialisation
-
-			chain.Stop()
-			var tail *uint64
-			if l == 0 {
-				tail = nil
-			} else {
-				var tl uint64
-				if chain.CurrentBlock().Number.Uint64() > l {
-					// tail should be the first block number which is indexed
-					// i.e the first block number that's in the lookup range
-					tl = chain.CurrentBlock().Number.Uint64() - l + 1
-				}
-				tail = &tl
-			}
-
-			check(tail, chain)
-
-			lastAcceptedHash = chain.CurrentHeader().Hash()
-		})
-	}
-}
-
-func TestTransactionSkipIndexing(t *testing.T) {
-	// Configure and generate a sample block chain
-	require := require.New(t)
-	var (
-		key1, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
-		key2, _ = crypto.HexToECDSA("8a1f9a8f95be41cd7ccb6168179afb4504aefe388d1e14474d32c45c72ce7b7a")
-		addr1   = crypto.PubkeyToAddress(key1.PublicKey)
-		addr2   = crypto.PubkeyToAddress(key2.PublicKey)
-		funds   = big.NewInt(10000000000000)
-		gspec   = &Genesis{
-			Config: &params.ChainConfig{HomesteadBlock: new(big.Int)},
-			Alloc:  GenesisAlloc{addr1: {Balance: funds}},
-		}
-		signer = types.LatestSigner(gspec.Config)
-	)
-	genDb, blocks, _, err := GenerateChainWithGenesis(gspec, dummy.NewFakerWithCallbacks(TestCallbacks), 5, 10, func(i int, block *BlockGen) {
-		tx, err := types.SignTx(types.NewTransaction(block.TxNonce(addr1), addr2, big.NewInt(10000), params.TxGas, nil, nil), signer, key1)
-		require.NoError(err)
-		block.AddTx(tx)
-	})
-	require.NoError(err)
-
-	blocks2, _, err := GenerateChain(gspec.Config, blocks[len(blocks)-1], dummy.NewFakerWithCallbacks(TestCallbacks), genDb, 5, 10, func(i int, block *BlockGen) {
-		tx, err := types.SignTx(types.NewTransaction(block.TxNonce(addr1), addr2, big.NewInt(10000), params.TxGas, nil, nil), signer, key1)
-		require.NoError(err)
-		block.AddTx(tx)
-	})
-	require.NoError(err)
-
-	checkRemoved := func(tail *uint64, to uint64, chain *BlockChain) {
-		stored := rawdb.ReadTxIndexTail(chain.db)
-		var tailValue uint64
-		if tail == nil {
-			require.Nil(stored)
-			tailValue = 0
-		} else {
-			require.EqualValues(*tail, *stored, "expected tail %d, got %d", *tail, *stored)
-			tailValue = *tail
-		}
-
-		for i := tailValue; i < to; i++ {
-			block := rawdb.ReadBlock(chain.db, rawdb.ReadCanonicalHash(chain.db, i), i)
-			if block.Transactions().Len() == 0 {
-				continue
-			}
-			for _, tx := range block.Transactions() {
-				index := rawdb.ReadTxLookupEntry(chain.db, tx.Hash())
-				require.NotNilf(index, "Miss transaction indices, number %d hash %s", i, tx.Hash().Hex())
-			}
-		}
-
-		for i := uint64(0); i < tailValue; i++ {
-			block := rawdb.ReadBlock(chain.db, rawdb.ReadCanonicalHash(chain.db, i), i)
-			if block.Transactions().Len() == 0 {
-				continue
-			}
-			for _, tx := range block.Transactions() {
-				index := rawdb.ReadTxLookupEntry(chain.db, tx.Hash())
-				require.Nilf(index, "Transaction indices should be deleted, number %d hash %s", i, tx.Hash().Hex())
-			}
-		}
-
-		for i := to; i <= chain.CurrentBlock().Number.Uint64(); i++ {
-			block := rawdb.ReadBlock(chain.db, rawdb.ReadCanonicalHash(chain.db, i), i)
-			if block.Transactions().Len() == 0 {
-				continue
-			}
-			for _, tx := range block.Transactions() {
-				index := rawdb.ReadTxLookupEntry(chain.db, tx.Hash())
-				require.Nilf(index, "Transaction indices should be skipped, number %d hash %s", i, tx.Hash().Hex())
-			}
-		}
-	}
-
-	conf := &CacheConfig{
-		TrieCleanLimit:            256,
-		TrieDirtyLimit:            256,
-		TrieDirtyCommitTarget:     20,
-		TriePrefetcherParallelism: 4,
-		Pruning:                   true,
-		CommitInterval:            4096,
-		SnapshotLimit:             256,
-		SnapshotNoBuild:           true, // Ensure the test errors if snapshot initialization fails
-		AcceptorQueueLimit:        64,
-		SkipTxIndexing:            true,
-	}
-
-	// test1: Init block chain and check all indices has been skipped.
-	chainDB := rawdb.NewMemoryDatabase()
-	chain, err := createAndInsertChain(chainDB, conf, gspec, blocks, common.Hash{})
-	require.NoError(err)
-	checkRemoved(nil, 0, chain) // check all indices has been skipped
-
-	// test2: specify lookuplimit with tx index skipping enabled. Blocks should not be indexed but tail should be updated.
-	conf.TxLookupLimit = 2
-	chain, err = createAndInsertChain(chainDB, conf, gspec, blocks2[0:1], chain.CurrentHeader().Hash())
-	require.NoError(err)
-	tail := chain.CurrentBlock().Number.Uint64() - conf.TxLookupLimit + 1
-	checkRemoved(&tail, 0, chain)
-
-	// test3: tx index skipping and unindexer disabled. Blocks should be indexed and tail should be updated.
-	conf.TxLookupLimit = 0
-	conf.SkipTxIndexing = false
-	chainDB = rawdb.NewMemoryDatabase()
-	chain, err = createAndInsertChain(chainDB, conf, gspec, blocks, common.Hash{})
-	require.NoError(err)
-	checkRemoved(nil, chain.CurrentBlock().Number.Uint64()+1, chain) // check all indices has been indexed
-
-	// now change tx index skipping to true and check that the indices are skipped for the last block
-	// and old indices are removed up to the tail, but [tail, current) indices are still there.
-	conf.TxLookupLimit = 2
-	conf.SkipTxIndexing = true
-	chain, err = createAndInsertChain(chainDB, conf, gspec, blocks2[0:1], chain.CurrentHeader().Hash())
-	require.NoError(err)
-	tail = chain.CurrentBlock().Number.Uint64() - conf.TxLookupLimit + 1
-	checkRemoved(&tail, chain.CurrentBlock().Number.Uint64(), chain)
-}
-
 // TestCanonicalHashMarker tests all the canonical hash markers are updated/deleted
 // correctly in case reorg is called.
 func TestCanonicalHashMarker(t *testing.T) {
+	testCanonicalHashMarker(t, rawdb.HashScheme)
+	testCanonicalHashMarker(t, rawdb.PathScheme)
+}
+
+func testCanonicalHashMarker(t *testing.T, scheme string) {
 	var cases = []struct {
 		forkA int
 		forkB int
@@ -933,7 +582,7 @@ func TestCanonicalHashMarker(t *testing.T) {
 		var (
 			gspec = &Genesis{
 				Config:  params.TestChainConfig,
-				Alloc:   GenesisAlloc{},
+				Alloc:   types.GenesisAlloc{},
 				BaseFee: big.NewInt(params.ApricotPhase3InitialBaseFee),
 			}
 			engine = dummy.NewCoinbaseFaker()
@@ -948,8 +597,7 @@ func TestCanonicalHashMarker(t *testing.T) {
 		}
 
 		// Initialize test chain
-		diskdb := rawdb.NewMemoryDatabase()
-		chain, err := NewBlockChain(diskdb, DefaultCacheConfig, gspec, engine, vm.Config{}, common.Hash{}, false)
+		chain, err := NewBlockChain(rawdb.NewMemoryDatabase(), DefaultCacheConfigWithScheme(scheme), gspec, engine, vm.Config{}, common.Hash{}, false)
 		if err != nil {
 			t.Fatalf("failed to create tester chain: %v", err)
 		}
@@ -1015,7 +663,7 @@ func TestTxLookupBlockChain(t *testing.T) {
 		SnapshotLimit:             256,
 		SnapshotNoBuild:           true, // Ensure the test errors if snapshot initialization fails
 		AcceptorQueueLimit:        64,   // ensure channel doesn't block
-		TxLookupLimit:             5,
+		TransactionHistory:        5,
 	}
 	createTxLookupBlockChain := func(db ethdb.Database, gspec *Genesis, lastAcceptedHash common.Hash) (*BlockChain, error) {
 		return createBlockChain(db, cacheConf, gspec, lastAcceptedHash)
@@ -1038,7 +686,7 @@ func TestTxLookupSkipIndexingBlockChain(t *testing.T) {
 		SnapshotLimit:             256,
 		SnapshotNoBuild:           true, // Ensure the test errors if snapshot initialization fails
 		AcceptorQueueLimit:        64,   // ensure channel doesn't block
-		TxLookupLimit:             5,
+		TransactionHistory:        5,
 		SkipTxIndexing:            true,
 	}
 	createTxLookupBlockChain := func(db ethdb.Database, gspec *Genesis, lastAcceptedHash common.Hash) (*BlockChain, error) {
@@ -1060,6 +708,9 @@ func TestCreateThenDeletePreByzantium(t *testing.T) {
 	config.PetersburgBlock = nil
 	config.IstanbulBlock = nil
 	config.MuirGlacierBlock = nil
+	config.BerlinBlock = nil
+	config.LondonBlock = nil
+
 	testCreateThenDelete(t, &config)
 }
 func TestCreateThenDeletePostByzantium(t *testing.T) {
@@ -1097,7 +748,7 @@ func testCreateThenDelete(t *testing.T, config *params.ChainConfig) {
 	}...)
 	gspec := &Genesis{
 		Config: config,
-		Alloc: GenesisAlloc{
+		Alloc: types.GenesisAlloc{
 			address: {Balance: funds},
 		},
 	}
@@ -1136,6 +787,120 @@ func testCreateThenDelete(t *testing.T, config *params.ChainConfig) {
 	}
 	defer chain.Stop()
 	// Import the blocks
+	for _, block := range blocks {
+		if _, err := chain.InsertChain([]*types.Block{block}); err != nil {
+			t.Fatalf("block %d: failed to insert into chain: %v", block.NumberU64(), err)
+		}
+	}
+}
+
+func TestDeleteThenCreate(t *testing.T) {
+	var (
+		engine      = dummy.NewFaker()
+		key, _      = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		address     = crypto.PubkeyToAddress(key.PublicKey)
+		factoryAddr = crypto.CreateAddress(address, 0)
+		funds       = big.NewInt(params.Ether) // Note: additional funds are provided here compared to go-ethereum so test completes.
+	)
+	/*
+		contract Factory {
+		  function deploy(bytes memory code) public {
+			address addr;
+			assembly {
+			  addr := create2(0, add(code, 0x20), mload(code), 0)
+			  if iszero(extcodesize(addr)) {
+				revert(0, 0)
+			  }
+			}
+		  }
+		}
+	*/
+	factoryBIN := common.Hex2Bytes("608060405234801561001057600080fd5b50610241806100206000396000f3fe608060405234801561001057600080fd5b506004361061002a5760003560e01c80627743601461002f575b600080fd5b610049600480360381019061004491906100d8565b61004b565b005b6000808251602084016000f59050803b61006457600080fd5b5050565b600061007b61007684610146565b610121565b905082815260208101848484011115610097576100966101eb565b5b6100a2848285610177565b509392505050565b600082601f8301126100bf576100be6101e6565b5b81356100cf848260208601610068565b91505092915050565b6000602082840312156100ee576100ed6101f5565b5b600082013567ffffffffffffffff81111561010c5761010b6101f0565b5b610118848285016100aa565b91505092915050565b600061012b61013c565b90506101378282610186565b919050565b6000604051905090565b600067ffffffffffffffff821115610161576101606101b7565b5b61016a826101fa565b9050602081019050919050565b82818337600083830152505050565b61018f826101fa565b810181811067ffffffffffffffff821117156101ae576101ad6101b7565b5b80604052505050565b7f4e487b7100000000000000000000000000000000000000000000000000000000600052604160045260246000fd5b600080fd5b600080fd5b600080fd5b600080fd5b6000601f19601f830116905091905056fea2646970667358221220ea8b35ed310d03b6b3deef166941140b4d9e90ea2c92f6b41eb441daf49a59c364736f6c63430008070033")
+
+	/*
+		contract C {
+			uint256 value;
+			constructor() {
+				value = 100;
+			}
+			function destruct() public payable {
+				selfdestruct(payable(msg.sender));
+			}
+			receive() payable external {}
+		}
+	*/
+	contractABI := common.Hex2Bytes("6080604052348015600f57600080fd5b5060646000819055506081806100266000396000f3fe608060405260043610601f5760003560e01c80632b68b9c614602a576025565b36602557005b600080fd5b60306032565b005b3373ffffffffffffffffffffffffffffffffffffffff16fffea2646970667358221220ab749f5ed1fcb87bda03a74d476af3f074bba24d57cb5a355e8162062ad9a4e664736f6c63430008070033")
+	contractAddr := crypto.CreateAddress2(factoryAddr, [32]byte{}, crypto.Keccak256(contractABI))
+
+	gspec := &Genesis{
+		Config: params.TestChainConfig,
+		Alloc: types.GenesisAlloc{
+			address: {Balance: funds},
+		},
+	}
+	nonce := uint64(0)
+	signer := types.HomesteadSigner{}
+	_, blocks, _, err := GenerateChainWithGenesis(gspec, engine, 2, 10, func(i int, b *BlockGen) {
+		fee := big.NewInt(1)
+		if b.header.BaseFee != nil {
+			fee = b.header.BaseFee
+		}
+		b.SetCoinbase(common.Address{1})
+
+		// Block 1
+		if i == 0 {
+			tx, _ := types.SignNewTx(key, signer, &types.LegacyTx{
+				Nonce:    nonce,
+				GasPrice: new(big.Int).Set(fee),
+				Gas:      500000,
+				Data:     factoryBIN,
+			})
+			nonce++
+			b.AddTx(tx)
+
+			data := common.Hex2Bytes("00774360000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000a76080604052348015600f57600080fd5b5060646000819055506081806100266000396000f3fe608060405260043610601f5760003560e01c80632b68b9c614602a576025565b36602557005b600080fd5b60306032565b005b3373ffffffffffffffffffffffffffffffffffffffff16fffea2646970667358221220ab749f5ed1fcb87bda03a74d476af3f074bba24d57cb5a355e8162062ad9a4e664736f6c6343000807003300000000000000000000000000000000000000000000000000")
+			tx, _ = types.SignNewTx(key, signer, &types.LegacyTx{
+				Nonce:    nonce,
+				GasPrice: new(big.Int).Set(fee),
+				Gas:      500000,
+				To:       &factoryAddr,
+				Data:     data,
+			})
+			b.AddTx(tx)
+			nonce++
+		} else {
+			// Block 2
+			tx, _ := types.SignNewTx(key, signer, &types.LegacyTx{
+				Nonce:    nonce,
+				GasPrice: new(big.Int).Set(fee),
+				Gas:      500000,
+				To:       &contractAddr,
+				Data:     common.Hex2Bytes("2b68b9c6"), // destruct
+			})
+			nonce++
+			b.AddTx(tx)
+
+			data := common.Hex2Bytes("00774360000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000a76080604052348015600f57600080fd5b5060646000819055506081806100266000396000f3fe608060405260043610601f5760003560e01c80632b68b9c614602a576025565b36602557005b600080fd5b60306032565b005b3373ffffffffffffffffffffffffffffffffffffffff16fffea2646970667358221220ab749f5ed1fcb87bda03a74d476af3f074bba24d57cb5a355e8162062ad9a4e664736f6c6343000807003300000000000000000000000000000000000000000000000000")
+			tx, _ = types.SignNewTx(key, signer, &types.LegacyTx{
+				Nonce:    nonce,
+				GasPrice: new(big.Int).Set(fee),
+				Gas:      500000,
+				To:       &factoryAddr, // re-creation
+				Data:     data,
+			})
+			b.AddTx(tx)
+			nonce++
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Import the canonical chain
+	chain, err := NewBlockChain(rawdb.NewMemoryDatabase(), DefaultCacheConfig, gspec, engine, vm.Config{}, common.Hash{}, false)
+	if err != nil {
+		t.Fatalf("failed to create tester chain: %v", err)
+	}
+	defer chain.Stop()
 	for _, block := range blocks {
 		if _, err := chain.InsertChain([]*types.Block{block}); err != nil {
 			t.Fatalf("block %d: failed to insert into chain: %v", block.NumberU64(), err)
@@ -1185,7 +950,7 @@ func TestTransientStorageReset(t *testing.T) {
 	}...)
 	gspec := &Genesis{
 		Config: params.TestChainConfig,
-		Alloc: GenesisAlloc{
+		Alloc: types.GenesisAlloc{
 			address: {Balance: funds},
 		},
 	}
@@ -1251,7 +1016,8 @@ func TestEIP3651(t *testing.T) {
 		addr2   = crypto.PubkeyToAddress(key2.PublicKey)
 		funds   = new(big.Int).Mul(common.Big1, big.NewInt(params.Ether))
 		gspec   = &Genesis{
-			Config: params.TestChainConfig,
+			Config:    params.TestChainConfig,
+			Timestamp: uint64(upgrade.InitiallyActiveTime.Unix()),
 			Alloc: GenesisAlloc{
 				addr1: {Balance: funds},
 				addr2: {Balance: funds},
@@ -1330,7 +1096,7 @@ func TestEIP3651(t *testing.T) {
 	// Note this differs from go-ethereum where the miner receives the gasUsed * block baseFee,
 	// as our handling of the coinbase payment is different.
 	// Note we use block.GasUsed() here as there is only one tx.
-	actual := state.GetBalance(common.HexToAddress("0x000000000000000000000000000000000000dEaD"))
+	actual := state.GetBalance(common.HexToAddress("0x000000000000000000000000000000000000dEaD")).ToBig()
 	tx := block.Transactions()[0]
 	gasPrice := new(big.Int).Add(block.BaseFee(), tx.EffectiveGasTipValue(block.BaseFee()))
 	expected := new(big.Int).SetUint64(block.GasUsed() * gasPrice.Uint64())
@@ -1341,31 +1107,8 @@ func TestEIP3651(t *testing.T) {
 	// 4: Ensure the tx sender paid for the gasUsed * (block baseFee + effectiveGasTip).
 	// Note this differs from go-ethereum where the miner receives the gasUsed * block baseFee,
 	// as our handling of the coinbase payment is different.
-	actual = new(big.Int).Sub(funds, state.GetBalance(addr1))
+	actual = new(big.Int).Sub(funds, state.GetBalance(addr1).ToBig())
 	if actual.Cmp(expected) != 0 {
 		t.Fatalf("sender balance incorrect: expected %d, got %d", expected, actual)
 	}
-}
-
-func createAndInsertChain(db ethdb.Database, cacheConfig *CacheConfig, gspec *Genesis, blocks types.Blocks, lastAcceptedHash common.Hash) (*BlockChain, error) {
-	chain, err := createBlockChain(db, cacheConfig, gspec, lastAcceptedHash)
-	if err != nil {
-		return nil, err
-	}
-	_, err = chain.InsertChain(blocks)
-	if err != nil {
-		return nil, err
-	}
-	for _, block := range blocks {
-		err := chain.Accept(block)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	chain.DrainAcceptorQueue()
-	time.Sleep(1000 * time.Millisecond) // Wait for indices initialisation
-
-	chain.Stop()
-	return chain, nil
 }

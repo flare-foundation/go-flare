@@ -6,6 +6,7 @@ package bootstrapper
 import (
 	"context"
 	"math"
+	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -13,8 +14,6 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/set"
-
-	safemath "github.com/ava-labs/avalanchego/utils/math"
 )
 
 func TestNewMajority(t *testing.T) {
@@ -37,7 +36,7 @@ func TestNewMajority(t *testing.T) {
 			nodeID0: 1,
 			nodeID1: 1,
 		},
-		received: make(map[ids.ID]uint64),
+		received: make(map[ids.ID]*big.Int),
 	}
 	require.Equal(t, expectedMajority, majority)
 }
@@ -62,7 +61,7 @@ func TestMajorityGetPeers(t *testing.T) {
 					nodeID0: 1,
 					nodeID1: 1,
 				},
-				received: make(map[ids.ID]uint64),
+				received: make(map[ids.ID]*big.Int),
 			},
 			expectedState: &Majority{
 				requests: requests{
@@ -75,7 +74,7 @@ func TestMajorityGetPeers(t *testing.T) {
 					nodeID0: 1,
 					nodeID1: 1,
 				},
-				received: make(map[ids.ID]uint64),
+				received: make(map[ids.ID]*big.Int),
 			},
 			expectedPeers: nil,
 		},
@@ -91,7 +90,7 @@ func TestMajorityGetPeers(t *testing.T) {
 					nodeID0: 1,
 					nodeID1: 1,
 				},
-				received: make(map[ids.ID]uint64),
+				received: make(map[ids.ID]*big.Int),
 			},
 			expectedState: &Majority{
 				requests: requests{
@@ -104,7 +103,7 @@ func TestMajorityGetPeers(t *testing.T) {
 					nodeID0: 1,
 					nodeID1: 1,
 				},
-				received: make(map[ids.ID]uint64),
+				received: make(map[ids.ID]*big.Int),
 			},
 			expectedPeers: set.Of(nodeID0, nodeID1),
 		},
@@ -119,7 +118,7 @@ func TestMajorityGetPeers(t *testing.T) {
 				nodeWeights: map[ids.NodeID]uint64{
 					nodeID0: 1,
 				},
-				received: make(map[ids.ID]uint64),
+				received: make(map[ids.ID]*big.Int),
 			},
 			expectedState: &Majority{
 				requests: requests{
@@ -131,7 +130,7 @@ func TestMajorityGetPeers(t *testing.T) {
 				nodeWeights: map[ids.NodeID]uint64{
 					nodeID0: 1,
 				},
-				received: make(map[ids.ID]uint64),
+				received: make(map[ids.ID]*big.Int),
 			},
 			expectedPeers: set.Of(nodeID0),
 		},
@@ -169,7 +168,7 @@ func TestMajorityRecordOpinion(t *testing.T) {
 					nodeID0: 1,
 					nodeID1: 1,
 				},
-				received: make(map[ids.ID]uint64),
+				received: make(map[ids.ID]*big.Int),
 			},
 			nodeID: nodeID0,
 			blkIDs: nil,
@@ -184,7 +183,7 @@ func TestMajorityRecordOpinion(t *testing.T) {
 					nodeID0: 1,
 					nodeID1: 1,
 				},
-				received: make(map[ids.ID]uint64),
+				received: make(map[ids.ID]*big.Int),
 			},
 			expectedErr: nil,
 		},
@@ -201,7 +200,7 @@ func TestMajorityRecordOpinion(t *testing.T) {
 					nodeID0: 2,
 					nodeID1: 3,
 				},
-				received: make(map[ids.ID]uint64),
+				received: make(map[ids.ID]*big.Int),
 			},
 			nodeID: nodeID1,
 			blkIDs: set.Of(blkID0),
@@ -216,14 +215,14 @@ func TestMajorityRecordOpinion(t *testing.T) {
 					nodeID0: 2,
 					nodeID1: 3,
 				},
-				received: map[ids.ID]uint64{
-					blkID0: 3,
+				received: map[ids.ID]*big.Int{
+					blkID0: big.NewInt(3),
 				},
 			},
 			expectedErr: nil,
 		},
 		{
-			name: "overflow during response",
+			name: "no overflow during response",
 			majority: &Majority{
 				requests: requests{
 					maxOutstanding: 1,
@@ -234,8 +233,8 @@ func TestMajorityRecordOpinion(t *testing.T) {
 					nodeID0: 1,
 					nodeID1: math.MaxUint64,
 				},
-				received: map[ids.ID]uint64{
-					blkID0: 1,
+				received: map[ids.ID]*big.Int{
+					blkID0: big.NewInt(1),
 				},
 			},
 			nodeID: nodeID1,
@@ -250,14 +249,15 @@ func TestMajorityRecordOpinion(t *testing.T) {
 					nodeID0: 1,
 					nodeID1: math.MaxUint64,
 				},
-				received: map[ids.ID]uint64{
-					blkID0: 1,
+				received: map[ids.ID]*big.Int{
+					blkID0: new(big.Int).Add(new(big.Int).SetUint64(math.MaxUint64), big.NewInt(1)),
 				},
+				accepted: []ids.ID{blkID0},
 			},
-			expectedErr: safemath.ErrOverflow,
+			expectedErr: nil,
 		},
 		{
-			name: "overflow during final response",
+			name: "no overflow during final response",
 			majority: &Majority{
 				requests: requests{
 					maxOutstanding: 1,
@@ -268,7 +268,7 @@ func TestMajorityRecordOpinion(t *testing.T) {
 					nodeID0: 1,
 					nodeID1: math.MaxUint64,
 				},
-				received: make(map[ids.ID]uint64),
+				received: make(map[ids.ID]*big.Int),
 			},
 			nodeID: nodeID1,
 			blkIDs: set.Of(blkID0),
@@ -282,11 +282,12 @@ func TestMajorityRecordOpinion(t *testing.T) {
 					nodeID0: 1,
 					nodeID1: math.MaxUint64,
 				},
-				received: map[ids.ID]uint64{
-					blkID0: math.MaxUint64,
+				received: map[ids.ID]*big.Int{
+					blkID0: new(big.Int).SetUint64(math.MaxUint64),
 				},
+				accepted: []ids.ID{blkID0},
 			},
-			expectedErr: safemath.ErrOverflow,
+			expectedErr: nil,
 		},
 		{
 			name: "finished after response",
@@ -301,9 +302,9 @@ func TestMajorityRecordOpinion(t *testing.T) {
 					nodeID1: 1,
 					nodeID2: 1,
 				},
-				received: map[ids.ID]uint64{
-					blkID0: 1,
-					blkID1: 1,
+				received: map[ids.ID]*big.Int{
+					blkID0: big.NewInt(1),
+					blkID1: big.NewInt(1),
 				},
 			},
 			nodeID: nodeID2,
@@ -319,9 +320,9 @@ func TestMajorityRecordOpinion(t *testing.T) {
 					nodeID1: 1,
 					nodeID2: 1,
 				},
-				received: map[ids.ID]uint64{
-					blkID0: 1,
-					blkID1: 2,
+				received: map[ids.ID]*big.Int{
+					blkID0: big.NewInt(1),
+					blkID1: big.NewInt(2),
 				},
 				accepted: []ids.ID{blkID1},
 			},
@@ -358,7 +359,7 @@ func TestMajorityResult(t *testing.T) {
 					nodeID0: 1,
 					nodeID1: 1,
 				},
-				received: make(map[ids.ID]uint64),
+				received: make(map[ids.ID]*big.Int),
 				accepted: nil,
 			},
 			expectedAccepted:  nil,
@@ -375,8 +376,8 @@ func TestMajorityResult(t *testing.T) {
 					nodeID0: 1,
 					nodeID1: 1,
 				},
-				received: map[ids.ID]uint64{
-					blkID0: 2,
+				received: map[ids.ID]*big.Int{
+					blkID0: big.NewInt(2),
 				},
 				accepted: []ids.ID{blkID0},
 			},

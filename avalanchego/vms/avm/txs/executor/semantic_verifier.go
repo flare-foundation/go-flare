@@ -9,7 +9,6 @@ import (
 	"reflect"
 
 	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/version"
 	"github.com/ava-labs/avalanchego/vms/avm/state"
 	"github.com/ava-labs/avalanchego/vms/avm/txs"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
@@ -240,11 +239,9 @@ func (v *SemanticVerifier) verifyFxUsage(
 		}
 	}
 
-	if !v.State.GetTimestamp().Before(version.GetCortinaTime(v.Ctx.NetworkID)) {
-		// Allow fx to be used for AVAX asset with fxID 0 when createAssetTx.States is empty
-		if len(createAssetTx.States) == 0 && assetID == v.Ctx.AVAXAssetID && fxID == 0 {
-			return nil
-		}
+	// Allow fx to be used for AVAX asset with fxID 0 when createAssetTx.States is empty
+	if len(createAssetTx.States) == 0 && assetID == v.Ctx.AVAXAssetID && fxID == 0 {
+		return nil
 	}
 
 	return errIncompatibleFx

@@ -5,18 +5,11 @@ package block
 
 import (
 	"context"
-	"errors"
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/consensus/snowman"
 	"github.com/ava-labs/avalanchego/snow/engine/common"
 )
-
-// ErrIndexIncomplete is used to indicate that the VM is currently repairing its
-// index.
-//
-// TODO: Remove after v1.11.x activates.
-var ErrIndexIncomplete = errors.New("query failed because height index is incomplete")
 
 // ChainVM defines the required functionality of a Snowman VM.
 //
@@ -56,15 +49,6 @@ type ChainVM interface {
 	// returned.
 	LastAccepted(context.Context) (ids.ID, error)
 
-	// VerifyHeightIndex should return:
-	// - nil if the height index is available.
-	// - ErrIndexIncomplete if the height index is not currently available.
-	// - Any other non-standard error that may have occurred when verifying the
-	//   index.
-	//
-	// TODO: Remove after v1.11.x activates.
-	VerifyHeightIndex(context.Context) error
-
 	// GetBlockIDAtHeight returns:
 	// - The ID of the block that was accepted with [height].
 	// - database.ErrNotFound if the [height] index is unknown.
@@ -98,4 +82,12 @@ type Parser interface {
 	//
 	// It is expected for all historical blocks to be parseable.
 	ParseBlock(ctx context.Context, blockBytes []byte) (snowman.Block, error)
+}
+
+// ParseFunc defines a function that parses raw bytes into a block.
+type ParseFunc func(context.Context, []byte) (snowman.Block, error)
+
+// ParseBlock wraps a ParseFunc into a ParseBlock function, to be used by a Parser interface
+func (f ParseFunc) ParseBlock(ctx context.Context, blockBytes []byte) (snowman.Block, error) {
+	return f(ctx, blockBytes)
 }

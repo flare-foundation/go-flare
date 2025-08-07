@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils"
@@ -20,6 +21,8 @@ import (
 	"github.com/ava-labs/avalanchego/utils/math"
 	"github.com/ava-labs/avalanchego/vms/platformvm/signer"
 )
+
+const localNetworkUpdateStartTimePeriod = 9 * 30 * 24 * time.Hour // 9 months
 
 var (
 	_ utils.Sortable[Allocation] = Allocation{}
@@ -148,12 +151,12 @@ func (c *Config) InitialSupply() (uint64, error) {
 
 	initialSupply := uint64(0)
 	for _, allocation := range c.Allocations {
-		newInitialSupply, err := math.Add64(initialSupply, allocation.InitialAmount)
+		newInitialSupply, err := math.Add(initialSupply, allocation.InitialAmount)
 		if err != nil {
 			return 0, err
 		}
 		for _, unlock := range allocation.UnlockSchedule {
-			newInitialSupply, err = math.Add64(newInitialSupply, unlock.Amount)
+			newInitialSupply, err = math.Add(newInitialSupply, unlock.Amount)
 			if err != nil {
 				return 0, err
 			}
@@ -202,7 +205,7 @@ func init() {
 	unparsedSongbirdConfig := UnparsedConfig{}
 	unparsedCostonConfig := UnparsedConfig{}
 
-	err := utils.Err(
+	err := errors.Join(
 		json.Unmarshal(mainnetGenesisConfigJSON, &unparsedMainnetConfig),
 		json.Unmarshal([]byte(localGenesisConfigJSON), &unparsedLocalConfig),
 		json.Unmarshal(flareGenesisConfigJSON, &unparsedFlareConfig),
@@ -306,4 +309,22 @@ func parseGenesisJSONBytesToConfig(bytes []byte) (*Config, error) {
 		return nil, fmt.Errorf("unable to parse config: %w", err)
 	}
 	return &config, nil
+}
+
+// getRecentStartTime advances [definedStartTime] in chunks of [period]. It
+// returns the latest startTime that isn't after [now].
+func getRecentStartTime(
+	definedStartTime time.Time,
+	now time.Time,
+	period time.Duration,
+) time.Time {
+	startTime := definedStartTime
+	for {
+		nextStartTime := startTime.Add(period)
+		if now.Before(nextStartTime) {
+			break
+		}
+		startTime = nextStartTime
+	}
+	return startTime
 }

@@ -44,7 +44,10 @@ func indexAtomicTxs(tr AtomicTrie, height uint64, atomicOps map[ids.ID]*atomic.R
 	if err := tr.UpdateTrie(snapshot, height, atomicOps); err != nil {
 		return err
 	}
-	root, nodes := snapshot.Commit(false)
+	root, nodes, err := snapshot.Commit(false)
+	if err != nil {
+		return err
+	}
 	if err := tr.InsertTrie(nodes, root); err != nil {
 		return err
 	}
@@ -136,7 +139,7 @@ func TestAtomicTrieInitialize(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			db := versiondb.New(memdb.New())
 			codec := testTxCodec()
-			repo, err := NewAtomicTxRepository(db, codec, test.lastAcceptedHeight, nil)
+			repo, err := NewAtomicTxRepository(db, codec, test.lastAcceptedHeight)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -225,7 +228,7 @@ func TestIndexerInitializesOnlyOnce(t *testing.T) {
 	lastAcceptedHeight := uint64(25)
 	db := versiondb.New(memdb.New())
 	codec := testTxCodec()
-	repo, err := NewAtomicTxRepository(db, codec, lastAcceptedHeight, nil)
+	repo, err := NewAtomicTxRepository(db, codec, lastAcceptedHeight)
 	assert.NoError(t, err)
 	operationsMap := make(map[uint64]map[ids.ID]*atomic.Requests)
 	writeTxs(t, repo, 1, lastAcceptedHeight+1, constTxsPerHeight(2), nil, operationsMap)
@@ -258,7 +261,7 @@ func TestIndexerInitializesOnlyOnce(t *testing.T) {
 
 func newTestAtomicTrie(t *testing.T) AtomicTrie {
 	db := versiondb.New(memdb.New())
-	repo, err := NewAtomicTxRepository(db, testTxCodec(), 0, nil)
+	repo, err := NewAtomicTxRepository(db, testTxCodec(), 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -336,7 +339,7 @@ func TestAtomicTrieDoesNotSkipBonusBlocks(t *testing.T) {
 	expectedCommitHeight := uint64(100)
 	db := versiondb.New(memdb.New())
 	codec := testTxCodec()
-	repo, err := NewAtomicTxRepository(db, codec, lastAcceptedHeight, nil)
+	repo, err := NewAtomicTxRepository(db, codec, lastAcceptedHeight)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -524,7 +527,7 @@ func TestApplyToSharedMemory(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			db := versiondb.New(memdb.New())
 			codec := testTxCodec()
-			repo, err := NewAtomicTxRepository(db, codec, test.lastAcceptedHeight, nil)
+			repo, err := NewAtomicTxRepository(db, codec, test.lastAcceptedHeight)
 			assert.NoError(t, err)
 			operationsMap := make(map[uint64]map[ids.ID]*atomic.Requests)
 			writeTxs(t, repo, 1, test.lastAcceptedHeight+1, constTxsPerHeight(2), nil, operationsMap)
@@ -595,7 +598,7 @@ func BenchmarkAtomicTrieInit(b *testing.B) {
 
 	lastAcceptedHeight := uint64(25000)
 	// add 25000 * 3 = 75000 transactions
-	repo, err := NewAtomicTxRepository(db, codec, lastAcceptedHeight, nil)
+	repo, err := NewAtomicTxRepository(db, codec, lastAcceptedHeight)
 	assert.NoError(b, err)
 	writeTxs(b, repo, 1, lastAcceptedHeight, constTxsPerHeight(3), nil, operationsMap)
 
@@ -630,7 +633,7 @@ func BenchmarkAtomicTrieIterate(b *testing.B) {
 
 	lastAcceptedHeight := uint64(25_000)
 	// add 25000 * 3 = 75000 transactions
-	repo, err := NewAtomicTxRepository(db, codec, lastAcceptedHeight, nil)
+	repo, err := NewAtomicTxRepository(db, codec, lastAcceptedHeight)
 	assert.NoError(b, err)
 	writeTxs(b, repo, 1, lastAcceptedHeight, constTxsPerHeight(3), nil, operationsMap)
 
@@ -658,7 +661,7 @@ func BenchmarkAtomicTrieIterate(b *testing.B) {
 }
 
 func levelDB(t testing.TB) database.Database {
-	db, err := leveldb.New(t.TempDir(), nil, logging.NoLog{}, "", prometheus.NewRegistry())
+	db, err := leveldb.New(t.TempDir(), nil, logging.NoLog{}, prometheus.NewRegistry())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -707,7 +710,7 @@ func benchmarkApplyToSharedMemory(b *testing.B, disk database.Database, blocks u
 	sharedMemory := testSharedMemory()
 
 	lastAcceptedHeight := blocks
-	repo, err := NewAtomicTxRepository(db, codec, lastAcceptedHeight, nil)
+	repo, err := NewAtomicTxRepository(db, codec, lastAcceptedHeight)
 	assert.NoError(b, err)
 
 	backend, err := NewAtomicBackend(db, sharedMemory, nil, repo, 0, common.Hash{}, 5000)

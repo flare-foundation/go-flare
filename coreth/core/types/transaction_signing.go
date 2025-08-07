@@ -49,7 +49,7 @@ type sigCache struct {
 // MakeSigner returns a Signer based on the given chain config and block number or time.
 func MakeSigner(config *params.ChainConfig, blockNumber *big.Int, blockTime uint64) Signer {
 	switch {
-	case config.IsCancun(blockTime):
+	case config.IsCancun(blockNumber, blockTime):
 		return NewCancunSigner(config.ChainID)
 	case config.IsApricotPhase3(blockTime):
 		return NewLondonSigner(config.ChainID)
@@ -65,9 +65,9 @@ func MakeSigner(config *params.ChainConfig, blockNumber *big.Int, blockTime uint
 }
 
 // LatestSigner returns the 'most permissive' Signer available for the given chain
-// configuration. Specifically, this enables support of EIP-155 replay protection and
-// EIP-2930 access list transactions when their respective forks are scheduled to occur at
-// any block number in the chain config.
+// configuration. Specifically, this enables support of all types of transactions
+// when their respective forks are scheduled to occur at any block number (or time)
+// in the chain config.
 //
 // Use this in transaction-handling code where the current block number is unknown. If you
 // have the current block number available, use MakeSigner instead.
@@ -339,11 +339,7 @@ func (s eip2930Signer) Sender(tx *Transaction) (common.Address, error) {
 	V, R, S := tx.RawSignatureValues()
 	switch tx.Type() {
 	case LegacyTxType:
-		if !tx.Protected() {
-			return HomesteadSigner{}.Sender(tx)
-		}
-		V = new(big.Int).Sub(V, s.chainIdMul)
-		V.Sub(V, big8)
+		return s.EIP155Signer.Sender(tx)
 	case AccessListTxType:
 		// AL txs are defined to use 0 and 1 as their recovery
 		// id, add 27 to become equivalent to unprotected Homestead signatures.
@@ -380,15 +376,7 @@ func (s eip2930Signer) SignatureValues(tx *Transaction, sig []byte) (R, S, V *bi
 func (s eip2930Signer) Hash(tx *Transaction) common.Hash {
 	switch tx.Type() {
 	case LegacyTxType:
-		return rlpHash([]interface{}{
-			tx.Nonce(),
-			tx.GasPrice(),
-			tx.Gas(),
-			tx.To(),
-			tx.Value(),
-			tx.Data(),
-			s.chainId, uint(0), uint(0),
-		})
+		return s.EIP155Signer.Hash(tx)
 	case AccessListTxType:
 		return prefixedRlpHash(
 			tx.Type(),

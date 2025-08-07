@@ -13,9 +13,9 @@ import (
 
 	"github.com/ava-labs/avalanchego/database/memdb"
 	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/snow/choices"
-	"github.com/ava-labs/avalanchego/snow/consensus/snowman"
+	"github.com/ava-labs/avalanchego/snow/consensus/snowman/snowmanmock"
 	"github.com/ava-labs/avalanchego/snow/engine/snowman/block"
+	"github.com/ava-labs/avalanchego/snow/engine/snowman/block/blockmock"
 	"github.com/ava-labs/avalanchego/snow/snowtest"
 	"github.com/ava-labs/avalanchego/vms/components/chain"
 )
@@ -28,9 +28,6 @@ var (
 	blkID1 = ids.ID{1}
 	blkID2 = ids.ID{2}
 
-	status1 = choices.Accepted
-	status2 = choices.Processing
-
 	time1 = time.Unix(1, 0)
 	time2 = time.Unix(2, 0)
 )
@@ -40,11 +37,11 @@ func batchedParseBlockCachingTestPlugin(t *testing.T, loadExpectations bool) blo
 
 	// create mock
 	ctrl := gomock.NewController(t)
-	vm := block.NewMockChainVM(ctrl)
+	vm := blockmock.NewChainVM(ctrl)
 
 	if loadExpectations {
-		blk1 := snowman.NewMockBlock(ctrl)
-		blk2 := snowman.NewMockBlock(ctrl)
+		blk1 := snowmanmock.NewBlock(ctrl)
+		blk2 := snowmanmock.NewBlock(ctrl)
 		gomock.InOrder(
 			// Initialize
 			vm.EXPECT().Initialize(
@@ -59,7 +56,6 @@ func batchedParseBlockCachingTestPlugin(t *testing.T, loadExpectations bool) blo
 			vm.EXPECT().ParseBlock(gomock.Any(), blkBytes1).Return(blk1, nil).Times(1),
 			blk1.EXPECT().ID().Return(blkID1).Times(1),
 			blk1.EXPECT().Parent().Return(blkID0).Times(1),
-			blk1.EXPECT().Status().Return(status1).Times(1),
 			blk1.EXPECT().Height().Return(uint64(1)).Times(1),
 			blk1.EXPECT().Timestamp().Return(time1).Times(1),
 
@@ -67,7 +63,6 @@ func batchedParseBlockCachingTestPlugin(t *testing.T, loadExpectations bool) blo
 			vm.EXPECT().ParseBlock(gomock.Any(), blkBytes2).Return(blk2, nil).Times(1),
 			blk2.EXPECT().ID().Return(blkID2).Times(1),
 			blk2.EXPECT().Parent().Return(blkID1).Times(1),
-			blk2.EXPECT().Status().Return(status2).Times(1),
 			blk2.EXPECT().Height().Return(uint64(2)).Times(1),
 			blk2.EXPECT().Timestamp().Return(time2).Times(1),
 		)
@@ -81,8 +76,8 @@ func TestBatchedParseBlockCaching(t *testing.T) {
 	testKey := batchedParseBlockCachingTestKey
 
 	// Create and start the plugin
-	vm, stopper := buildClientHelper(require, testKey)
-	defer stopper.Stop(context.Background())
+	vm := buildClientHelper(require, testKey)
+	defer vm.runtime.Stop(context.Background())
 
 	ctx := snowtest.Context(t, snowtest.CChainID)
 

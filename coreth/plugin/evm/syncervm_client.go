@@ -11,7 +11,6 @@ import (
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/database/versiondb"
 	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/snow/choices"
 	commonEng "github.com/ava-labs/avalanchego/snow/engine/common"
 	"github.com/ava-labs/avalanchego/snow/engine/snowman/block"
 	"github.com/ava-labs/avalanchego/vms/components/chain"
@@ -86,7 +85,7 @@ type StateSyncClient interface {
 	ParseStateSummary(ctx context.Context, summaryBytes []byte) (block.StateSummary, error)
 
 	// additional methods required by the evm package
-	StateSyncClearOngoingSummary() error
+	ClearOngoingSummary() error
 	Shutdown() error
 	Error() error
 }
@@ -126,8 +125,8 @@ func (client *stateSyncerClient) GetOngoingSyncStateSummary(context.Context) (bl
 	return summary, nil
 }
 
-// StateSyncClearOngoingSummary clears any marker of an ongoing state sync summary
-func (client *stateSyncerClient) StateSyncClearOngoingSummary() error {
+// ClearOngoingSummary clears any marker of an ongoing state sync summary
+func (client *stateSyncerClient) ClearOngoingSummary() error {
 	if err := client.metadataDB.Delete(stateSyncSummaryKey); err != nil {
 		return fmt.Errorf("failed to clear ongoing summary: %w", err)
 	}
@@ -173,12 +172,6 @@ func (client *stateSyncerClient) acceptSyncSummary(proposedSummary message.SyncS
 				"lastAccepted", client.lastAcceptedHeight,
 				"syncableHeight", proposedSummary.Height(),
 			)
-			if err := client.StateSyncClearOngoingSummary(); err != nil {
-				return block.StateSyncSkipped, fmt.Errorf("failed to clear ongoing summary after skipping state sync: %w", err)
-			}
-			// Initialize snapshots if we're skipping state sync, since it will not have been initialized on
-			// startup.
-			client.chain.BlockChain().InitializeSnapshots()
 			return block.StateSyncSkipped, nil
 		}
 
@@ -342,7 +335,6 @@ func (client *stateSyncerClient) finishSync() error {
 		return fmt.Errorf("could not convert block(%T) to evm.Block", stateBlock)
 	}
 
-	evmBlock.SetStatus(choices.Accepted)
 	block := evmBlock.ethBlock
 
 	if block.Hash() != client.syncSummary.BlockHash {

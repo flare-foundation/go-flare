@@ -14,7 +14,6 @@ type VM interface {
 	CodecRegistry() codec.Registry
 	Clock() *mockable.Clock
 	Logger() logging.Logger
-	EthVerificationEnabled() bool
 }
 
 var _ VM = (*TestVM)(nil)
@@ -37,7 +36,3 @@ func (vm *TestVM) CodecRegistry() codec.Registry {
 func (vm *TestVM) Logger() logging.Logger {
 	return vm.Log
 }
-func (vm *TestVM) EthVerificationEnabled() bool  { 
-	return false
-}
-

@@ -25,7 +25,6 @@ func TestMessage(t *testing.T) {
 
 	mb, err := newMsgBuilder(
 		logging.NoLog{},
-		"test",
 		prometheus.NewRegistry(),
 		5*time.Second,
 	)
@@ -55,7 +54,7 @@ func TestMessage(t *testing.T) {
 		bytesSaved       bool // if true, outbound message saved bytes must be non-zero
 	}{
 		{
-			desc: "ping message with no compression no subnet uptimes",
+			desc: "ping message with no compression no uptime",
 			op:   PingOp,
 			msg: &p2p.Message{
 				Message: &p2p.Message_Ping{
@@ -67,13 +66,11 @@ func TestMessage(t *testing.T) {
 			bytesSaved:       false,
 		},
 		{
-			desc: "pong message with no compression no subnet uptimes",
+			desc: "pong message with no compression",
 			op:   PongOp,
 			msg: &p2p.Message{
 				Message: &p2p.Message_Pong{
-					Pong: &p2p.Pong{
-						Uptime: 100,
-					},
+					Pong: &p2p.Pong{},
 				},
 			},
 			compressionType:  compression.TypeNone,
@@ -81,37 +78,12 @@ func TestMessage(t *testing.T) {
 			bytesSaved:       false,
 		},
 		{
-			desc: "ping message with no compression and subnet uptimes",
+			desc: "ping message with no compression and uptime",
 			op:   PingOp,
 			msg: &p2p.Message{
 				Message: &p2p.Message_Ping{
 					Ping: &p2p.Ping{
-						SubnetUptimes: []*p2p.SubnetUptime{
-							{
-								SubnetId: testID[:],
-								Uptime:   100,
-							},
-						},
-					},
-				},
-			},
-			compressionType:  compression.TypeNone,
-			bypassThrottling: true,
-			bytesSaved:       false,
-		},
-		{
-			desc: "pong message with no compression and subnet uptimes",
-			op:   PongOp,
-			msg: &p2p.Message{
-				Message: &p2p.Message_Pong{
-					Pong: &p2p.Pong{
 						Uptime: 100,
-						SubnetUptimes: []*p2p.SubnetUptime{
-							{
-								SubnetId: testID[:],
-								Uptime:   100,
-							},
-						},
 					},
 				},
 			},
@@ -129,7 +101,6 @@ func TestMessage(t *testing.T) {
 						MyTime:         uint64(nowUnix),
 						IpAddr:         []byte(net.IPv6zero),
 						IpPort:         9651,
-						MyVersion:      "v1.2.3",
 						IpSigningTime:  uint64(nowUnix),
 						IpNodeIdSig:    []byte{'y', 'e', 'e', 't'},
 						TrackedSubnets: [][]byte{testID[:]},
@@ -339,10 +310,9 @@ func TestMessage(t *testing.T) {
 			msg: &p2p.Message{
 				Message: &p2p.Message_GetAcceptedFrontier{
 					GetAcceptedFrontier: &p2p.GetAcceptedFrontier{
-						ChainId:    testID[:],
-						RequestId:  1,
-						Deadline:   1,
-						EngineType: p2p.EngineType_ENGINE_TYPE_AVALANCHE,
+						ChainId:   testID[:],
+						RequestId: 1,
+						Deadline:  1,
 					},
 				},
 			},
@@ -376,7 +346,6 @@ func TestMessage(t *testing.T) {
 						RequestId:    1,
 						Deadline:     1,
 						ContainerIds: [][]byte{testID[:], testID[:]},
-						EngineType:   p2p.EngineType_ENGINE_TYPE_AVALANCHE,
 					},
 				},
 			},
@@ -460,7 +429,6 @@ func TestMessage(t *testing.T) {
 						RequestId:   1,
 						Deadline:    1,
 						ContainerId: testID[:],
-						EngineType:  p2p.EngineType_ENGINE_TYPE_AVALANCHE,
 					},
 				},
 			},
@@ -474,10 +442,9 @@ func TestMessage(t *testing.T) {
 			msg: &p2p.Message{
 				Message: &p2p.Message_Put{
 					Put: &p2p.Put{
-						ChainId:    testID[:],
-						RequestId:  1,
-						Container:  []byte{0},
-						EngineType: p2p.EngineType_ENGINE_TYPE_AVALANCHE,
+						ChainId:   testID[:],
+						RequestId: 1,
+						Container: []byte{0},
 					},
 				},
 			},
@@ -491,10 +458,9 @@ func TestMessage(t *testing.T) {
 			msg: &p2p.Message{
 				Message: &p2p.Message_Put{
 					Put: &p2p.Put{
-						ChainId:    testID[:],
-						RequestId:  1,
-						Container:  compressibleContainers[0],
-						EngineType: p2p.EngineType_ENGINE_TYPE_AVALANCHE,
+						ChainId:   testID[:],
+						RequestId: 1,
+						Container: compressibleContainers[0],
 					},
 				},
 			},
@@ -508,11 +474,10 @@ func TestMessage(t *testing.T) {
 			msg: &p2p.Message{
 				Message: &p2p.Message_PushQuery{
 					PushQuery: &p2p.PushQuery{
-						ChainId:    testID[:],
-						RequestId:  1,
-						Deadline:   1,
-						Container:  []byte{0},
-						EngineType: p2p.EngineType_ENGINE_TYPE_AVALANCHE,
+						ChainId:   testID[:],
+						RequestId: 1,
+						Deadline:  1,
+						Container: []byte{0},
 					},
 				},
 			},
@@ -526,11 +491,10 @@ func TestMessage(t *testing.T) {
 			msg: &p2p.Message{
 				Message: &p2p.Message_PushQuery{
 					PushQuery: &p2p.PushQuery{
-						ChainId:    testID[:],
-						RequestId:  1,
-						Deadline:   1,
-						Container:  compressibleContainers[0],
-						EngineType: p2p.EngineType_ENGINE_TYPE_AVALANCHE,
+						ChainId:   testID[:],
+						RequestId: 1,
+						Deadline:  1,
+						Container: compressibleContainers[0],
 					},
 				},
 			},
@@ -548,7 +512,6 @@ func TestMessage(t *testing.T) {
 						RequestId:   1,
 						Deadline:    1,
 						ContainerId: testID[:],
-						EngineType:  p2p.EngineType_ENGINE_TYPE_AVALANCHE,
 					},
 				},
 			},
@@ -681,7 +644,7 @@ func TestMessage(t *testing.T) {
 			require.Equal(tv.op, encodedMsg.Op())
 
 			if bytesSaved := encodedMsg.BytesSavedCompression(); tv.bytesSaved {
-				require.Greater(bytesSaved, 0)
+				require.Positive(bytesSaved)
 			}
 
 			parsedMsg, err := mb.parseInbound(encodedMsg.Bytes(), ids.EmptyNodeID, func() {})
@@ -699,7 +662,6 @@ func TestInboundMessageToString(t *testing.T) {
 
 	mb, err := newMsgBuilder(
 		logging.NoLog{},
-		"test",
 		prometheus.NewRegistry(),
 		5*time.Second,
 	)
@@ -708,9 +670,7 @@ func TestInboundMessageToString(t *testing.T) {
 	// msg that will become the tested InboundMessage
 	msg := &p2p.Message{
 		Message: &p2p.Message_Pong{
-			Pong: &p2p.Pong{
-				Uptime: 100,
-			},
+			Pong: &p2p.Pong{},
 		},
 	}
 	msgBytes, err := proto.Marshal(msg)
@@ -719,7 +679,7 @@ func TestInboundMessageToString(t *testing.T) {
 	inboundMsg, err := mb.parseInbound(msgBytes, ids.EmptyNodeID, func() {})
 	require.NoError(err)
 
-	require.Equal("NodeID-111111111111111111116DBWJs Op: pong Message: uptime:100", inboundMsg.String())
+	require.Equal("NodeID-111111111111111111116DBWJs Op: pong Message: ", inboundMsg.String())
 
 	internalMsg := InternalGetStateSummaryFrontierFailed(ids.EmptyNodeID, ids.Empty, 1)
 	require.Equal("NodeID-111111111111111111116DBWJs Op: get_state_summary_frontier_failed Message: ChainID: 11111111111111111111111111111111LpoYY RequestID: 1", internalMsg.String())
@@ -732,7 +692,6 @@ func TestEmptyInboundMessage(t *testing.T) {
 
 	mb, err := newMsgBuilder(
 		logging.NoLog{},
-		"test",
 		prometheus.NewRegistry(),
 		5*time.Second,
 	)
@@ -753,7 +712,6 @@ func TestNilInboundMessage(t *testing.T) {
 
 	mb, err := newMsgBuilder(
 		logging.NoLog{},
-		"test",
 		prometheus.NewRegistry(),
 		5*time.Second,
 	)

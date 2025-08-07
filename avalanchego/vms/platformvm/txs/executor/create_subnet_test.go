@@ -10,16 +10,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/upgrade/upgradetest"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/utils/units"
-	"github.com/ava-labs/avalanchego/vms/components/avax"
+	"github.com/ava-labs/avalanchego/vms/platformvm/genesis/genesistest"
 	"github.com/ava-labs/avalanchego/vms/platformvm/state"
-	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
 	"github.com/ava-labs/avalanchego/vms/platformvm/utxo"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 )
 
 func TestCreateSubnetTxAP3FeeChange(t *testing.T) {
-	ap3Time := defaultGenesisTime.Add(time.Hour)
+	ap3Time := genesistest.DefaultValidatorStartTime.Add(time.Hour)
 	tests := []struct {
 		name        string
 		time        time.Time
@@ -28,7 +29,7 @@ func TestCreateSubnetTxAP3FeeChange(t *testing.T) {
 	}{
 		{
 			name:        "pre-fork - correctly priced",
-			time:        defaultGenesisTime,
+			time:        genesistest.DefaultValidatorStartTime,
 			fee:         0,
 			expectedErr: nil,
 		},
@@ -49,38 +50,41 @@ func TestCreateSubnetTxAP3FeeChange(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			require := require.New(t)
 
-			env := newEnvironment(t, apricotPhase3)
-			env.config.ApricotPhase3Time = ap3Time
+			env := newEnvironment(t, upgradetest.ApricotPhase3)
+			env.config.UpgradeConfig.ApricotPhase3Time = ap3Time
 			env.ctx.Lock.Lock()
 			defer env.ctx.Lock.Unlock()
 
-			ins, outs, _, signers, err := env.utxosHandler.Spend(env.state, preFundedKeys, 0, test.fee, ids.ShortEmpty)
-			require.NoError(err)
+			env.state.SetTimestamp(test.time) // to duly set fee
 
-			// Create the tx
-			utx := &txs.CreateSubnetTx{
-				BaseTx: txs.BaseTx{BaseTx: avax.BaseTx{
-					NetworkID:    env.ctx.NetworkID,
-					BlockchainID: env.ctx.ChainID,
-					Ins:          ins,
-					Outs:         outs,
-				}},
-				Owner: &secp256k1fx.OutputOwners{},
+			addrs := set.NewSet[ids.ShortID](len(genesistest.DefaultFundedKeys))
+			for _, key := range genesistest.DefaultFundedKeys {
+				addrs.Add(key.Address())
 			}
-			tx := &txs.Tx{Unsigned: utx}
-			require.NoError(tx.Sign(txs.Codec, signers))
+
+			config := *env.config
+			config.StaticFeeConfig.CreateSubnetTxFee = test.fee
+			wallet := newWallet(t, env, walletConfig{
+				config: &config,
+			})
+
+			tx, err := wallet.IssueCreateSubnetTx(
+				&secp256k1fx.OutputOwners{},
+			)
+			require.NoError(err)
 
 			stateDiff, err := state.NewDiff(lastAcceptedID, env)
 			require.NoError(err)
 
 			stateDiff.SetTimestamp(test.time)
 
-			executor := StandardTxExecutor{
-				Backend: &env.backend,
-				State:   stateDiff,
-				Tx:      tx,
-			}
-			err = tx.Unsigned.Visit(&executor)
+			feeCalculator := state.PickFeeCalculator(env.config, stateDiff)
+			_, _, _, err = StandardTx(
+				&env.backend,
+				feeCalculator,
+				tx,
+				stateDiff,
+			)
 			require.ErrorIs(err, test.expectedErr)
 		})
 	}
