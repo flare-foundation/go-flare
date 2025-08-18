@@ -126,7 +126,8 @@ func TestFilters(t *testing.T) {
 		// Sender account
 		key1, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
 		addr    = crypto.PubkeyToAddress(key1.PublicKey)
-		signer  = types.NewLondonSigner(big.NewInt(1))
+		// FIXME: use a constant from somewhere for chainId?
+		signer = types.NewLondonSigner(big.NewInt(14))
 		// Logging contract
 		contract  = common.Address{0xfe}
 		contract2 = common.Address{0xff}
