@@ -106,7 +106,7 @@ func TestEIP2200(t *testing.T) {
 			CanTransfer: func(StateDB, common.Address, *uint256.Int) bool { return true },
 			Transfer:    func(StateDB, common.Address, common.Address, *uint256.Int) {},
 		}
-		vmenv := NewEVM(vmctx, TxContext{}, statedb, params.TestChainConfig, Config{ExtraEips: []int{2200}})
+		vmenv := NewEVM(vmctx, TxContext{}, statedb, params.TestFlareChainConfig, Config{ExtraEips: []int{2200}})
 
 		_, gas, err := vmenv.Call(AccountRef(common.Address{}), address, nil, tt.gaspool, new(uint256.Int))
 		if err != tt.failure {
@@ -145,7 +145,7 @@ var createGasTests = []struct {
 
 func TestCreateGas(t *testing.T) {
 	for i, tt := range createGasTests {
-		var gasUsed = uint64(0)
+		gasUsed := uint64(0)
 		doCheck := func(testGas int) bool {
 			address := common.BytesToAddress([]byte("contract"))
 			statedb, _ := state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
@@ -164,8 +164,8 @@ func TestCreateGas(t *testing.T) {
 
 			// Note: we use Cortina instead of AllEthashProtocolChanges (upstream)
 			// because it is the last fork before the activation of EIP-3860
-			vmenv := NewEVM(vmctx, TxContext{}, statedb, params.TestCortinaChainConfig, config)
-			var startGas = uint64(testGas)
+			vmenv := NewEVM(vmctx, TxContext{}, statedb, params.TestFlareCortinaChainConfig, config)
+			startGas := uint64(testGas)
 			ret, gas, err := vmenv.Call(AccountRef(common.Address{}), address, nil, startGas, new(uint256.Int))
 			if err != nil {
 				return false

@@ -71,7 +71,7 @@ var testChainConfig *params.ChainConfig
 
 func init() {
 	testChainConfig = new(params.ChainConfig)
-	*testChainConfig = *params.TestChainConfig
+	*testChainConfig = *params.TestFlareChainConfig
 
 	testChainConfig.CancunTime = new(uint64)
 	*testChainConfig.CancunTime = uint64(time.Now().Unix())
@@ -684,8 +684,8 @@ func TestOpenIndex(t *testing.T) {
 		txExecFeeCaps = []uint64{100, 90, 200, 10, 80, 300}
 		txBlobFeeCaps = []uint64{55, 66, 77, 33, 22, 11}
 
-		//basefeeJumps = []float64{39.098, 38.204, 44.983, 19.549, 37.204, 48.426} // log 1.125 (exec fee cap)
-		//blobfeeJumps = []float64{34.023, 35.570, 36.879, 29.686, 26.243, 20.358} // log 1.125 (blob fee cap)
+		// basefeeJumps = []float64{39.098, 38.204, 44.983, 19.549, 37.204, 48.426} // log 1.125 (exec fee cap)
+		// blobfeeJumps = []float64{34.023, 35.570, 36.879, 29.686, 26.243, 20.358} // log 1.125 (blob fee cap)
 
 		evictExecTipCaps  = []uint64{10, 10, 5, 5, 1, 1}
 		evictExecFeeJumps = []float64{39.098, 38.204, 38.204, 19.549, 19.549, 19.549} //  min(log 1.125 (exec fee cap))

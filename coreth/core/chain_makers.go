@@ -271,7 +271,7 @@ func (b *BlockGen) SetOnBlockGenerated(onBlockGenerated func(*types.Block)) {
 // a similar non-validating proof of work implementation.
 func GenerateChain(config *params.ChainConfig, parent *types.Block, engine consensus.Engine, db ethdb.Database, n int, gap uint64, gen func(int, *BlockGen)) ([]*types.Block, []types.Receipts, error) {
 	if config == nil {
-		config = params.TestChainConfig
+		config = params.TestFlareChainConfig
 	}
 	if engine == nil {
 		panic("nil consensus engine")

@@ -544,7 +544,7 @@ func TestCanonicalHashMarker(t *testing.T) {
 }
 
 func testCanonicalHashMarker(t *testing.T, scheme string) {
-	var cases = []struct {
+	cases := []struct {
 		forkA int
 		forkB int
 	}{
@@ -581,7 +581,7 @@ func testCanonicalHashMarker(t *testing.T, scheme string) {
 	for _, c := range cases {
 		var (
 			gspec = &Genesis{
-				Config:  params.TestChainConfig,
+				Config:  params.TestFlareChainConfig,
 				Alloc:   types.GenesisAlloc{},
 				BaseFee: big.NewInt(params.ApricotPhase3InitialBaseFee),
 			}
@@ -702,7 +702,7 @@ func TestTxLookupSkipIndexingBlockChain(t *testing.T) {
 func TestCreateThenDeletePreByzantium(t *testing.T) {
 	// We want to use pre-byzantium rules where we have intermediate state roots
 	// between transactions.
-	config := *params.TestLaunchConfig
+	config := *params.TestFlareLaunchConfig
 	config.ByzantiumBlock = nil
 	config.ConstantinopleBlock = nil
 	config.PetersburgBlock = nil
@@ -713,8 +713,9 @@ func TestCreateThenDeletePreByzantium(t *testing.T) {
 
 	testCreateThenDelete(t, &config)
 }
+
 func TestCreateThenDeletePostByzantium(t *testing.T) {
-	testCreateThenDelete(t, params.TestChainConfig)
+	testCreateThenDelete(t, params.TestFlareChainConfig)
 }
 
 // testCreateThenDelete tests a creation and subsequent deletion of a contract, happening
@@ -737,7 +738,8 @@ func testCreateThenDelete(t *testing.T, config *params.ChainConfig) {
 		byte(vm.PUSH1), 0x1,
 		byte(vm.SSTORE),
 		// Get the runtime-code on the stack
-		byte(vm.PUSH32)}
+		byte(vm.PUSH32),
+	}
 	initCode = append(initCode, code...)
 	initCode = append(initCode, []byte{
 		byte(vm.PUSH1), 0x0, // offset
@@ -779,8 +781,8 @@ func testCreateThenDelete(t *testing.T, config *params.ChainConfig) {
 	})
 	// Import the canonical chain
 	chain, err := NewBlockChain(rawdb.NewMemoryDatabase(), DefaultCacheConfig, gspec, engine, vm.Config{
-		//Debug:  true,
-		//Tracer: logger.NewJSONLogger(nil, os.Stdout),
+		// Debug:  true,
+		// Tracer: logger.NewJSONLogger(nil, os.Stdout),
 	}, common.Hash{}, false)
 	if err != nil {
 		t.Fatalf("failed to create tester chain: %v", err)
@@ -833,7 +835,7 @@ func TestDeleteThenCreate(t *testing.T) {
 	contractAddr := crypto.CreateAddress2(factoryAddr, [32]byte{}, crypto.Keccak256(contractABI))
 
 	gspec := &Genesis{
-		Config: params.TestChainConfig,
+		Config: params.TestFlareChainConfig,
 		Alloc: types.GenesisAlloc{
 			address: {Balance: funds},
 		},
@@ -939,7 +941,8 @@ func TestTransientStorageReset(t *testing.T) {
 		byte(vm.TSTORE),
 
 		// Get the runtime-code on the stack
-		byte(vm.PUSH32)}
+		byte(vm.PUSH32),
+	}
 	initCode = append(initCode, code...)
 	initCode = append(initCode, []byte{
 		byte(vm.PUSH1), 0x0, // offset
@@ -949,7 +952,7 @@ func TestTransientStorageReset(t *testing.T) {
 		byte(vm.RETURN), // return 6 bytes of zero-code
 	}...)
 	gspec := &Genesis{
-		Config: params.TestChainConfig,
+		Config: params.TestFlareChainConfig,
 		Alloc: types.GenesisAlloc{
 			address: {Balance: funds},
 		},
@@ -1016,7 +1019,7 @@ func TestEIP3651(t *testing.T) {
 		addr2   = crypto.PubkeyToAddress(key2.PublicKey)
 		funds   = new(big.Int).Mul(common.Big1, big.NewInt(params.Ether))
 		gspec   = &Genesis{
-			Config:    params.TestChainConfig,
+			Config:    params.TestFlareChainConfig,
 			Timestamp: uint64(upgrade.InitiallyActiveTime.Unix()),
 			Alloc: GenesisAlloc{
 				addr1: {Balance: funds},

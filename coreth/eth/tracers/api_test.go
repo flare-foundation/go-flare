@@ -226,7 +226,7 @@ func TestTraceCall(t *testing.T) {
 	// Initialize test accounts
 	accounts := newAccounts(3)
 	genesis := &core.Genesis{
-		Config: params.TestBanffChainConfig, // TODO: go-ethereum has not enabled Shanghai yet, so we use Banff here so tests pass.
+		Config: params.TestFlareBanffChainConfig, // TODO: go-ethereum has not enabled Shanghai yet, so we use Banff here so tests pass.
 		Alloc: types.GenesisAlloc{
 			accounts[0].addr: {Balance: big.NewInt(params.Ether)},
 			accounts[1].addr: {Balance: big.NewInt(params.Ether)},
@@ -246,7 +246,8 @@ func TestTraceCall(t *testing.T) {
 			Value:    big.NewInt(1000),
 			Gas:      params.TxGas,
 			GasPrice: b.BaseFee(),
-			Data:     nil}),
+			Data:     nil,
+		}),
 			signer, accounts[0].key)
 		b.AddTx(tx)
 		nonce++
@@ -259,7 +260,8 @@ func TestTraceCall(t *testing.T) {
 				Value:    big.NewInt(1000),
 				Gas:      params.TxGas,
 				GasPrice: b.BaseFee(),
-				Data:     nil}),
+				Data:     nil,
+			}),
 				signer, accounts[0].key)
 			b.AddTx(tx)
 			nonce++
@@ -271,7 +273,8 @@ func TestTraceCall(t *testing.T) {
 				Value:    big.NewInt(1000),
 				Gas:      params.TxGas,
 				GasPrice: b.BaseFee(),
-				Data:     nil}),
+				Data:     nil,
+			}),
 				signer, accounts[0].key)
 			b.AddTx(tx)
 			nonce++
@@ -282,7 +285,7 @@ func TestTraceCall(t *testing.T) {
 
 	defer backend.teardown()
 	api := NewAPI(backend)
-	var testSuite = []struct {
+	testSuite := []struct {
 		blockNumber rpc.BlockNumber
 		call        ethapi.TransactionArgs
 		config      *TraceCallConfig
@@ -368,7 +371,7 @@ func TestTraceCall(t *testing.T) {
 			},
 			config:    nil,
 			expectErr: fmt.Errorf("block #%d not found", genBlocks+1),
-			//expect:    nil,
+			// expect:    nil,
 		},
 		// Standard JSON trace upon the latest block
 		{
@@ -444,7 +447,7 @@ func TestTraceTransaction(t *testing.T) {
 	// Initialize test accounts
 	accounts := newAccounts(2)
 	genesis := &core.Genesis{
-		Config: params.TestChainConfig,
+		Config: params.TestFlareChainConfig,
 		Alloc: types.GenesisAlloc{
 			accounts[0].addr: {Balance: big.NewInt(params.Ether)},
 			accounts[1].addr: {Balance: big.NewInt(params.Ether)},
@@ -462,7 +465,8 @@ func TestTraceTransaction(t *testing.T) {
 			Value:    big.NewInt(1000),
 			Gas:      params.TxGas,
 			GasPrice: new(big.Int).Add(b.BaseFee(), big.NewInt(int64(500*params.GWei))),
-			Data:     nil}),
+			Data:     nil,
+		}),
 			signer, accounts[0].key)
 		b.AddTx(tx)
 		target = tx.Hash()
@@ -500,7 +504,7 @@ func TestTraceBlock(t *testing.T) {
 	// Initialize test accounts
 	accounts := newAccounts(3)
 	genesis := &core.Genesis{
-		Config: params.TestChainConfig,
+		Config: params.TestFlareChainConfig,
 		Alloc: types.GenesisAlloc{
 			accounts[0].addr: {Balance: big.NewInt(params.Ether)},
 			accounts[1].addr: {Balance: big.NewInt(params.Ether)},
@@ -520,7 +524,8 @@ func TestTraceBlock(t *testing.T) {
 			Value:    big.NewInt(1000),
 			Gas:      params.TxGas,
 			GasPrice: b.BaseFee(),
-			Data:     nil}),
+			Data:     nil,
+		}),
 			signer, accounts[0].key)
 		b.AddTx(tx)
 		txHash = tx.Hash()
@@ -528,7 +533,7 @@ func TestTraceBlock(t *testing.T) {
 	defer backend.chain.Stop()
 	api := NewAPI(backend)
 
-	var testSuite = []struct {
+	testSuite := []struct {
 		blockNumber rpc.BlockNumber
 		config      *TraceConfig
 		want        string
@@ -590,7 +595,7 @@ func TestTracingWithOverrides(t *testing.T) {
 	accounts := newAccounts(3)
 	storageAccount := common.Address{0x13, 37}
 	genesis := &core.Genesis{
-		Config: params.TestCortinaChainConfig, // TODO: go-ethereum has not enabled Shanghai yet, so we use Cortina here so tests pass.
+		Config: params.TestFlareCortinaChainConfig, // TODO: go-ethereum has not enabled Shanghai yet, so we use Cortina here so tests pass.
 		Alloc: types.GenesisAlloc{
 			accounts[0].addr: {Balance: big.NewInt(params.Ether)},
 			accounts[1].addr: {Balance: big.NewInt(params.Ether)},
@@ -617,7 +622,8 @@ func TestTracingWithOverrides(t *testing.T) {
 			Value:    big.NewInt(1000),
 			Gas:      params.TxGas,
 			GasPrice: b.BaseFee(),
-			Data:     nil}),
+			Data:     nil,
+		}),
 			signer, accounts[0].key)
 		b.AddTx(tx)
 	})
@@ -629,7 +635,7 @@ func TestTracingWithOverrides(t *testing.T) {
 		Failed      bool
 		ReturnValue string
 	}
-	var testSuite = []struct {
+	testSuite := []struct {
 		blockNumber rpc.BlockNumber
 		call        ethapi.TransactionArgs
 		config      *TraceCallConfig
@@ -686,7 +692,7 @@ func TestTracingWithOverrides(t *testing.T) {
 				Data: newRPCBytes(common.Hex2Bytes("8381f58a")), // call number()
 			},
 			config: &TraceCallConfig{
-				//Tracer: &tracer,
+				// Tracer: &tracer,
 				StateOverrides: &ethapi.StateOverride{
 					randomAccounts[2].addr: ethapi.OverrideAccount{
 						Code:      newRPCBytes(common.Hex2Bytes("6080604052348015600f57600080fd5b506004361060285760003560e01c80638381f58a14602d575b600080fd5b60336049565b6040518082815260200191505060405180910390f35b6000548156fea2646970667358221220eab35ffa6ab2adfe380772a48b8ba78e82a1b820a18fcb6f59aa4efb20a5f60064736f6c63430007040033")),
@@ -778,7 +784,7 @@ func TestTracingWithOverrides(t *testing.T) {
 					},
 				},
 			},
-			//want: `{"gas":46900,"failed":false,"returnValue":"0000000000000000000000000000000000000000000000000000000000000539"}`,
+			// want: `{"gas":46900,"failed":false,"returnValue":"0000000000000000000000000000000000000000000000000000000000000539"}`,
 			want: `{"gas":44100,"failed":false,"returnValue":"0000000000000000000000000000000000000000000000000000000000000001"}`,
 		},
 		{ // No state override
@@ -960,7 +966,7 @@ func TestTraceChain(t *testing.T) {
 	// Note: the balances in this test have been increased compared to go-ethereum.
 	accounts := newAccounts(3)
 	genesis := &core.Genesis{
-		Config: params.TestChainConfig,
+		Config: params.TestFlareChainConfig,
 		Alloc: types.GenesisAlloc{
 			accounts[0].addr: {Balance: big.NewInt(5 * params.Ether)},
 			accounts[1].addr: {Balance: big.NewInt(5 * params.Ether)},
@@ -990,7 +996,7 @@ func TestTraceChain(t *testing.T) {
 	api := NewAPI(backend)
 
 	single := `{"txHash":"0x0000000000000000000000000000000000000000000000000000000000000000","result":{"gas":21000,"failed":false,"returnValue":"","structLogs":[]}}`
-	var cases = []struct {
+	cases := []struct {
 		start  uint64
 		end    uint64
 		config *TraceConfig

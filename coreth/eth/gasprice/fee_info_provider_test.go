@@ -17,7 +17,7 @@ import (
 )
 
 func TestFeeInfoProvider(t *testing.T) {
-	backend := newTestBackend(t, params.TestChainConfig, 2, common.Big0, testGenBlock(t, 55, 370))
+	backend := newTestBackend(t, params.TestFlareChainConfig, 2, common.Big0, testGenBlock(t, 55, 370))
 	f, err := newFeeInfoProvider(backend, 1, 2)
 	require.NoError(t, err)
 
@@ -45,7 +45,7 @@ func TestFeeInfoProvider(t *testing.T) {
 func TestFeeInfoProviderCacheSize(t *testing.T) {
 	size := 5
 	overflow := 3
-	backend := newTestBackend(t, params.TestChainConfig, 0, common.Big0, testGenBlock(t, 55, 370))
+	backend := newTestBackend(t, params.TestFlareChainConfig, 0, common.Big0, testGenBlock(t, 55, 370))
 	f, err := newFeeInfoProvider(backend, 1, size)
 	require.NoError(t, err)
 

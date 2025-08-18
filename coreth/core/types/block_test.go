@@ -304,7 +304,7 @@ func makeBenchBlock() *Block {
 		key, _   = crypto.GenerateKey()
 		txs      = make([]*Transaction, 70)
 		receipts = make([]*Receipt, len(txs))
-		signer   = LatestSigner(params.TestChainConfig)
+		signer   = LatestSigner(params.TestFlareChainConfig)
 		uncles   = make([]*Header, 3)
 	)
 	header := &Header{

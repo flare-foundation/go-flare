@@ -67,7 +67,7 @@ func TestSetupGenesis(t *testing.T) {
 }
 
 func testSetupGenesis(t *testing.T, scheme string) {
-	apricotPhase1Config := *params.TestApricotPhase1Config
+	apricotPhase1Config := *params.TestFlareApricotPhase1Config
 	apricotPhase1Config.ApricotPhase1BlockTimestamp = utils.NewUint64(100)
 	var (
 		customghash = common.HexToHash("0x1099a11e9e454bd3ef31d688cf21936671966407bc330f051d754b5ce401e7ed")
@@ -195,7 +195,7 @@ func testSetupGenesis(t *testing.T, scheme string) {
 func TestNetworkUpgradeBetweenHeadAndAcceptedBlock(t *testing.T) {
 	db := rawdb.NewMemoryDatabase()
 	customg := Genesis{
-		Config: params.TestApricotPhase1Config,
+		Config: params.TestFlareApricotPhase1Config,
 		Alloc: types.GenesisAlloc{
 			{1}: {Balance: big.NewInt(1), Storage: map[common.Hash]common.Hash{{1}: {1}}},
 		},
@@ -222,7 +222,7 @@ func TestNetworkUpgradeBetweenHeadAndAcceptedBlock(t *testing.T) {
 
 	activatedGenesis := customg
 	apricotPhase2Timestamp := utils.NewUint64(51)
-	updatedApricotPhase2Config := *params.TestApricotPhase1Config
+	updatedApricotPhase2Config := *params.TestFlareApricotPhase1Config
 	updatedApricotPhase2Config.ApricotPhase2BlockTimestamp = apricotPhase2Timestamp
 
 	activatedGenesis.Config = &updatedApricotPhase2Config
@@ -242,7 +242,7 @@ func TestNetworkUpgradeBetweenHeadAndAcceptedBlock(t *testing.T) {
 
 func TestGenesisWriteUpgradesRegression(t *testing.T) {
 	require := require.New(t)
-	config := *params.TestChainConfig
+	config := *params.TestFlareChainConfig
 	genesis := &Genesis{
 		Config: &config,
 		Alloc: types.GenesisAlloc{

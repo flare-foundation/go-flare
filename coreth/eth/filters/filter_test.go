@@ -70,7 +70,7 @@ func BenchmarkFilters(b *testing.B) {
 		gspec = &core.Genesis{
 			Alloc:   types.GenesisAlloc{addr1: {Balance: big.NewInt(1000000)}},
 			BaseFee: big.NewInt(1),
-			Config:  params.TestChainConfig,
+			Config:  params.TestFlareChainConfig,
 		}
 	)
 	defer db.Close()
@@ -175,7 +175,7 @@ func TestFilters(t *testing.T) {
 		hash4 = common.BytesToHash([]byte("topic4"))
 
 		gspec = &core.Genesis{
-			Config: params.TestChainConfig,
+			Config: params.TestFlareChainConfig,
 			Alloc: types.GenesisAlloc{
 				addr:      {Balance: big.NewInt(0).Mul(big.NewInt(100), big.NewInt(params.Ether))},
 				contract:  {Balance: big.NewInt(0), Code: bytecode},

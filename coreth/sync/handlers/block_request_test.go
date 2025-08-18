@@ -102,14 +102,14 @@ func executeBlockRequestTest(t testing.TB, test blockRequestTest, blocks []*type
 }
 
 func TestBlockRequestHandler(t *testing.T) {
-	var gspec = &core.Genesis{
-		Config: params.TestChainConfig,
+	gspec := &core.Genesis{
+		Config: params.TestFlareChainConfig,
 	}
 	memdb := rawdb.NewMemoryDatabase()
 	tdb := triedb.NewDatabase(memdb, nil)
 	genesis := gspec.MustCommit(memdb, tdb)
 	engine := dummy.NewETHFaker()
-	blocks, _, err := core.GenerateChain(params.TestChainConfig, genesis, engine, memdb, 96, 0, func(i int, b *core.BlockGen) {})
+	blocks, _, err := core.GenerateChain(params.TestFlareChainConfig, genesis, engine, memdb, 96, 0, func(i int, b *core.BlockGen) {})
 	if err != nil {
 		t.Fatal("unexpected error when generating test blockchain", err)
 	}
@@ -214,14 +214,14 @@ func TestBlockRequestHandlerLargeBlocks(t *testing.T) {
 }
 
 func TestBlockRequestHandlerCtxExpires(t *testing.T) {
-	var gspec = &core.Genesis{
-		Config: params.TestChainConfig,
+	gspec := &core.Genesis{
+		Config: params.TestFlareChainConfig,
 	}
 	memdb := rawdb.NewMemoryDatabase()
 	tdb := triedb.NewDatabase(memdb, nil)
 	genesis := gspec.MustCommit(memdb, tdb)
 	engine := dummy.NewETHFaker()
-	blocks, _, err := core.GenerateChain(params.TestChainConfig, genesis, engine, memdb, 11, 0, func(i int, b *core.BlockGen) {})
+	blocks, _, err := core.GenerateChain(params.TestFlareChainConfig, genesis, engine, memdb, 11, 0, func(i int, b *core.BlockGen) {})
 	if err != nil {
 		t.Fatal("unexpected error when generating test blockchain", err)
 	}

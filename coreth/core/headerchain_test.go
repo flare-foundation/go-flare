@@ -76,7 +76,7 @@ func TestHeaderInsertion(t *testing.T) {
 		db    = rawdb.NewMemoryDatabase()
 		gspec = &Genesis{
 			BaseFee: big.NewInt(params.ApricotPhase3InitialBaseFee),
-			Config:  params.TestChainConfig,
+			Config:  params.TestFlareChainConfig,
 		}
 	)
 	genesis := gspec.ToBlock()
@@ -87,11 +87,11 @@ func TestHeaderInsertion(t *testing.T) {
 	defer chain.Stop()
 
 	// chain A: G->A1->A2...A128
-	chainA, _, _ := GenerateChain(params.TestChainConfig, types.NewBlockWithHeader(genesis.Header()), dummy.NewCoinbaseFaker(), db, 128, 10, func(i int, b *BlockGen) {
+	chainA, _, _ := GenerateChain(params.TestFlareChainConfig, types.NewBlockWithHeader(genesis.Header()), dummy.NewCoinbaseFaker(), db, 128, 10, func(i int, b *BlockGen) {
 		b.SetCoinbase(common.Address{0: byte(10), 19: byte(i)})
 	})
 	// chain B: G->A1->B2...B128
-	chainB, _, _ := GenerateChain(params.TestChainConfig, types.NewBlockWithHeader(chainA[0].Header()), dummy.NewCoinbaseFaker(), db, 128, 10, func(i int, b *BlockGen) {
+	chainB, _, _ := GenerateChain(params.TestFlareChainConfig, types.NewBlockWithHeader(chainA[0].Header()), dummy.NewCoinbaseFaker(), db, 128, 10, func(i int, b *BlockGen) {
 		b.SetCoinbase(common.Address{0: byte(10), 19: byte(i)})
 	})
 

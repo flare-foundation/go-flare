@@ -121,22 +121,22 @@ var (
 		return &cpy
 	}
 
-	genesisJSONApricotPhase0     = genesisJSON(params.TestLaunchConfig)
-	genesisJSONApricotPhase1     = genesisJSON(params.TestApricotPhase1Config)
-	genesisJSONApricotPhase2     = genesisJSON(params.TestApricotPhase2Config)
-	genesisJSONApricotPhase3     = genesisJSON(params.TestApricotPhase3Config)
-	genesisJSONApricotPhase4     = genesisJSON(params.TestApricotPhase4Config)
-	genesisJSONApricotPhase5     = genesisJSON(params.TestApricotPhase5Config)
-	genesisJSONApricotPhasePre6  = genesisJSON(params.TestApricotPhasePre6Config)
-	genesisJSONApricotPhase6     = genesisJSON(params.TestApricotPhase6Config)
-	genesisJSONApricotPhasePost6 = genesisJSON(params.TestApricotPhasePost6Config)
-	genesisJSONBanff             = genesisJSON(params.TestBanffChainConfig)
-	genesisJSONCortina           = genesisJSON(params.TestCortinaChainConfig)
-	genesisJSONDurango           = genesisJSON(params.TestDurangoChainConfig)
-	genesisJSONEtna              = genesisJSON(params.TestEtnaChainConfig)
+	genesisJSONApricotPhase0     = genesisJSON(params.TestFlareLaunchConfig)
+	genesisJSONApricotPhase1     = genesisJSON(params.TestFlareApricotPhase1Config)
+	genesisJSONApricotPhase2     = genesisJSON(params.TestFlareApricotPhase2Config)
+	genesisJSONApricotPhase3     = genesisJSON(params.TestFlareApricotPhase3Config)
+	genesisJSONApricotPhase4     = genesisJSON(params.TestFlareApricotPhase4Config)
+	genesisJSONApricotPhase5     = genesisJSON(params.TestFlareApricotPhase5Config)
+	genesisJSONApricotPhasePre6  = genesisJSON(params.TestFlareApricotPhasePre6Config)
+	genesisJSONApricotPhase6     = genesisJSON(params.TestFlareApricotPhase6Config)
+	genesisJSONApricotPhasePost6 = genesisJSON(params.TestFlareApricotPhasePost6Config)
+	genesisJSONBanff             = genesisJSON(params.TestFlareBanffChainConfig)
+	genesisJSONCortina           = genesisJSON(params.TestFlareCortinaChainConfig)
+	genesisJSONDurango           = genesisJSON(params.TestFlareDurangoChainConfig)
+	genesisJSONEtna              = genesisJSON(params.TestFlareEtnaChainConfig)
 	genesisJSONLatest            = genesisJSONEtna
 
-	genesisJSONCancun = genesisJSON(activateCancun(params.TestChainConfig))
+	genesisJSONCancun = genesisJSON(activateCancun(params.TestFlareChainConfig))
 
 	apricotRulesPhase0 = params.Rules{}
 	apricotRulesPhase1 = params.Rules{AvalancheRules: params.AvalancheRules{IsApricotPhase1: true}}
@@ -177,7 +177,7 @@ func newPrefundedGenesis(
 	}
 
 	return &core.Genesis{
-		Config:     params.TestChainConfig,
+		Config:     params.TestFlareChainConfig,
 		Difficulty: big.NewInt(0),
 		Alloc:      alloc,
 	}
@@ -3994,7 +3994,7 @@ func TestMinFeeSetAtEtna(t *testing.T) {
 	etnaTime := uint64(now.Add(1 * time.Second).Unix())
 
 	genesis := genesisJSON(
-		activateEtna(params.TestEtnaChainConfig, etnaTime),
+		activateEtna(params.TestFlareEtnaChainConfig, etnaTime),
 	)
 	clock := mockable.Clock{}
 	clock.Set(now)

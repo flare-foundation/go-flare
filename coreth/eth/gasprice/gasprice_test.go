@@ -93,7 +93,7 @@ func (b *testBackend) teardown() {
 }
 
 func newTestBackendFakerEngine(t *testing.T, config *params.ChainConfig, numBlocks int, extDataGasUsage *big.Int, genBlocks func(i int, b *core.BlockGen)) *testBackend {
-	var gspec = &core.Genesis{
+	gspec := &core.Genesis{
 		Config: config,
 		Alloc:  types.GenesisAlloc{addr: {Balance: bal}},
 	}
@@ -120,7 +120,7 @@ func newTestBackendFakerEngine(t *testing.T, config *params.ChainConfig, numBloc
 // newTestBackend creates a test backend. OBS: don't forget to invoke tearDown
 // after use, otherwise the blockchain instance will mem-leak via goroutines.
 func newTestBackend(t *testing.T, config *params.ChainConfig, numBlocks int, extDataGasUsage *big.Int, genBlocks func(i int, b *core.BlockGen)) *testBackend {
-	var gspec = &core.Genesis{
+	gspec := &core.Genesis{
 		Config: config,
 		Alloc:  types.GenesisAlloc{addr: {Balance: bal}},
 	}
@@ -222,12 +222,12 @@ func testGenBlock(t *testing.T, tip int64, numTx int) func(int, *core.BlockGen) 
 		b.SetCoinbase(common.Address{1})
 
 		txTip := big.NewInt(tip * params.GWei)
-		signer := types.LatestSigner(params.TestChainConfig)
+		signer := types.LatestSigner(params.TestFlareChainConfig)
 		baseFee := b.BaseFee()
 		feeCap := new(big.Int).Add(baseFee, txTip)
 		for j := 0; j < numTx; j++ {
 			tx := types.NewTx(&types.DynamicFeeTx{
-				ChainID:   params.TestChainConfig.ChainID,
+				ChainID:   params.TestFlareChainConfig.ChainID,
 				Nonce:     b.TxNonce(addr),
 				To:        &common.Address{},
 				Gas:       params.TxGas,
@@ -244,7 +244,7 @@ func testGenBlock(t *testing.T, tip int64, numTx int) func(int, *core.BlockGen) 
 
 func TestSuggestTipCapEmptyExtDataGasUsage(t *testing.T) {
 	applyGasPriceTest(t, suggestTipCapTest{
-		chainConfig:     params.TestChainConfig,
+		chainConfig:     params.TestFlareChainConfig,
 		numBlocks:       3,
 		extDataGasUsage: nil,
 		genBlock:        testGenBlock(t, 55, 370),
@@ -254,7 +254,7 @@ func TestSuggestTipCapEmptyExtDataGasUsage(t *testing.T) {
 
 func TestSuggestTipCapSimple(t *testing.T) {
 	applyGasPriceTest(t, suggestTipCapTest{
-		chainConfig:     params.TestChainConfig,
+		chainConfig:     params.TestFlareChainConfig,
 		numBlocks:       3,
 		extDataGasUsage: common.Big0,
 		genBlock:        testGenBlock(t, 55, 370),
@@ -264,7 +264,7 @@ func TestSuggestTipCapSimple(t *testing.T) {
 
 func TestSuggestTipCapSimpleFloor(t *testing.T) {
 	applyGasPriceTest(t, suggestTipCapTest{
-		chainConfig:     params.TestChainConfig,
+		chainConfig:     params.TestFlareChainConfig,
 		numBlocks:       1,
 		extDataGasUsage: common.Big0,
 		genBlock:        testGenBlock(t, 55, 370),
@@ -275,18 +275,18 @@ func TestSuggestTipCapSimpleFloor(t *testing.T) {
 func TestSuggestTipCapSmallTips(t *testing.T) {
 	tip := big.NewInt(550 * params.GWei)
 	applyGasPriceTest(t, suggestTipCapTest{
-		chainConfig:     params.TestChainConfig,
+		chainConfig:     params.TestFlareChainConfig,
 		numBlocks:       3,
 		extDataGasUsage: common.Big0,
 		genBlock: func(i int, b *core.BlockGen) {
 			b.SetCoinbase(common.Address{1})
 
-			signer := types.LatestSigner(params.TestChainConfig)
+			signer := types.LatestSigner(params.TestFlareChainConfig)
 			baseFee := b.BaseFee()
 			feeCap := new(big.Int).Add(baseFee, tip)
 			for j := 0; j < 185; j++ {
 				tx := types.NewTx(&types.DynamicFeeTx{
-					ChainID:   params.TestChainConfig.ChainID,
+					ChainID:   params.TestFlareChainConfig.ChainID,
 					Nonce:     b.TxNonce(addr),
 					To:        &common.Address{},
 					Gas:       params.TxGas,
@@ -300,7 +300,7 @@ func TestSuggestTipCapSmallTips(t *testing.T) {
 				}
 				b.AddTx(tx)
 				tx = types.NewTx(&types.DynamicFeeTx{
-					ChainID:   params.TestChainConfig.ChainID,
+					ChainID:   params.TestFlareChainConfig.ChainID,
 					Nonce:     b.TxNonce(addr),
 					To:        &common.Address{},
 					Gas:       params.TxGas,
@@ -320,7 +320,7 @@ func TestSuggestTipCapSmallTips(t *testing.T) {
 
 func TestSuggestTipCapExtDataUsage(t *testing.T) {
 	applyGasPriceTest(t, suggestTipCapTest{
-		chainConfig:     params.TestChainConfig,
+		chainConfig:     params.TestFlareChainConfig,
 		numBlocks:       3,
 		extDataGasUsage: big.NewInt(10_000),
 		genBlock:        testGenBlock(t, 55, 370),
@@ -330,7 +330,7 @@ func TestSuggestTipCapExtDataUsage(t *testing.T) {
 
 func TestSuggestTipCapMinGas(t *testing.T) {
 	applyGasPriceTest(t, suggestTipCapTest{
-		chainConfig:     params.TestChainConfig,
+		chainConfig:     params.TestFlareChainConfig,
 		numBlocks:       3,
 		extDataGasUsage: common.Big0,
 		genBlock:        testGenBlock(t, 500, 50),
@@ -347,10 +347,10 @@ func TestSuggestGasPricePreAP3(t *testing.T) {
 		Percentile: 60,
 	}
 
-	backend := newTestBackend(t, params.TestApricotPhase2Config, 3, nil, func(i int, b *core.BlockGen) {
+	backend := newTestBackend(t, params.TestFlareApricotPhase2Config, 3, nil, func(i int, b *core.BlockGen) {
 		b.SetCoinbase(common.Address{1})
 
-		signer := types.LatestSigner(params.TestApricotPhase2Config)
+		signer := types.LatestSigner(params.TestFlareApricotPhase2Config)
 		gasPrice := big.NewInt(params.ApricotPhase1MinGasPrice)
 		for j := 0; j < 50; j++ {
 			tx := types.NewTx(&types.LegacyTx{
@@ -376,7 +376,7 @@ func TestSuggestGasPricePreAP3(t *testing.T) {
 
 func TestSuggestTipCapMaxBlocksLookback(t *testing.T) {
 	applyGasPriceTest(t, suggestTipCapTest{
-		chainConfig:     params.TestChainConfig,
+		chainConfig:     params.TestFlareChainConfig,
 		numBlocks:       20,
 		extDataGasUsage: common.Big0,
 		genBlock:        testGenBlock(t, 550, 370),
@@ -386,7 +386,7 @@ func TestSuggestTipCapMaxBlocksLookback(t *testing.T) {
 
 func TestSuggestTipCapMaxBlocksSecondsLookback(t *testing.T) {
 	applyGasPriceTest(t, suggestTipCapTest{
-		chainConfig:     params.TestChainConfig,
+		chainConfig:     params.TestFlareChainConfig,
 		numBlocks:       20,
 		extDataGasUsage: big.NewInt(1),
 		genBlock:        testGenBlock(t, 550, 370),

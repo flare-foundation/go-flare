@@ -41,7 +41,7 @@ func fundAddressByGenesis(addrs []common.Address) (string, error) {
 		}
 	}
 	genesis.Alloc = funds
-	genesis.Config = params.TestChainConfig
+	genesis.Config = params.TestFlareChainConfig
 
 	bytes, err := json.Marshal(genesis)
 	return string(bytes), err

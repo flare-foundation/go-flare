@@ -155,7 +155,7 @@ func TestGossipSubscribe(t *testing.T) {
 	addr := crypto.PubkeyToAddress(key.PublicKey)
 
 	require.NoError(err)
-	txPool := setupPoolWithConfig(t, params.TestChainConfig, addr)
+	txPool := setupPoolWithConfig(t, params.TestFlareChainConfig, addr)
 	defer txPool.Close()
 	txPool.SetGasTip(common.Big1)
 	txPool.SetMinFee(common.Big0)

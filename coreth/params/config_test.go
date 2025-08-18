@@ -44,9 +44,9 @@ func TestCheckCompatible(t *testing.T) {
 		wantErr       *ConfigCompatError
 	}
 	tests := []test{
-		{stored: TestChainConfig, new: TestChainConfig, headBlock: 0, headTimestamp: 0, wantErr: nil},
-		{stored: TestChainConfig, new: TestChainConfig, headBlock: 0, headTimestamp: uint64(time.Now().Unix()), wantErr: nil},
-		{stored: TestChainConfig, new: TestChainConfig, headBlock: 100, wantErr: nil},
+		{stored: TestFlareChainConfig, new: TestFlareChainConfig, headBlock: 0, headTimestamp: 0, wantErr: nil},
+		{stored: TestFlareChainConfig, new: TestFlareChainConfig, headBlock: 0, headTimestamp: uint64(time.Now().Unix()), wantErr: nil},
+		{stored: TestFlareChainConfig, new: TestFlareChainConfig, headBlock: 100, wantErr: nil},
 		{
 			stored:        &ChainConfig{EIP150Block: big.NewInt(10)},
 			new:           &ChainConfig{EIP150Block: big.NewInt(20)},
@@ -55,7 +55,7 @@ func TestCheckCompatible(t *testing.T) {
 			wantErr:       nil,
 		},
 		{
-			stored:        TestChainConfig,
+			stored:        TestFlareChainConfig,
 			new:           &ChainConfig{HomesteadBlock: nil},
 			headBlock:     3,
 			headTimestamp: 30,
@@ -67,7 +67,7 @@ func TestCheckCompatible(t *testing.T) {
 			},
 		},
 		{
-			stored:        TestChainConfig,
+			stored:        TestFlareChainConfig,
 			new:           &ChainConfig{HomesteadBlock: big.NewInt(1)},
 			headBlock:     3,
 			headTimestamp: 30,
@@ -110,8 +110,8 @@ func TestCheckCompatible(t *testing.T) {
 			},
 		},
 		{
-			stored:        TestChainConfig,
-			new:           TestApricotPhase4Config,
+			stored:        TestFlareChainConfig,
+			new:           TestFlareApricotPhase4Config,
 			headBlock:     0,
 			headTimestamp: 0,
 			wantErr: &ConfigCompatError{
@@ -122,8 +122,8 @@ func TestCheckCompatible(t *testing.T) {
 			},
 		},
 		{
-			stored:        TestChainConfig,
-			new:           TestApricotPhase4Config,
+			stored:        TestFlareChainConfig,
+			new:           TestFlareApricotPhase4Config,
 			headBlock:     10,
 			headTimestamp: 100,
 			wantErr: &ConfigCompatError{

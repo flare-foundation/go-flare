@@ -75,9 +75,9 @@ var (
 	// CostonChainConfig   = getChainConfig(constants.CostonID, CostonChainID)
 	// LocalChainConfig    = getChainConfig(constants.LocalID, LocalChainID)
 
-	TestChainConfig = &ChainConfig{
+	TestFlareChainConfig = &ChainConfig{
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
-		ChainID:             big.NewInt(1),
+		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
 		DAOForkBlock:        nil,
 		DAOForkSupport:      false,
@@ -107,9 +107,9 @@ var (
 		},
 	}
 
-	TestLaunchConfig = &ChainConfig{
+	TestFlareLaunchConfig = &ChainConfig{
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
-		ChainID:             big.NewInt(1),
+		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
 		DAOForkBlock:        nil,
 		DAOForkSupport:      false,
@@ -137,9 +137,9 @@ var (
 		},
 	}
 
-	TestApricotPhase1Config = &ChainConfig{
+	TestFlareApricotPhase1Config = &ChainConfig{
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
-		ChainID:             big.NewInt(1),
+		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
 		DAOForkBlock:        nil,
 		DAOForkSupport:      false,
@@ -167,9 +167,9 @@ var (
 		},
 	}
 
-	TestApricotPhase2Config = &ChainConfig{
+	TestFlareApricotPhase2Config = &ChainConfig{
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
-		ChainID:             big.NewInt(1),
+		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
 		DAOForkBlock:        nil,
 		DAOForkSupport:      false,
@@ -198,9 +198,9 @@ var (
 		},
 	}
 
-	TestApricotPhase3Config = &ChainConfig{
+	TestFlareApricotPhase3Config = &ChainConfig{
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
-		ChainID:             big.NewInt(1),
+		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
 		DAOForkBlock:        nil,
 		DAOForkSupport:      false,
@@ -230,9 +230,9 @@ var (
 		},
 	}
 
-	TestApricotPhase4Config = &ChainConfig{
+	TestFlareApricotPhase4Config = &ChainConfig{
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
-		ChainID:             big.NewInt(1),
+		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
 		DAOForkBlock:        nil,
 		DAOForkSupport:      false,
@@ -262,9 +262,9 @@ var (
 		},
 	}
 
-	TestApricotPhase5Config = &ChainConfig{
+	TestFlareApricotPhase5Config = &ChainConfig{
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
-		ChainID:             big.NewInt(1),
+		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
 		DAOForkBlock:        nil,
 		DAOForkSupport:      false,
@@ -294,9 +294,9 @@ var (
 		},
 	}
 
-	TestApricotPhasePre6Config = &ChainConfig{
+	TestFlareApricotPhasePre6Config = &ChainConfig{
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
-		ChainID:             big.NewInt(1),
+		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
 		DAOForkBlock:        nil,
 		DAOForkSupport:      false,
@@ -326,9 +326,9 @@ var (
 		},
 	}
 
-	TestApricotPhase6Config = &ChainConfig{
+	TestFlareApricotPhase6Config = &ChainConfig{
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
-		ChainID:             big.NewInt(1),
+		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
 		DAOForkBlock:        nil,
 		DAOForkSupport:      false,
@@ -358,9 +358,9 @@ var (
 		},
 	}
 
-	TestApricotPhasePost6Config = &ChainConfig{
+	TestFlareApricotPhasePost6Config = &ChainConfig{
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
-		ChainID:             big.NewInt(1),
+		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
 		DAOForkBlock:        nil,
 		DAOForkSupport:      false,
@@ -390,9 +390,9 @@ var (
 		},
 	}
 
-	TestBanffChainConfig = &ChainConfig{
+	TestFlareBanffChainConfig = &ChainConfig{
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
-		ChainID:             big.NewInt(1),
+		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
 		DAOForkBlock:        nil,
 		DAOForkSupport:      false,
@@ -422,9 +422,9 @@ var (
 		},
 	}
 
-	TestCortinaChainConfig = &ChainConfig{
+	TestFlareCortinaChainConfig = &ChainConfig{
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
-		ChainID:             big.NewInt(1),
+		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
 		DAOForkBlock:        nil,
 		DAOForkSupport:      false,
@@ -454,9 +454,9 @@ var (
 		},
 	}
 
-	TestDurangoChainConfig = &ChainConfig{
+	TestFlareDurangoChainConfig = &ChainConfig{
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
-		ChainID:             big.NewInt(1),
+		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
 		DAOForkBlock:        nil,
 		DAOForkSupport:      false,
@@ -487,9 +487,9 @@ var (
 		},
 	}
 
-	TestEtnaChainConfig = &ChainConfig{
+	TestFlareEtnaChainConfig = &ChainConfig{
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
-		ChainID:             big.NewInt(1),
+		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
 		DAOForkBlock:        nil,
 		DAOForkSupport:      false,
@@ -521,7 +521,453 @@ var (
 		},
 	}
 
-	TestRules = TestChainConfig.Rules(new(big.Int), 0)
+	TestSongbirdChainConfig = &ChainConfig{
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             SongbirdChainID,
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
+			ApricotPhase6BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePost6BlockTimestamp: utils.NewUint64(0),
+			BanffBlockTimestamp:             utils.NewUint64(0),
+			CortinaBlockTimestamp:           utils.NewUint64(0),
+			DurangoBlockTimestamp:           utils.NewUint64(0),
+			EtnaTimestamp:                   utils.NewUint64(0),
+		},
+	}
+
+	TestSongbirdLaunchConfig = &ChainConfig{
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             SongbirdChainID,
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     nil,
+			ApricotPhase2BlockTimestamp:     nil,
+			ApricotPhase3BlockTimestamp:     nil,
+			ApricotPhase4BlockTimestamp:     nil,
+			ApricotPhase5BlockTimestamp:     nil,
+			ApricotPhasePre6BlockTimestamp:  nil,
+			ApricotPhase6BlockTimestamp:     nil,
+			ApricotPhasePost6BlockTimestamp: nil,
+			BanffBlockTimestamp:             nil,
+			CortinaBlockTimestamp:           nil,
+			DurangoBlockTimestamp:           nil,
+			EtnaTimestamp:                   nil,
+		},
+	}
+
+	TestSongbirdApricotPhase1Config = &ChainConfig{
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             SongbirdChainID,
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     nil,
+			ApricotPhase3BlockTimestamp:     nil,
+			ApricotPhase4BlockTimestamp:     nil,
+			ApricotPhase5BlockTimestamp:     nil,
+			ApricotPhasePre6BlockTimestamp:  nil,
+			ApricotPhase6BlockTimestamp:     nil,
+			ApricotPhasePost6BlockTimestamp: nil,
+			BanffBlockTimestamp:             nil,
+			CortinaBlockTimestamp:           nil,
+			DurangoBlockTimestamp:           nil,
+			EtnaTimestamp:                   nil,
+		},
+	}
+
+	TestSongbirdApricotPhase2Config = &ChainConfig{
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             SongbirdChainID,
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     nil,
+			ApricotPhase4BlockTimestamp:     nil,
+			ApricotPhase5BlockTimestamp:     nil,
+			ApricotPhasePre6BlockTimestamp:  nil,
+			ApricotPhase6BlockTimestamp:     nil,
+			ApricotPhasePost6BlockTimestamp: nil,
+			BanffBlockTimestamp:             nil,
+			CortinaBlockTimestamp:           nil,
+			DurangoBlockTimestamp:           nil,
+			EtnaTimestamp:                   nil,
+		},
+	}
+
+	TestSongbirdApricotPhase3Config = &ChainConfig{
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             SongbirdChainID,
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase4BlockTimestamp:     nil,
+			ApricotPhase5BlockTimestamp:     nil,
+			ApricotPhasePre6BlockTimestamp:  nil,
+			ApricotPhase6BlockTimestamp:     nil,
+			ApricotPhasePost6BlockTimestamp: nil,
+			BanffBlockTimestamp:             nil,
+			CortinaBlockTimestamp:           nil,
+			DurangoBlockTimestamp:           nil,
+			EtnaTimestamp:                   nil,
+		},
+	}
+
+	TestSongbirdApricotPhase4Config = &ChainConfig{
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             SongbirdChainID,
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase5BlockTimestamp:     nil,
+			ApricotPhasePre6BlockTimestamp:  nil,
+			ApricotPhase6BlockTimestamp:     nil,
+			ApricotPhasePost6BlockTimestamp: nil,
+			BanffBlockTimestamp:             nil,
+			CortinaBlockTimestamp:           nil,
+			DurangoBlockTimestamp:           nil,
+			EtnaTimestamp:                   nil,
+		},
+	}
+
+	TestSongbirdApricotPhase5Config = &ChainConfig{
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             SongbirdChainID,
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePre6BlockTimestamp:  nil,
+			ApricotPhase6BlockTimestamp:     nil,
+			ApricotPhasePost6BlockTimestamp: nil,
+			BanffBlockTimestamp:             nil,
+			CortinaBlockTimestamp:           nil,
+			DurangoBlockTimestamp:           nil,
+			EtnaTimestamp:                   nil,
+		},
+	}
+
+	TestSongbirdApricotPhasePre6Config = &ChainConfig{
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             SongbirdChainID,
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
+			ApricotPhase6BlockTimestamp:     nil,
+			ApricotPhasePost6BlockTimestamp: nil,
+			BanffBlockTimestamp:             nil,
+			CortinaBlockTimestamp:           nil,
+			DurangoBlockTimestamp:           nil,
+			EtnaTimestamp:                   nil,
+		},
+	}
+
+	TestSongbirdApricotPhase6Config = &ChainConfig{
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             SongbirdChainID,
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
+			ApricotPhase6BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePost6BlockTimestamp: nil,
+			BanffBlockTimestamp:             nil,
+			CortinaBlockTimestamp:           nil,
+			DurangoBlockTimestamp:           nil,
+			EtnaTimestamp:                   nil,
+		},
+	}
+
+	TestSongbirdApricotPhasePost6Config = &ChainConfig{
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             SongbirdChainID,
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
+			ApricotPhase6BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePost6BlockTimestamp: utils.NewUint64(0),
+			BanffBlockTimestamp:             nil,
+			CortinaBlockTimestamp:           nil,
+			DurangoBlockTimestamp:           nil,
+			EtnaTimestamp:                   nil,
+		},
+	}
+
+	TestSongbirdBanffChainConfig = &ChainConfig{
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             SongbirdChainID,
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
+			ApricotPhase6BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePost6BlockTimestamp: utils.NewUint64(0),
+			BanffBlockTimestamp:             utils.NewUint64(0),
+			CortinaBlockTimestamp:           nil,
+			DurangoBlockTimestamp:           nil,
+			EtnaTimestamp:                   nil,
+		},
+	}
+
+	TestSongbirdCortinaChainConfig = &ChainConfig{
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             SongbirdChainID,
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
+			ApricotPhase6BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePost6BlockTimestamp: utils.NewUint64(0),
+			BanffBlockTimestamp:             utils.NewUint64(0),
+			CortinaBlockTimestamp:           utils.NewUint64(0),
+			DurangoBlockTimestamp:           nil,
+			EtnaTimestamp:                   nil,
+		},
+	}
+
+	TestSongbirdDurangoChainConfig = &ChainConfig{
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             SongbirdChainID,
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		ShanghaiTime:        utils.NewUint64(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
+			ApricotPhase6BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePost6BlockTimestamp: utils.NewUint64(0),
+			BanffBlockTimestamp:             utils.NewUint64(0),
+			CortinaBlockTimestamp:           utils.NewUint64(0),
+			DurangoBlockTimestamp:           utils.NewUint64(0),
+			EtnaTimestamp:                   nil,
+		},
+	}
+
+	TestSongbirdEtnaChainConfig = &ChainConfig{
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             SongbirdChainID,
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      false,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		ShanghaiTime:        utils.NewUint64(0),
+		CancunTime:          utils.NewUint64(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
+			ApricotPhase6BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePost6BlockTimestamp: utils.NewUint64(0),
+			BanffBlockTimestamp:             utils.NewUint64(0),
+			CortinaBlockTimestamp:           utils.NewUint64(0),
+			DurangoBlockTimestamp:           utils.NewUint64(0),
+			EtnaTimestamp:                   utils.NewUint64(0),
+		},
+	}
+
+	TestRules = TestFlareChainConfig.Rules(new(big.Int), 0)
 )
 
 // ChainConfig is the core config which determines the blockchain settings.

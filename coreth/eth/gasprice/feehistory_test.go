@@ -42,7 +42,7 @@ import (
 )
 
 func TestFeeHistory(t *testing.T) {
-	var cases = []struct {
+	cases := []struct {
 		pending      bool
 		maxCallBlock uint64
 		maxBlock     uint64
@@ -81,8 +81,8 @@ func TestFeeHistory(t *testing.T) {
 			MaxBlockHistory:     c.maxBlock,
 		}
 		tip := big.NewInt(1 * params.GWei)
-		backend := newTestBackendFakerEngine(t, params.TestChainConfig, 32, common.Big0, func(i int, b *core.BlockGen) {
-			signer := types.LatestSigner(params.TestChainConfig)
+		backend := newTestBackendFakerEngine(t, params.TestFlareChainConfig, 32, common.Big0, func(i int, b *core.BlockGen) {
+			signer := types.LatestSigner(params.TestFlareChainConfig)
 
 			b.SetCoinbase(common.Address{1})
 
@@ -91,7 +91,7 @@ func TestFeeHistory(t *testing.T) {
 
 			var tx *types.Transaction
 			txdata := &types.DynamicFeeTx{
-				ChainID:   params.TestChainConfig.ChainID,
+				ChainID:   params.TestFlareChainConfig.ChainID,
 				Nonce:     b.TxNonce(addr),
 				To:        &common.Address{},
 				Gas:       params.TxGas,

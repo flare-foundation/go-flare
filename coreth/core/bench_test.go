@@ -45,18 +45,23 @@ import (
 func BenchmarkInsertChain_empty_memdb(b *testing.B) {
 	benchInsertChain(b, false, nil)
 }
+
 func BenchmarkInsertChain_empty_diskdb(b *testing.B) {
 	benchInsertChain(b, true, nil)
 }
+
 func BenchmarkInsertChain_valueTx_memdb(b *testing.B) {
 	benchInsertChain(b, false, genValueTx(0))
 }
+
 func BenchmarkInsertChain_valueTx_diskdb(b *testing.B) {
 	benchInsertChain(b, true, genValueTx(0))
 }
+
 func BenchmarkInsertChain_valueTx_100kB_memdb(b *testing.B) {
 	benchInsertChain(b, false, genValueTx(100*1024))
 }
+
 func BenchmarkInsertChain_valueTx_100kB_diskdb(b *testing.B) {
 	benchInsertChain(b, true, genValueTx(100*1024))
 }
@@ -64,12 +69,15 @@ func BenchmarkInsertChain_valueTx_100kB_diskdb(b *testing.B) {
 func BenchmarkInsertChain_ring200_memdb(b *testing.B) {
 	benchInsertChain(b, false, genTxRing(200))
 }
+
 func BenchmarkInsertChain_ring200_diskdb(b *testing.B) {
 	benchInsertChain(b, true, genTxRing(200))
 }
+
 func BenchmarkInsertChain_ring1000_memdb(b *testing.B) {
 	benchInsertChain(b, false, genTxRing(1000))
 }
+
 func BenchmarkInsertChain_ring1000_diskdb(b *testing.B) {
 	benchInsertChain(b, true, genTxRing(1000))
 }
@@ -174,7 +182,7 @@ func benchInsertChain(b *testing.B, disk bool, gen func(int, *BlockGen)) {
 	// Generate a chain of b.N blocks using the supplied block
 	// generator function.
 	gspec := &Genesis{
-		Config: params.TestChainConfig,
+		Config: params.TestFlareChainConfig,
 		Alloc:  types.GenesisAlloc{benchRootAddr: {Balance: benchRootFunds}},
 	}
 	_, chain, _, _ := GenerateChainWithGenesis(gspec, dummy.NewCoinbaseFaker(), b.N, 10, gen)
@@ -193,36 +201,47 @@ func benchInsertChain(b *testing.B, disk bool, gen func(int, *BlockGen)) {
 func BenchmarkChainRead_header_10k(b *testing.B) {
 	benchReadChain(b, false, 10000)
 }
+
 func BenchmarkChainRead_full_10k(b *testing.B) {
 	benchReadChain(b, true, 10000)
 }
+
 func BenchmarkChainRead_header_100k(b *testing.B) {
 	benchReadChain(b, false, 100000)
 }
+
 func BenchmarkChainRead_full_100k(b *testing.B) {
 	benchReadChain(b, true, 100000)
 }
+
 func BenchmarkChainRead_header_500k(b *testing.B) {
 	benchReadChain(b, false, 500000)
 }
+
 func BenchmarkChainRead_full_500k(b *testing.B) {
 	benchReadChain(b, true, 500000)
 }
+
 func BenchmarkChainWrite_header_10k(b *testing.B) {
 	benchWriteChain(b, false, 10000)
 }
+
 func BenchmarkChainWrite_full_10k(b *testing.B) {
 	benchWriteChain(b, true, 10000)
 }
+
 func BenchmarkChainWrite_header_100k(b *testing.B) {
 	benchWriteChain(b, false, 100000)
 }
+
 func BenchmarkChainWrite_full_100k(b *testing.B) {
 	benchWriteChain(b, true, 100000)
 }
+
 func BenchmarkChainWrite_header_500k(b *testing.B) {
 	benchWriteChain(b, false, 500000)
 }
+
 func BenchmarkChainWrite_full_500k(b *testing.B) {
 	benchWriteChain(b, true, 500000)
 }
@@ -263,7 +282,7 @@ func makeChainForBench(db ethdb.Database, genesis *Genesis, full bool, count uin
 }
 
 func benchWriteChain(b *testing.B, full bool, count uint64) {
-	genesis := &Genesis{Config: params.TestChainConfig}
+	genesis := &Genesis{Config: params.TestFlareChainConfig}
 	for i := 0; i < b.N; i++ {
 		dir := b.TempDir()
 		db, err := rawdb.NewLevelDBDatabase(dir, 128, 1024, "", false)
@@ -282,7 +301,7 @@ func benchReadChain(b *testing.B, full bool, count uint64) {
 	if err != nil {
 		b.Fatalf("error opening database at %v: %v", dir, err)
 	}
-	genesis := &Genesis{Config: params.TestChainConfig}
+	genesis := &Genesis{Config: params.TestFlareChainConfig}
 	makeChainForBench(db, genesis, full, count)
 	db.Close()
 
