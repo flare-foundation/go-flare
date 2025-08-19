@@ -4,6 +4,8 @@
   "scripts": {
     "p-chain-import": "ts-node ./src/test-p-chain-import.ts",
     "p-chain-export": "ts-node ./src/test-p-chain-export.ts",
+    "x-chain-import": "ts-node ./src/test-x-chain-import.ts",
+    "x-chain-export": "ts-node ./src/test-x-chain-export.ts",
     "add-validator": "ts-node ./src/test-add-validator.ts",
     "add-delegator": "ts-node ./src/test-add-delegator.ts"
   },
