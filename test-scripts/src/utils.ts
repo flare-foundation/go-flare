@@ -17,6 +17,7 @@ export const TestXAddress =
   "X-localflare18jma8ppw3nhx5r4ap8clazz0dps7rv5uj3gy4v";
 export const TestPrivateKey =
   "0x56289e99c94b6912bfc12adc093c9b51124f0dc54ac7a766b2bc5ccf558d8027";
+// corresponding publicKey: "0x0327448e78ffa8cdb24cf19be0204ad954b1bdb4db8c51183534c1eecf2ebd094e",
 
 export interface TestContext {
   context: Context.Context;
