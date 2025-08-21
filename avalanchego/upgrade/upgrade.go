@@ -15,6 +15,7 @@ import (
 var (
 	InitiallyActiveTime       = time.Date(2020, time.December, 5, 5, 0, 0, 0, time.UTC)
 	UnscheduledActivationTime = time.Date(9999, time.December, 1, 0, 0, 0, 0, time.UTC)
+	ZeroTime                  = time.Unix(0, 0)
 
 	Mainnet = Config{
 		ApricotPhase1Time:            time.Date(2021, time.March, 31, 14, 0, 0, 0, time.UTC),
@@ -112,35 +113,35 @@ var (
 		EtnaTime:              UnscheduledActivationTime,
 	}
 	LocalFlare = Config{
-		ApricotPhase1Time:            InitiallyActiveTime,
-		ApricotPhase2Time:            InitiallyActiveTime,
-		ApricotPhase3Time:            InitiallyActiveTime,
-		ApricotPhase4Time:            InitiallyActiveTime,
+		ApricotPhase1Time:            ZeroTime,
+		ApricotPhase2Time:            ZeroTime,
+		ApricotPhase3Time:            ZeroTime,
+		ApricotPhase4Time:            ZeroTime,
 		ApricotPhase4MinPChainHeight: 0,
-		ApricotPhase5Time:            InitiallyActiveTime,
-		ApricotPhasePre6Time:         InitiallyActiveTime,
-		ApricotPhase6Time:            InitiallyActiveTime,
-		ApricotPhasePost6Time:        InitiallyActiveTime,
-		BanffTime:                    InitiallyActiveTime,
-		CortinaTime:                  InitiallyActiveTime,
+		ApricotPhase5Time:            ZeroTime,
+		ApricotPhasePre6Time:         ZeroTime,
+		ApricotPhase6Time:            ZeroTime,
+		ApricotPhasePost6Time:        ZeroTime,
+		BanffTime:                    ZeroTime,
+		CortinaTime:                  ZeroTime,
 		CortinaXChainStopVertexID:    ids.Empty,
-		DurangoTime:                  InitiallyActiveTime,
-		EtnaTime:                     InitiallyActiveTime,
+		DurangoTime:                  ZeroTime,
+		EtnaTime:                     UnscheduledActivationTime,
 	}
 	Local = Config{
-		ApricotPhase1Time:            InitiallyActiveTime,
-		ApricotPhase2Time:            InitiallyActiveTime,
-		ApricotPhase3Time:            InitiallyActiveTime,
-		ApricotPhase4Time:            InitiallyActiveTime,
+		ApricotPhase1Time:            ZeroTime,
+		ApricotPhase2Time:            ZeroTime,
+		ApricotPhase3Time:            ZeroTime,
+		ApricotPhase4Time:            ZeroTime,
 		ApricotPhase4MinPChainHeight: 0,
-		ApricotPhase5Time:            InitiallyActiveTime,
-		ApricotPhasePre6Time:         InitiallyActiveTime,
-		ApricotPhase6Time:            InitiallyActiveTime,
-		ApricotPhasePost6Time:        InitiallyActiveTime,
-		BanffTime:                    InitiallyActiveTime,
-		CortinaTime:                  InitiallyActiveTime,
+		ApricotPhase5Time:            ZeroTime,
+		ApricotPhasePre6Time:         ZeroTime,
+		ApricotPhase6Time:            ZeroTime,
+		ApricotPhasePost6Time:        ZeroTime,
+		BanffTime:                    ZeroTime,
+		CortinaTime:                  ZeroTime,
 		CortinaXChainStopVertexID:    ids.Empty,
-		DurangoTime:                  InitiallyActiveTime,
+		DurangoTime:                  ZeroTime,
 		EtnaTime:                     InitiallyActiveTime,
 	}
 	Default = Config{

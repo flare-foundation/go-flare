@@ -115,20 +115,20 @@ var (
 		EtnaTime:                     InitiallyActiveTime,
 	}
 	LocalFlare = Config{
-		ApricotPhase1Time:            InitiallyActiveTime,
-		ApricotPhase2Time:            InitiallyActiveTime,
-		ApricotPhase3Time:            InitiallyActiveTime,
-		ApricotPhase4Time:            InitiallyActiveTime,
+		ApricotPhase1Time:            ZeroTime,
+		ApricotPhase2Time:            ZeroTime,
+		ApricotPhase3Time:            ZeroTime,
+		ApricotPhase4Time:            ZeroTime,
 		ApricotPhase4MinPChainHeight: 0,
-		ApricotPhase5Time:            InitiallyActiveTime,
-		ApricotPhasePre6Time:         InitiallyActiveTime,
-		ApricotPhase6Time:            InitiallyActiveTime,
-		ApricotPhasePost6Time:        InitiallyActiveTime,
-		BanffTime:                    InitiallyActiveTime,
-		CortinaTime:                  InitiallyActiveTime,
+		ApricotPhase5Time:            ZeroTime,
+		ApricotPhasePre6Time:         ZeroTime,
+		ApricotPhase6Time:            ZeroTime,
+		ApricotPhasePost6Time:        ZeroTime,
+		BanffTime:                    ZeroTime,
+		CortinaTime:                  ZeroTime,
 		CortinaXChainStopVertexID:    ids.Empty,
-		DurangoTime:                  InitiallyActiveTime,
-		EtnaTime:                     InitiallyActiveTime,
+		DurangoTime:                  ZeroTime,
+		EtnaTime:                     ZeroTime,
 	}
 
 	Local = Config{}
