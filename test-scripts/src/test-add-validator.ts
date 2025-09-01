@@ -2,8 +2,9 @@ import { networkIDs, pvm, utils } from "@flarenetwork/flarejs";
 import { issuePChainTx, localFlareContext } from "./utils";
 import { runTest } from "./runner";
 
-const blsPublicKey = '0x917386c374aab0ea3d2bda96768f2be1f0b11483cd5c41bd9cddd3892b693ab84efecc6cf70300d614dcdc6d298ab659';
-const blsSignature = '0x81c7174fc3bc9bbf00a1e26cc7b177d92589b517df5c46844498c14ede655bfedb89929e3d2974210983a1ff06a2a39b05208974a2d3dddac4948bcc81f367717d960be9704b775f21022d639b439135d34b7fb1f2bacbb5ffab3ddafc86220f'
+const nodeID = 'NodeID-MFrZFVCXPv5iCn6M9K6XduxGTYp891xXZ';
+const blsPublicKey = '0xadb0203ebc76627d28fb9440272a2701b85f5c5d4266352686ea42666f5026f1fdabab59529932f1eddb317a6f7435f9';
+const blsSignature = '0x926a1c21953babb12189ec88bfab5cb0060b385efa04c51abe4a3bc42266f80eebb84bcfaacfc8f075560ab444bda8de17bf9013ec20a80dfdfda4ae047a0b39669d153dcee94eb964fe194f5d55c5bba5939ff9ba07b728b6733d696c33ac5a'
 
 async function addValidator(nodeID: string, endTime: number, weight: number) {
     const ctx = await localFlareContext();
@@ -37,7 +38,7 @@ async function addValidator(nodeID: string, endTime: number, weight: number) {
 }
 
 runTest(() => addValidator(
-    'NodeID-MFrZFVCXPv5iCn6M9K6XduxGTYp891xXZ',
+    nodeID,
     Math.ceil(Date.now() / 1000) + 14 * 24 * 60 * 60 + 5, // 14 days (+ 5 seconds) from now
     10_000
 ))
