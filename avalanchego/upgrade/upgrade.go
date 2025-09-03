@@ -142,7 +142,7 @@ var (
 		CortinaTime:                  ZeroTime,
 		CortinaXChainStopVertexID:    ids.Empty,
 		DurangoTime:                  ZeroTime,
-		EtnaTime:                     InitiallyActiveTime,
+		EtnaTime:                     UnscheduledActivationTime,
 	}
 	Default = Config{
 		ApricotPhase1Time:            InitiallyActiveTime,

@@ -112,7 +112,7 @@ var (
 		CortinaTime:                  InitiallyActiveTime,
 		CortinaXChainStopVertexID:    ids.Empty,
 		DurangoTime:                  InitiallyActiveTime,
-		EtnaTime:                     InitiallyActiveTime,
+		EtnaTime:                     UnscheduledActivationTime,
 	}
 	LocalFlare = Config{
 		ApricotPhase1Time:            ZeroTime,
@@ -128,7 +128,7 @@ var (
 		CortinaTime:                  ZeroTime,
 		CortinaXChainStopVertexID:    ids.Empty,
 		DurangoTime:                  ZeroTime,
-		EtnaTime:                     ZeroTime,
+		EtnaTime:                     UnscheduledActivationTime,
 	}
 
 	Local = Config{}
