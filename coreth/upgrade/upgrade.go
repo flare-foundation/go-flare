@@ -110,9 +110,8 @@ var (
 		ApricotPhasePost6Time:        InitiallyActiveTime,
 		BanffTime:                    InitiallyActiveTime,
 		CortinaTime:                  InitiallyActiveTime,
-		CortinaXChainStopVertexID:    ids.Empty,
 		DurangoTime:                  InitiallyActiveTime,
-		EtnaTime:                     UnscheduledActivationTime,
+		EtnaTime:                     InitiallyActiveTime,
 	}
 	LocalFlare = Config{
 		ApricotPhase1Time:            ZeroTime,
@@ -126,13 +125,24 @@ var (
 		ApricotPhasePost6Time:        ZeroTime,
 		BanffTime:                    ZeroTime,
 		CortinaTime:                  ZeroTime,
-		CortinaXChainStopVertexID:    ids.Empty,
 		DurangoTime:                  ZeroTime,
-		EtnaTime:                     UnscheduledActivationTime,
+		EtnaTime:                     ZeroTime,
 	}
-
-	Local = Config{}
-
+	Local = Config{
+		ApricotPhase1Time:            ZeroTime,
+		ApricotPhase2Time:            ZeroTime,
+		ApricotPhase3Time:            ZeroTime,
+		ApricotPhase4Time:            ZeroTime,
+		ApricotPhase4MinPChainHeight: 0,
+		ApricotPhase5Time:            ZeroTime,
+		ApricotPhasePre6Time:         ZeroTime,
+		ApricotPhase6Time:            ZeroTime,
+		ApricotPhasePost6Time:        ZeroTime,
+		BanffTime:                    ZeroTime,
+		CortinaTime:                  ZeroTime,
+		DurangoTime:                  ZeroTime,
+		EtnaTime:                     ZeroTime,
+	}
 	ErrInvalidUpgradeTimes = errors.New("invalid upgrade configuration")
 )
 
