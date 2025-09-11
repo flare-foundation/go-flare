@@ -511,6 +511,8 @@ func (vm *VM) Initialize(
 
 	vm.chainID = g.Config.ChainID
 
+	g.Config.SetEthUpgrades()
+
 	if g.Config.IsSongbirdCode() {
 		vm.ethConfig = ethconfig.NewDefaultSgbConfig()
 	} else {
