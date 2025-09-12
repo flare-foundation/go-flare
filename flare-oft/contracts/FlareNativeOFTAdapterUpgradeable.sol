@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.22;
 
-import { NativeOFTAdapterUpgradeable } from "@layerzerolabs/oft-evm-upgradeable/contracts/NativeOFTAdapterUpgradeable.sol"; // TODO update import after npm version is updated
-
+import { NativeOFTAdapterUpgradeable } from "@layerzerolabs/oft-evm-upgradeable/contracts/oft/NativeOFTAdapterUpgradeable.sol";
 /**
  * @title NativeOFTAdapterUpgradeable Contract
  * @dev NativeOFTAdapterUpgradeable is a contract that adapts native currency to the OFT functionality.
