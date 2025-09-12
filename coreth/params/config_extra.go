@@ -46,6 +46,18 @@ func (c *ChainConfig) SetEthUpgrades() {
 	} else if c.ChainID != nil && AvalancheMainnetChainID.Cmp(c.ChainID) == 0 {
 		c.BerlinBlock = big.NewInt(1640340) // https://snowtrace.io/block/1640340?chainid=43114, AP2 activation block
 		c.LondonBlock = big.NewInt(3308552) // https://snowtrace.io/block/3308552?chainid=43114, AP3 activation block
+	} else if c.ChainID != nil && CostonChainID.Cmp(c.ChainID) == 0 {
+		// Songbird did not have AP3 active immediately
+		c.BerlinBlock = big.NewInt(0)     // AP2 has always been active
+		c.LondonBlock = big.NewInt(55188) // https://coston.testnet.flarescan.com/block/55188, AP3 activation block
+	} else if c.ChainID != nil && SongbirdChainID.Cmp(c.ChainID) == 0 {
+		// Coston did not have AP3 active immediately
+		c.BerlinBlock = big.NewInt(0)        // AP2 has always been active
+		c.LondonBlock = big.NewInt(12349716) // https://songbird.flarescan.com/block/12349716, AP3 activation block
+	} else if c.ChainID != nil && (CostwoChainID.Cmp(c.ChainID) == 0 || FlareChainID.Cmp(c.ChainID) == 0) {
+		// Flare and Costwo have always hand AP3 activated, so BerlinBlock and LondonBlock are both 0.
+		c.BerlinBlock = big.NewInt(0)
+		c.LondonBlock = big.NewInt(0)
 	} else {
 		// In testing or local networks, we only support enabling Berlin and London prior
 		// to the initially active time. This is likely to correspond to an intended block
