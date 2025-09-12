@@ -15,7 +15,7 @@ import { HyperLiquidComposerCodec } from "@layerzerolabs/hyperliquid-composer/co
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import { MyHyperLiquidComposer } from "../../contracts/MyHyperLiquidComposer.sol";
+import { FlareHyperLiquidComposer } from "../../contracts/FlareHyperLiquidComposer.sol";
 import { MyOFT } from "../../contracts/MyOFT.sol";
 
 import { TestHelperOz5 } from "@layerzerolabs/test-devtools-evm-foundry/contracts/TestHelperOz5.sol";
@@ -51,7 +51,7 @@ contract MyHyperLiquidOFTTest is TestHelperOz5 {
     MyOFT internal srcOFT;
     MyOFT internal dstOFT;
 
-    MyHyperLiquidComposer internal dstLZComposer;
+    FlareHyperLiquidComposer internal dstLZComposer;
 
     address public userA = makeAddr("userA");
     address public userB = makeAddr("userB");
@@ -95,7 +95,7 @@ contract MyHyperLiquidOFTTest is TestHelperOz5 {
         srcOFT = new MyOFT(SRC_OFT_NAME, SRC_OFT_SYMBOL, address(endpoints[SRC_EID]), address(this));
         dstOFT = new MyOFT(DST_OFT_NAME, DST_OFT_SYMBOL, address(endpoints[DST_EID]), address(this));
 
-        dstLZComposer = new MyHyperLiquidComposer(address(dstOFT), oftHlIndexId, WEI_DIFF);
+        dstLZComposer = new FlareHyperLiquidComposer(address(dstOFT), oftHlIndexId, WEI_DIFF);
 
         // config and wire the ofts
         address[] memory ofts = new address[](2);

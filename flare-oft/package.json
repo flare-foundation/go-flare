@@ -35,6 +35,7 @@
     "@layerzerolabs/lz-evm-v1-0.7": "^3.0.12",
     "@layerzerolabs/lz-v2-utilities": "^3.0.12",
     "@layerzerolabs/oapp-evm": "^0.3.1",
+    "@layerzerolabs/oapp-evm-upgradeable": "^0.1.2",
     "@layerzerolabs/oft-evm": "^3.2.0",
     "@layerzerolabs/oft-evm-upgradeable": "^3.2.0",
     "@layerzerolabs/prettier-config-next": "^2.3.39",

@@ -19,7 +19,7 @@ contract FlareNativeOFTAdapterUpgradeable is NativeOFTAdapterUpgradeable {
     }
 
     function initialize(address _delegate) public initializer {
-        __NativeOFTAdapter_init(_localDecimals, _lzEndpoint, _delegate);
+        __NativeOFTAdapter_init(_delegate);
         __Ownable_init(_delegate);
     }
 }
