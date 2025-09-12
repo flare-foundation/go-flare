@@ -12,7 +12,7 @@ import { HyperLiquidComposer } from "@layerzerolabs/hyperliquid-composer/contrac
 /// @dev Disclaimer: If your token's evm total supply exceeds your asset bridge's balance when scaled to EVM,
 ///      it is possible that the composer will not be able to send the tokens to the receiver on hypercore.
 ///      Tokens would instead be returned to the sender address on HyperEVM. Front-end handling is recommended.
-contract MyHyperLiquidComposer is HyperLiquidComposer {
+contract FlareHyperLiquidComposer is HyperLiquidComposer {
     /// @notice Constructor for the HyperLiquidComposer
     ///
     /// @param _oft The address of the OFT
