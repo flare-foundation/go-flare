@@ -17,6 +17,18 @@ const deploy: DeployFunction = async (hre) => {
 
     const localDecimals = 18
 
+    // First deploy the ProxyAdmin contract
+    const proxyAdminName = `${contractName}_ProxyAdmin`
+    await deploy(proxyAdminName, {
+        from: signer.address,
+        contract: 'ProxyAdmin',
+        args: [signer.address],
+        log: true,
+        waitConfirmations: 1,
+        skipIfAlreadyDeployed: false,
+    })
+
+    // Then deploy the main contract using the ProxyAdmin
     await deploy(contractName, {
         from: signer.address,
         args: [localDecimals, address],
@@ -25,7 +37,9 @@ const deploy: DeployFunction = async (hre) => {
         skipIfAlreadyDeployed: false,
         proxy: {
             proxyContract: 'OpenZeppelinTransparentProxy',
-            owner: signer.address,
+            viaAdminContract: {
+                name: proxyAdminName,
+            },
             execute: {
                 init: {
                     methodName: 'initialize',
