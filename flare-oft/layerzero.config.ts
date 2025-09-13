@@ -54,10 +54,10 @@ export default async function () {
     return {
         contracts: CONTRACTS.map((contract) => ({
             contract,
-            // config: { // TODO after deployment is tested
-            //     owner: getMultisigAddress(contract.eid),
-            //     delegate: getMultisigAddress(contract.eid),
-            // },
+            config: {
+                owner: getMultisigAddress(contract.eid),
+                delegate: getMultisigAddress(contract.eid),
+            },
         })),
         connections,
     }
