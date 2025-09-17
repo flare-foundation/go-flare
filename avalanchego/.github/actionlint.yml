@@ -1,4 +1,0 @@
-self-hosted-runner:
-  labels:
-    - custom-arm64-jammy
-    - custom-arm64-noble
