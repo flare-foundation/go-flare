@@ -330,11 +330,11 @@ func (i *Info) Uptime(_ *http.Request, _ *struct{}, reply *UptimeResponse) error
 }
 
 type ACP struct {
-	SupportWeight *big.Int            `json:"supportWeight"`
+	SupportWeight json.BigInt         `json:"supportWeight"`
 	Supporters    set.Set[ids.NodeID] `json:"supporters"`
-	ObjectWeight  *big.Int            `json:"objectWeight"`
+	ObjectWeight  json.BigInt         `json:"objectWeight"`
 	Objectors     set.Set[ids.NodeID] `json:"objectors"`
-	AbstainWeight *big.Int            `json:"abstainWeight"`
+	AbstainWeight json.BigInt         `json:"abstainWeight"`
 }
 
 type ACPsReply struct {
@@ -344,7 +344,11 @@ type ACPsReply struct {
 func (a *ACPsReply) getACP(acpNum uint32) *ACP {
 	acp, ok := a.ACPs[acpNum]
 	if !ok {
-		acp = &ACP{}
+		acp = &ACP{
+			SupportWeight: json.NewBigIntFromInt(0),
+			ObjectWeight:  json.NewBigIntFromInt(0),
+			AbstainWeight: json.NewBigIntFromInt(0),
+		}
 		a.ACPs[acpNum] = acp
 	}
 	return acp
@@ -367,19 +371,19 @@ func (i *Info) Acps(_ *http.Request, _ *struct{}, reply *ACPsReply) error {
 		for acpNum := range peer.SupportedACPs {
 			acp := reply.getACP(acpNum)
 			acp.Supporters.Add(peer.ID)
-			acp.SupportWeight = new(big.Int).Add(acp.SupportWeight, new(big.Int).SetUint64(weight))
+			acp.SupportWeight.Set(new(big.Int).Add(acp.SupportWeight.ToBigInt(), new(big.Int).SetUint64(weight)))
 		}
 		for acpNum := range peer.ObjectedACPs {
 			acp := reply.getACP(acpNum)
 			acp.Objectors.Add(peer.ID)
-			acp.ObjectWeight = new(big.Int).Add(acp.ObjectWeight, new(big.Int).SetUint64(weight))
+			acp.ObjectWeight.Set(new(big.Int).Add(acp.ObjectWeight.ToBigInt(), new(big.Int).SetUint64(weight)))
 		}
 	}
 
 	totalWeight := i.validators.TotalWeight(constants.PrimaryNetworkID)
 	for acpNum := range constants.CurrentACPs {
 		acp := reply.getACP(acpNum)
-		acp.AbstainWeight = new(big.Int).Sub(totalWeight, new(big.Int).Add(acp.SupportWeight, acp.ObjectWeight))
+		acp.AbstainWeight.Set(new(big.Int).Sub(totalWeight, new(big.Int).Add(acp.SupportWeight.ToBigInt(), acp.ObjectWeight.ToBigInt())))
 	}
 	return nil
 }

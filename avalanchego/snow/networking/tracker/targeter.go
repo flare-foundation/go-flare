@@ -4,6 +4,8 @@
 package tracker
 
 import (
+	"math/big"
+
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/validators"
 	"github.com/ava-labs/avalanchego/utils/constants"
@@ -69,6 +71,10 @@ func (t *targeter) TargetUsage(nodeID ids.NodeID) float64 {
 	}
 
 	totalWeight := t.vdrs.TotalWeight(constants.PrimaryNetworkID)
+	if totalWeight.Cmp(big.NewInt(0)) == 0 {
+		return baseAlloc
+	}
+
 	totalWeightFloat, _ := totalWeight.Float64()
 
 	vdrAlloc := t.vdrAlloc * float64(weight) / totalWeightFloat

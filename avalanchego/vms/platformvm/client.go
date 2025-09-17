@@ -543,9 +543,9 @@ func (c *client) GetTotalStake(ctx context.Context, subnetID ids.ID, options ...
 	}, res, options...)
 	var amount *big.Int
 	if subnetID == constants.PrimaryNetworkID {
-		amount = res.Stake
+		amount = res.Stake.ToBigInt()
 	} else {
-		amount = res.Weight
+		amount = res.Weight.ToBigInt()
 	}
 	return amount, err
 }

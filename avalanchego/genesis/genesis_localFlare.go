@@ -21,12 +21,12 @@ var (
 	LocalFlareParams = Params{
 		TxFeeConfig: TxFeeConfig{
 			CreateAssetTxFee: units.MilliAvax,
+			// For reference only, fees are set via program arguments (defaults are below)
 			StaticFeeConfig: txfee.StaticConfig{
-				TxFee:                 units.MilliAvax,
-				CreateSubnetTxFee:     100 * units.MegaAvax,
-				CreateBlockchainTxFee: 100 * units.MegaAvax,
-
-				TransformSubnetTxFee:          1 * units.Avax,
+				TxFee:                         units.MilliAvax,
+				CreateSubnetTxFee:             100 * units.MilliAvax,
+				TransformSubnetTxFee:          100 * units.MilliAvax,
+				CreateBlockchainTxFee:         100 * units.MilliAvax,
 				AddPrimaryNetworkValidatorFee: 0,
 				AddPrimaryNetworkDelegatorFee: 0,
 				AddSubnetValidatorFee:         units.MilliAvax,

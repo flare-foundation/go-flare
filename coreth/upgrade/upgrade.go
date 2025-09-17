@@ -143,6 +143,21 @@ var (
 		DurangoTime:                  ZeroTime,
 		EtnaTime:                     ZeroTime,
 	}
+	Local = Config{
+		ApricotPhase1Time:            ZeroTime,
+		ApricotPhase2Time:            ZeroTime,
+		ApricotPhase3Time:            ZeroTime,
+		ApricotPhase4Time:            ZeroTime,
+		ApricotPhase4MinPChainHeight: 0,
+		ApricotPhase5Time:            ZeroTime,
+		ApricotPhasePre6Time:         ZeroTime,
+		ApricotPhase6Time:            ZeroTime,
+		ApricotPhasePost6Time:        ZeroTime,
+		BanffTime:                    ZeroTime,
+		CortinaTime:                  ZeroTime,
+		DurangoTime:                  ZeroTime,
+		EtnaTime:                     UnscheduledActivationTime,
+	}
 	ErrInvalidUpgradeTimes = errors.New("invalid upgrade configuration")
 )
 
