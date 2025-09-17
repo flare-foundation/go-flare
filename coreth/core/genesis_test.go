@@ -67,12 +67,12 @@ func TestSetupGenesis(t *testing.T) {
 }
 
 func testSetupGenesis(t *testing.T, scheme string) {
-	apricotPhase1Config := *params.TestFlareApricotPhase1Config
-	apricotPhase1Config.ApricotPhase1BlockTimestamp = utils.NewUint64(100)
+	apricotPhase4Config := *params.TestFlareApricotPhase4Config
+	apricotPhase4Config.ApricotPhase4BlockTimestamp = utils.NewUint64(100)
 	var (
-		customghash = common.HexToHash("0x1099a11e9e454bd3ef31d688cf21936671966407bc330f051d754b5ce401e7ed")
+		customghash = common.HexToHash("0x02cd6246f54563efaf38f0a1c9604899937999ae1d7b813872f77259a19917bf")
 		customg     = Genesis{
-			Config: &apricotPhase1Config,
+			Config: &apricotPhase4Config,
 			Alloc: types.GenesisAlloc{
 				{1}: {Balance: big.NewInt(1), Storage: map[common.Hash]common.Hash{{1}: {1}}},
 			},
@@ -80,9 +80,9 @@ func testSetupGenesis(t *testing.T, scheme string) {
 		oldcustomg = customg
 	)
 
-	rollbackApricotPhase1Config := apricotPhase1Config
-	rollbackApricotPhase1Config.ApricotPhase1BlockTimestamp = utils.NewUint64(90)
-	oldcustomg.Config = &rollbackApricotPhase1Config
+	rollbackApricotPhase4Config := apricotPhase4Config
+	rollbackApricotPhase4Config.ApricotPhase4BlockTimestamp = utils.NewUint64(90)
+	oldcustomg.Config = &rollbackApricotPhase4Config
 	tests := []struct {
 		name       string
 		fn         func(ethdb.Database) (*params.ChainConfig, common.Hash, error)
@@ -129,8 +129,8 @@ func testSetupGenesis(t *testing.T, scheme string) {
 		{
 			name: "incompatible config for avalanche fork in DB",
 			fn: func(db ethdb.Database) (*params.ChainConfig, common.Hash, error) {
-				// Commit the 'old' genesis block with ApricotPhase1 transition at 90.
-				// Advance to block #4, past the ApricotPhase1 transition block of customg.
+				// Commit the 'old' genesis block with ApricotPhase4 transition at 90.
+				// Advance to block #4, past the ApricotPhase4 transition block of customg.
 				tdb := triedb.NewDatabase(db, newDbConfig(scheme))
 				genesis, err := oldcustomg.Commit(db, tdb)
 				if err != nil {
@@ -158,7 +158,7 @@ func testSetupGenesis(t *testing.T, scheme string) {
 			wantHash:   customghash,
 			wantConfig: customg.Config,
 			wantErr: &params.ConfigCompatError{
-				What:         "ApricotPhase1 fork block timestamp",
+				What:         "ApricotPhase4 fork block timestamp",
 				StoredTime:   u64(90),
 				NewTime:      u64(100),
 				RewindToTime: 89,

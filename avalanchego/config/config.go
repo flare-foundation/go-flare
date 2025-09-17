@@ -763,7 +763,7 @@ func getStakingConfig(v *viper.Viper, networkID uint32) (node.StakingConfig, err
 }
 
 func getTxFeeConfig(v *viper.Viper, networkID uint32) genesis.TxFeeConfig {
-	if networkID != constants.MainnetID {
+	if networkID == constants.LocalFlareID || networkID == constants.LocalID {
 		return genesis.TxFeeConfig{
 			CreateAssetTxFee: v.GetUint64(CreateAssetTxFeeKey),
 			StaticFeeConfig: txfee.StaticConfig{

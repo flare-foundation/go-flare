@@ -50,17 +50,15 @@ type Params struct {
 }
 
 func GetTxFeeConfig(networkID uint32) TxFeeConfig {
+	// TxFee configs are ommitted for LocalFlare and Local networks since they
+	// are set from program arguments (getTxFeeConfig)
 	switch networkID {
 	case constants.MainnetID:
 		return MainnetParams.TxFeeConfig
-	case constants.LocalID:
-		return LocalParams.TxFeeConfig
 	case constants.FlareID:
 		return FlareParams.TxFeeConfig
 	case constants.CostwoID:
 		return CostwoParams.TxFeeConfig
-	case constants.LocalFlareID:
-		return LocalFlareParams.TxFeeConfig
 	case constants.SongbirdID:
 		return SongbirdParams.TxFeeConfig
 	case constants.CostonID:
