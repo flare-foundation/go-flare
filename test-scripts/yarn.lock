@@ -12,10 +12,10 @@
   resolved "https://registry.yarnpkg.com/@ethereumjs/rlp/-/rlp-5.0.0.tgz#dd81b32b2237bc32fb1b54534f8ff246a6c89d9b"
   integrity sha512-WuS1l7GJmB0n0HsXLozCoEFc9IwYgf3l0gCkKVYgR67puVF1O4OpEaN0hWmm1c+iHUHFCKt1hJrvy5toLg+6ag==
 
-"@flarenetwork/flarejs@^4.0.5":
-  version "4.0.5"
-  resolved "https://registry.yarnpkg.com/@flarenetwork/flarejs/-/flarejs-4.0.5.tgz#deaebb65bf9ca4d2917aee4966ee804345a67d63"
-  integrity sha512-H9Mh3SKH4aN7kZOEdHG2dh+eSsB+cIS7288FTAo+GHrbwuMoL39t0IwGXY3Ra8NB8/e06cn33C6FX7DvITtKJw==
+"@flarenetwork/flarejs@^4.1.1":
+  version "4.1.1-rc0"
+  resolved "https://registry.yarnpkg.com/@flarenetwork/flarejs/-/flarejs-4.1.1-rc0.tgz#49abad5c65c5ddd97888d4c2bc4adbb971b18ba6"
+  integrity sha512-QSN4siKddoWPu6vUNNElN0PMSxrUDHq4k39kspBTg2CIoLyt0g3XU+o4luvZ8zTnIv9VTM2BWlDe5xhDK4z/rQ==
   dependencies:
     "@noble/curves" "1.3.0"
     "@noble/hashes" "1.3.3"
