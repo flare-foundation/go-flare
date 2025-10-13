@@ -2,7 +2,7 @@ import { pvm, utils, TransferableOutput } from '@flarenetwork/flarejs';
 import { issuePChainTx, localFlareContext } from './utils';
 import { runTest } from './runner';
 
-async function PtoCExport(amountFLR: number, toAddress: string) {
+async function PtoPTransfer(amountFLR: number, toAddress: string) {
     const ctx = await localFlareContext();
 
     // Create and issue a P chain transfer transaction (BaseTx)
@@ -25,5 +25,5 @@ async function PtoCExport(amountFLR: number, toAddress: string) {
 }
 
 
-runTest(() => PtoCExport(100, "P-localflare1zjaa3yjnzn5cjx9r56x59raam2jgwnmztlg995"))
+runTest(() => PtoPTransfer(100, "P-localflare1zjaa3yjnzn5cjx9r56x59raam2jgwnmztlg995"))
 
