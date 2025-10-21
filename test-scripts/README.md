@@ -13,8 +13,8 @@ Tests can be performed on **localflare** network and include:
 Run localflare in `avalanchego` directory:
 
 ```bash
-./scripts/build.sh. # Build avalanchego
-./scripts/localflare.sh. # Run 5 localflare nodes
+./scripts/build.sh       # Build avalanchego
+./scripts/localflare.sh  # Run 5 localflare nodes
 ```
 
 Check that the nodes are running by visiting `http://localhost:9650/ext/health` in your browser.
