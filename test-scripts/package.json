@@ -25,7 +25,7 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "@flarenetwork/flarejs": "^4.1.1",
+    "@flarenetwork/flarejs": "^4.1.1-rc0",
     "ethers": "^6.15.0"
   }
 }

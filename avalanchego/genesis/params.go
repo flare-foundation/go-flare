@@ -59,11 +59,14 @@ func GetTxFeeConfig(networkID uint32) TxFeeConfig {
 		return FlareParams.TxFeeConfig
 	case constants.CostwoID:
 		return CostwoParams.TxFeeConfig
+	case constants.LocalFlareID:
+		return LocalFlareParams.TxFeeConfig
 	case constants.SongbirdID:
 		return SongbirdParams.TxFeeConfig
 	case constants.CostonID:
 		return CostonParams.TxFeeConfig
 	default:
+		// for LocalID and any other networkID
 		return LocalParams.TxFeeConfig
 	}
 }
