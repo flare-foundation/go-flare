@@ -1,28 +1,49 @@
-import { networkIDs, pvm, utils } from "@flarenetwork/flarejs";
+import { networkIDs, pvm, UnsignedTx, utils } from "@flarenetwork/flarejs";
 import { issuePChainTx, localFlareContext } from "./utils";
 import { runTest } from "./runner";
 
-async function addDelegator(nodeID: string, endTime: number, weight: number) {
+async function addDelegator(nodeId: string, endTime: number, weight: number) {
     const ctx = await localFlareContext();
 
     // Create the transaction to add a delegator
-    console.log(`Creating add delegator transaction for node ${nodeID} with weight ${weight}...`);
+    console.log(`Creating add delegator transaction for node ${nodeId} with weight ${weight}...`);
 
     const { utxos } = await ctx.pvmapi.getUTXOs({
         addresses: [ctx.addressP]
     });
-    const tx = pvm.newAddPermissionlessDelegatorTx(
+
+    let tx: UnsignedTx;
+    if (ctx.isEtnaForkActive) {
+        console.log("Etna fork is active, using new transaction format.");
+        const feeState = await ctx.pvmapi.getFeeState();
+        tx = pvm.e.newAddPermissionlessDelegatorTx(
+            {
+                feeState,
+                utxos,
+                nodeId,
+                subnetId: networkIDs.PrimaryNetworkID.toString(),
+                start: BigInt(Date.now()) / 1000n,
+                end: BigInt(endTime),
+                weight: BigInt(weight * 1e9),
+                fromAddressesBytes: [utils.bech32ToBytes(ctx.addressP)],
+                rewardAddresses: [utils.bech32ToBytes(ctx.addressP)],
+            },
+            ctx.context,
+        );
+    } else {
+        console.log("Etna fork is not active, using legacy transaction format.");
+        tx = pvm.newAddPermissionlessDelegatorTx(
         ctx.context,
         utxos,
         [utils.bech32ToBytes(ctx.addressP)],
-        nodeID,
+        nodeId,
         networkIDs.PrimaryNetworkID.toString(),
         BigInt(Date.now()) / 1000n,
         BigInt(endTime),
         BigInt(weight * 1e9),
         [utils.bech32ToBytes(ctx.addressP)],
-    );
-
+        );
+    }
     await issuePChainTx(ctx.pvmapi, tx, ctx.privateKey);
 }
 

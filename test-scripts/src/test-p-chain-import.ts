@@ -1,4 +1,4 @@
-import { evm, pvm, utils } from '@flarenetwork/flarejs';
+import { evm, pvm, UnsignedTx, utils } from '@flarenetwork/flarejs';
 import { issueCChainTx, issuePChainTx, localFlareContext } from './utils';
 import { runTest } from './runner';
 
@@ -29,14 +29,31 @@ async function CtoPExport(amountFLR: number) {
         sourceChain: 'C',
         addresses: [ctx.addressP]
     });
-    const importTx = pvm.newImportTx(
-        ctx.context,
-        ctx.context.cBlockchainID,
-        utxos,
-        [utils.bech32ToBytes(ctx.addressP)],
-        [utils.bech32ToBytes(ctx.addressP)]
-    );
 
+    let importTx: UnsignedTx;
+    if (ctx.isEtnaForkActive) {
+        console.log("Etna fork is active, using new transaction format for import.");
+        const feeState = await ctx.pvmapi.getFeeState();
+        importTx = pvm.e.newImportTx(
+            {
+                feeState,
+                utxos,
+                sourceChainId: ctx.context.cBlockchainID,
+                fromAddressesBytes: [utils.bech32ToBytes(ctx.addressP)],
+                toAddressesBytes: [utils.bech32ToBytes(ctx.addressP)],
+            },
+            ctx.context,
+        );
+    } else {
+        console.log("Etna fork is not active, using legacy transaction format for import.");
+        importTx = pvm.newImportTx(
+            ctx.context,
+            ctx.context.cBlockchainID,
+            utxos,
+            [utils.bech32ToBytes(ctx.addressP)],
+            [utils.bech32ToBytes(ctx.addressP)]
+        );
+    }
     await issuePChainTx(ctx.pvmapi, importTx, ctx.privateKey);
 }
 
