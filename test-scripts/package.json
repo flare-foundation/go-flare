@@ -8,14 +8,7 @@
     "x-chain-import": "ts-node ./src/test-x-chain-import.ts",
     "x-chain-export": "ts-node ./src/test-x-chain-export.ts",
     "add-validator": "ts-node ./src/test-add-validator.ts",
-    "add-delegator": "ts-node ./src/test-add-delegator.ts",
-    "etna-p-chain-import": "ts-node ./src/etna/test-p-chain-import.ts",
-    "etna-p-chain-export": "ts-node ./src/etna/test-p-chain-export.ts",
-    "etna-p-chain-transfer": "ts-node ./src/etna/test-p-chain-transfer.ts",
-    "etna-x-chain-import": "ts-node ./src/etna/test-x-chain-import.ts",
-    "etna-x-chain-export": "ts-node ./src/etna/test-x-chain-export.ts",
-    "etna-add-validator": "ts-node ./src/etna/test-add-validator.ts",
-    "etna-add-delegator": "ts-node ./src/etna/test-add-delegator.ts"
+    "add-delegator": "ts-node ./src/test-add-delegator.ts"
   },
   "keywords": [],
   "author": "Flare Foundation",
