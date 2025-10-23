@@ -6,6 +6,7 @@ import {
   addTxSignatures,
   UnsignedTx,
   utils,
+  info,
 } from "@flarenetwork/flarejs";
 import { JsonRpcProvider } from "ethers";
 
@@ -24,6 +25,8 @@ export interface TestContext {
   evmapi: evm.EVMApi;
   pvmapi: pvm.PVMApi;
   avmapi: avm.AVMApi;
+  infoapi: info.InfoApi;
+  isEtnaForkActive: boolean;
   provider: JsonRpcProvider;
   addressC: string;
   addressP: string;
@@ -53,16 +56,28 @@ export async function PChainBalance(): Promise<BigInt> {
 }
 
 export async function localFlareContext(): Promise<TestContext> {
-  const evmapi = new evm.EVMApi(LocalURL);
-  const pvmapi = new pvm.PVMApi(LocalURL);
-  const avmapi = new avm.AVMApi(LocalURL);
-  const context = await Context.getContextFromURI(LocalURL);
-  const provider = new JsonRpcProvider(LocalURL + "/ext/bc/C/rpc");
+  return getContext(LocalURL);
+}
+
+export async function getContext(url: string): Promise<TestContext> {
+  const evmapi = new evm.EVMApi(url);
+  const pvmapi = new pvm.PVMApi(url);
+  const avmapi = new avm.AVMApi(url);
+  const infoapi = new info.InfoApi(url);
+  const context = await Context.getContextFromURI(url);
+  const provider = new JsonRpcProvider(url + "/ext/bc/C/rpc");
+
+  const { etnaTime } = await infoapi.getUpgradesInfo();
+  const etnaDateTime = new Date(etnaTime);
+  const now = new Date();
+
   return {
     context,
     evmapi,
     pvmapi,
     avmapi,
+    infoapi,
+    isEtnaForkActive: now > etnaDateTime,
     provider,
     addressC: TestCAddress,
     addressP: TestPAddress,
