@@ -2,6 +2,19 @@
 
 Here are listed specific changes to the code for the Flare and Songbird networks. For a comprehensive list of general changes, see [here](./avalanchego/RELEASES.md) for the AvalancheGo project and [here](./coreth/RELEASES.md) for the Coreth project.
 
+## v1.12.0
+
+The changes go into effect
+ * November X, 2025 at 12 PM UTC for the Coston network,
+ * November X, 2025 at 12 PM UTC for the Coston2 network,
+ * November X, 2025 at 12 PM UTC for the Songbird network,
+ * December X, 2025 at 12 PM UTC for the Flare network.
+
+### Note:
+
+ * In contrast to Avalanche, the minimum C-chain base fee after the fork remains at 25 GWei.
+ * Minimum price per unit of gas used in P-chain [dynamic transaction fee calculation](https://github.com/avalanche-foundation/ACPs/blob/main/ACPs/103-dynamic-fees) is set to 250 nFLR.
+
 ## v1.11.0
 
 The changes go into effect
