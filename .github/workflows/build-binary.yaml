@@ -66,12 +66,6 @@ jobs:
           --output-certificate ${{ env.ARTIFACT_NAME }}.pem \
           ${{ env.ARTIFACT_NAME }}
 
-    - name: Release
-      uses: softprops/action-gh-release@v1
-      if: github.ref_type == 'tag'
-      with:
-        files: ${{ env.ARTIFACT_NAME }}*
-
     - name: Verify release binary signature
       if: github.ref_type == 'tag'
       shell: bash
@@ -84,6 +78,13 @@ jobs:
           --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
           --signature ${{ env.ARTIFACT_NAME }}.sig \
           ${{ env.ARTIFACT_NAME }}
+
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      if: github.ref_type == 'tag'
+      with:
+        body: "TODO"
+        files: ${{ env.ARTIFACT_NAME }}*
 
     - name: Archive production artifacts
       if: github.ref_type == 'tag'
