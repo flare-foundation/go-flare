@@ -81,7 +81,7 @@ var (
 		BanffTime:             time.Date(2024, time.November, 26, 15, 0, 0, 0, time.UTC),
 		CortinaTime:           time.Date(2025, time.April, 8, 12, 0, 0, 0, time.UTC),
 		DurangoTime:           time.Date(2025, time.June, 24, 12, 0, 0, 0, time.UTC),
-		EtnaTime:              time.Date(2025, time.November, 13, 12, 0, 0, 0, time.UTC),
+		EtnaTime:              time.Date(2025, time.November, 13, 14, 0, 0, 0, time.UTC),
 	}
 	Coston = Config{
 		ApricotPhase1Time:      ZeroTime,
@@ -96,7 +96,7 @@ var (
 		BanffTime:              time.Date(2025, time.January, 7, 15, 0, 0, 0, time.UTC),
 		CortinaTime:            time.Date(2025, time.March, 27, 13, 0, 0, 0, time.UTC),
 		DurangoTime:            time.Date(2025, time.July, 1, 12, 0, 0, 0, time.UTC),
-		EtnaTime:               time.Date(2025, time.November, 13, 12, 0, 0, 0, time.UTC),
+		EtnaTime:               time.Date(2025, time.November, 13, 10, 0, 0, 0, time.UTC),
 	}
 	Default = Config{
 		ApricotPhase1Time:            InitiallyActiveTime,

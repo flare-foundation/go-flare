@@ -5,8 +5,8 @@ Here are listed specific changes to the code for the Flare and Songbird networks
 ## v1.12.0
 
 The changes go into effect
- * November 13, 2025 at 12 PM UTC for the Coston network,
- * November 13, 2025 at 12 PM UTC for the Coston2 network,
+ * November 13, 2025 at 10 AM UTC for the Coston network,
+ * November 13, 2025 at 2 PM UTC for the Coston2 network,
  * November 25, 2025 at 12 PM UTC for the Songbird network,
  * December 2, 2025 at 12 PM UTC for the Flare network.
 
