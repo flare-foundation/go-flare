@@ -36,7 +36,7 @@ const (
 	ApricotPhase5TargetGas                uint64 = 15_000_000
 	SgbApricotPhase5TargetGas             uint64 = 150_000_000
 	ApricotPhase5BaseFeeChangeDenominator uint64 = 36
-	EtnaMinBaseFee                        int64  = GWei
+	EtnaMinBaseFee                        int64  = 25 * GWei // No change after Etna in contrast to Avalanche value of 1 GWei
 
 	DynamicFeeExtraDataSize        = 80
 	RollupWindow            uint64 = 10

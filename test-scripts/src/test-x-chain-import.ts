@@ -2,7 +2,7 @@ import { avm, evm, utils } from "@flarenetwork/flarejs";
 import { issueCChainTx, issueXChainTx, localFlareContext } from "./utils";
 import { runTest } from "./runner";
 
-async function CtoPExport(amountFLR: number) {
+async function CtoXExport(amountFLR: number) {
   const ctx = await localFlareContext();
   const fee = 1; // in FLR
   const txCount = await ctx.provider.getTransactionCount(ctx.addressC);
@@ -40,4 +40,4 @@ async function CtoPExport(amountFLR: number) {
   await issueXChainTx(ctx.avmapi, importTx, ctx.privateKey);
 }
 
-runTest(() => CtoPExport(100));
+runTest(() => CtoXExport(101));

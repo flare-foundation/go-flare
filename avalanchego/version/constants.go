@@ -24,8 +24,8 @@ const (
 var (
 	Current = &Semantic{
 		Major: 1,
-		Minor: 11,
-		Patch: 13,
+		Minor: 12,
+		Patch: 0,
 	}
 	CurrentApp = &Application{
 		Name:  Client,
@@ -36,7 +36,7 @@ var (
 	MinimumCompatibleVersion = &Application{
 		Name:  Client,
 		Major: 1,
-		Minor: 11,
+		Minor: 12,
 		Patch: 0,
 	}
 	PrevMinimumCompatibleVersion = &Application{
@@ -48,8 +48,8 @@ var (
 
 	CurrentSgb = &Semantic{
 		Major: 0,
-		Minor: 9,
-		Patch: 13,
+		Minor: 10,
+		Patch: 0,
 	}
 	CurrentSgbApp = &Application{
 		Name:  Client,
@@ -60,7 +60,7 @@ var (
 	MinimumCompatibleSgbVersion = &Application{
 		Name:  Client,
 		Major: 0,
-		Minor: 9,
+		Minor: 10,
 		Patch: 0,
 	}
 	PrevMinimumCompatibleSgbVersion = &Application{

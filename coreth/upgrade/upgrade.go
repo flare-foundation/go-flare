@@ -52,7 +52,7 @@ var (
 		BanffTime:             time.Date(2024, time.December, 17, 15, 0, 0, 0, time.UTC),
 		CortinaTime:           time.Date(2025, time.May, 13, 12, 0, 0, 0, time.UTC),
 		DurangoTime:           time.Date(2025, time.August, 5, 12, 0, 0, 0, time.UTC),
-		EtnaTime:              UnscheduledActivationTime,
+		EtnaTime:              time.Date(2025, time.December, 2, 12, 0, 0, 0, time.UTC),
 	}
 	Songbird = Config{
 		ApricotPhase1Time:      ZeroTime,
@@ -67,7 +67,7 @@ var (
 		BanffTime:              time.Date(2025, time.January, 28, 15, 0, 0, 0, time.UTC),
 		CortinaTime:            time.Date(2025, time.May, 6, 12, 0, 0, 0, time.UTC),
 		DurangoTime:            time.Date(2025, time.July, 22, 12, 0, 0, 0, time.UTC),
-		EtnaTime:               UnscheduledActivationTime,
+		EtnaTime:               time.Date(2025, time.November, 25, 12, 0, 0, 0, time.UTC),
 	}
 	Costwo = Config{
 		ApricotPhase1Time:     ZeroTime,
@@ -81,7 +81,7 @@ var (
 		BanffTime:             time.Date(2024, time.November, 26, 15, 0, 0, 0, time.UTC),
 		CortinaTime:           time.Date(2025, time.April, 8, 12, 0, 0, 0, time.UTC),
 		DurangoTime:           time.Date(2025, time.June, 24, 12, 0, 0, 0, time.UTC),
-		EtnaTime:              UnscheduledActivationTime,
+		EtnaTime:              time.Date(2025, time.November, 13, 14, 0, 0, 0, time.UTC),
 	}
 	Coston = Config{
 		ApricotPhase1Time:      ZeroTime,
@@ -96,7 +96,7 @@ var (
 		BanffTime:              time.Date(2025, time.January, 7, 15, 0, 0, 0, time.UTC),
 		CortinaTime:            time.Date(2025, time.March, 27, 13, 0, 0, 0, time.UTC),
 		DurangoTime:            time.Date(2025, time.July, 1, 12, 0, 0, 0, time.UTC),
-		EtnaTime:               UnscheduledActivationTime,
+		EtnaTime:               time.Date(2025, time.November, 13, 10, 0, 0, 0, time.UTC),
 	}
 	Default = Config{
 		ApricotPhase1Time:            InitiallyActiveTime,
@@ -111,7 +111,7 @@ var (
 		BanffTime:                    InitiallyActiveTime,
 		CortinaTime:                  InitiallyActiveTime,
 		DurangoTime:                  InitiallyActiveTime,
-		EtnaTime:                     UnscheduledActivationTime,
+		EtnaTime:                     InitiallyActiveTime,
 	}
 	LocalFlare = Config{
 		ApricotPhase1Time:            ZeroTime,
@@ -126,7 +126,7 @@ var (
 		BanffTime:                    ZeroTime,
 		CortinaTime:                  ZeroTime,
 		DurangoTime:                  ZeroTime,
-		EtnaTime:                     UnscheduledActivationTime,
+		EtnaTime:                     ZeroTime,
 	}
 	Local = Config{
 		ApricotPhase1Time:            ZeroTime,
@@ -141,7 +141,7 @@ var (
 		BanffTime:                    ZeroTime,
 		CortinaTime:                  ZeroTime,
 		DurangoTime:                  ZeroTime,
-		EtnaTime:                     UnscheduledActivationTime,
+		EtnaTime:                     ZeroTime,
 	}
 	ErrInvalidUpgradeTimes = errors.New("invalid upgrade configuration")
 )

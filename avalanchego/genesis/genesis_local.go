@@ -120,7 +120,7 @@ var (
 				MaxCapacity:     1_000_000,
 				MaxPerSecond:    100_000, // Refill time 10s
 				TargetPerSecond: 50_000,  // Target is half of max
-				MinPrice:        1,
+				MinPrice:        250,
 				// ExcessConversionConstant = (MaxPerSecond - TargetPerSecond) * NumberOfSecondsPerDoubling / ln(2)
 				//
 				// ln(2) is a float and the result is consensus critical, so we

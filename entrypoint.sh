@@ -16,29 +16,41 @@ fi
 
 if [ "$AUTOCONFIGURE_BOOTSTRAP" = "1" ];
 then
-
-
-    __BOOTSTRAP_ENDPOINTS=("${AUTOCONFIGURE_BOOTSTRAP_ENDPOINT}" ${AUTOCONFIGURE_FALLBACK_ENDPOINTS//,/ })
+	__BOOTSTRAP_ENDPOINTS=("${AUTOCONFIGURE_BOOTSTRAP_ENDPOINT}" ${AUTOCONFIGURE_FALLBACK_ENDPOINTS//,/ })
 
 	echo "Trying provided bootstrap endpoints"
 	for __ENDPOINT in "${__BOOTSTRAP_ENDPOINTS[@]}"; do
-        echo "  Trying endpoint $__ENDPOINT"
+		echo "  Trying endpoint $__ENDPOINT"
 
-        RESPONSE_CODE=$(curl -X POST -m 5 -s -o /dev/null -w '%{http_code}' "$__ENDPOINT" -H 'Content-Type: application/json' --data '{ "jsonrpc":"2.0", "id":1, "method":"info.getNodeIP" }' || true)
-        if [ "$RESPONSE_CODE" = "200" ]; then
-            __BOOTSTRAP_ENDPOINT="$__ENDPOINT"
-            break
-        else
-			echo "    Failed! The endpoint is unreachable."
-            continue
-        fi
-    done
+		# Capture both status code and response body for better error reporting
+		TEMP_RESPONSE=$(mktemp)
+		RESPONSE_CODE=$(curl -X POST -m 5 -s -w '%{http_code}' -o "$TEMP_RESPONSE" "$__ENDPOINT" -H 'Content-Type: application/json' --data '{ "jsonrpc":"2.0", "id":1, "method":"info.getNodeIP" }' 2>/dev/null || echo "NETWORK_ERROR")
+		
+		if [ "$RESPONSE_CODE" = "200" ]; then
+			__BOOTSTRAP_ENDPOINT="$__ENDPOINT"
+			rm -f "$TEMP_RESPONSE"
+			break
+		elif [ "$RESPONSE_CODE" = "NETWORK_ERROR" ]; then
+			echo "    Failed! Network error (connection timeout, DNS failure, or unreachable host)"
+			rm -f "$TEMP_RESPONSE"
+			continue
+		else
+			# Read response body for additional context (limit to first 200 chars)
+			RESPONSE_BODY=$(head -c 200 "$TEMP_RESPONSE" 2>/dev/null || echo "")
+			if [ -n "$RESPONSE_BODY" ]; then
+				echo "    Failed! HTTP $RESPONSE_CODE, response body: $RESPONSE_BODY"
+			else
+				echo "    Failed! HTTP $RESPONSE_CODE"
+			fi
+			rm -f "$TEMP_RESPONSE"
+			continue
+		fi
+	done
 
 	if [ -z "$__BOOTSTRAP_ENDPOINT" ]; then
-        echo "  None of provided bootstrap endpoints worked!"
-        exit 1
-    fi
-
+		echo "  None of provided bootstrap endpoints worked!"
+		exit 1
+	fi
 
 	echo "Autoconfiguring bootstrap IPs and IDs"
 

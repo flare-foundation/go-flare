@@ -561,9 +561,9 @@ func TestDynamicFeesEtna(t *testing.T) {
 	}
 	_, nextBaseFee, err = CalcBaseFee(params.TestFlareEtnaChainConfig, header, timestamp)
 	require.NoError(err)
-	// After some time has passed in the Etna phase, the base fee should drop
-	// lower than the prior base fee minimum.
-	require.Less(nextBaseFee.Int64(), params.ApricotPhase4MinBaseFee)
+	// Etna fee is equal to Apricot Phase 4 fee calculation in contrast to Avalanche code
+	// where it would drop
+	require.Equal(nextBaseFee.Int64(), params.ApricotPhase4MinBaseFee)
 }
 
 func TestCalcBaseFeeRegression(t *testing.T) {

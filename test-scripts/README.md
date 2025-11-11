@@ -32,6 +32,18 @@ yarn run x-chain-import
 yarn run x-chain-export
 ```
 
+or if Etna has already started, use:
+
+```bash
+yarn
+yarn run etna-p-chain-import
+yarn run etna-p-chain-export
+yarn run etna-x-chain-import
+yarn run etna-x-chain-export
+yarn run etna-add-validator
+yarn run etna-add-delegator
+```
+
 Note:
 
 - Nodejs version >=20 is required to run the scripts, also make sure you have the `yarn` package manager installed.
