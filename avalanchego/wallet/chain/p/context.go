@@ -1,87 +1,82 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package p
 
 import (
-	stdcontext "context"
+	"context"
 
 	"github.com/ava-labs/avalanchego/api/info"
-	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/vms/avm"
+	"github.com/ava-labs/avalanchego/utils/constants"
+	"github.com/ava-labs/avalanchego/vms/platformvm"
+	"github.com/ava-labs/avalanchego/vms/platformvm/txs/fee"
+	"github.com/ava-labs/avalanchego/wallet/chain/p/builder"
 )
 
-var _ Context = &context{}
+// gasPriceMultiplier increases the gas price to support multiple transactions
+// to be issued.
+//
+// TODO: Handle this better. Either here or in the mempool.
+const gasPriceMultiplier = 2
 
-type Context interface {
-	NetworkID() uint32
-	AVAXAssetID() ids.ID
-	BaseTxFee() uint64
-	CreateSubnetTxFee() uint64
-	CreateBlockchainTxFee() uint64
-}
-
-type context struct {
-	networkID             uint32
-	avaxAssetID           ids.ID
-	baseTxFee             uint64
-	createSubnetTxFee     uint64
-	createBlockchainTxFee uint64
-}
-
-func NewContextFromURI(ctx stdcontext.Context, uri string) (Context, error) {
+func NewContextFromURI(ctx context.Context, uri string) (*builder.Context, error) {
 	infoClient := info.NewClient(uri)
-	xChainClient := avm.NewClient(uri, "X")
-	return NewContextFromClients(ctx, infoClient, xChainClient)
+	chainClient := platformvm.NewClient(uri)
+	return NewContextFromClients(ctx, infoClient, chainClient)
 }
 
 func NewContextFromClients(
-	ctx stdcontext.Context,
+	ctx context.Context,
 	infoClient info.Client,
-	xChainClient avm.Client,
-) (Context, error) {
+	chainClient platformvm.Client,
+) (*builder.Context, error) {
 	networkID, err := infoClient.GetNetworkID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	asset, err := xChainClient.GetAssetDescription(ctx, "AVAX")
+	avaxAssetID, err := chainClient.GetStakingAssetID(ctx, constants.PrimaryNetworkID)
 	if err != nil {
 		return nil, err
 	}
 
-	txFees, err := infoClient.GetTxFee(ctx)
+	dynamicFeeConfig, err := chainClient.GetFeeConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewContext(
-		networkID,
-		asset.AssetID,
-		uint64(txFees.TxFee),
-		uint64(txFees.CreateSubnetTxFee),
-		uint64(txFees.CreateBlockchainTxFee),
-	), nil
-}
+	// TODO: After Etna is activated, assume the gas price is always non-zero.
+	if dynamicFeeConfig.MinPrice != 0 {
+		_, gasPrice, _, err := chainClient.GetFeeState(ctx)
+		if err != nil {
+			return nil, err
+		}
 
-func NewContext(
-	networkID uint32,
-	avaxAssetID ids.ID,
-	baseTxFee uint64,
-	createSubnetTxFee uint64,
-	createBlockchainTxFee uint64,
-) Context {
-	return &context{
-		networkID:             networkID,
-		avaxAssetID:           avaxAssetID,
-		baseTxFee:             baseTxFee,
-		createSubnetTxFee:     createSubnetTxFee,
-		createBlockchainTxFee: createBlockchainTxFee,
+		return &builder.Context{
+			NetworkID:         networkID,
+			AVAXAssetID:       avaxAssetID,
+			ComplexityWeights: dynamicFeeConfig.Weights,
+			GasPrice:          gasPriceMultiplier * gasPrice,
+		}, nil
 	}
-}
 
-func (c *context) NetworkID() uint32             { return c.networkID }
-func (c *context) AVAXAssetID() ids.ID           { return c.avaxAssetID }
-func (c *context) BaseTxFee() uint64             { return c.baseTxFee }
-func (c *context) CreateSubnetTxFee() uint64     { return c.createSubnetTxFee }
-func (c *context) CreateBlockchainTxFee() uint64 { return c.createBlockchainTxFee }
+	staticFeeConfig, err := infoClient.GetTxFee(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &builder.Context{
+		NetworkID:   networkID,
+		AVAXAssetID: avaxAssetID,
+		StaticFeeConfig: fee.StaticConfig{
+			TxFee:                         uint64(staticFeeConfig.TxFee),
+			CreateSubnetTxFee:             uint64(staticFeeConfig.CreateSubnetTxFee),
+			TransformSubnetTxFee:          uint64(staticFeeConfig.TransformSubnetTxFee),
+			CreateBlockchainTxFee:         uint64(staticFeeConfig.CreateBlockchainTxFee),
+			AddPrimaryNetworkValidatorFee: uint64(staticFeeConfig.AddPrimaryNetworkValidatorFee),
+			AddPrimaryNetworkDelegatorFee: uint64(staticFeeConfig.AddPrimaryNetworkDelegatorFee),
+			AddSubnetValidatorFee:         uint64(staticFeeConfig.AddSubnetValidatorFee),
+			AddSubnetDelegatorFee:         uint64(staticFeeConfig.AddSubnetDelegatorFee),
+		},
+	}, nil
+}

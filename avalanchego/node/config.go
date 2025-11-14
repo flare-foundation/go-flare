@@ -1,40 +1,30 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package node
 
 import (
 	"crypto/tls"
+	"net/netip"
 	"time"
 
+	"github.com/ava-labs/avalanchego/api/server"
 	"github.com/ava-labs/avalanchego/chains"
 	"github.com/ava-labs/avalanchego/genesis"
 	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/nat"
 	"github.com/ava-labs/avalanchego/network"
-	"github.com/ava-labs/avalanchego/snow/consensus/avalanche"
 	"github.com/ava-labs/avalanchego/snow/networking/benchlist"
 	"github.com/ava-labs/avalanchego/snow/networking/router"
-	"github.com/ava-labs/avalanchego/snow/networking/sender"
 	"github.com/ava-labs/avalanchego/snow/networking/tracker"
-	"github.com/ava-labs/avalanchego/utils/dynamicip"
-	"github.com/ava-labs/avalanchego/utils/ips"
+	"github.com/ava-labs/avalanchego/subnets"
+	"github.com/ava-labs/avalanchego/trace"
+	"github.com/ava-labs/avalanchego/upgrade"
+	"github.com/ava-labs/avalanchego/utils/crypto/bls"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/profiler"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/utils/timer"
-	"github.com/ava-labs/avalanchego/vms"
 )
-
-type IPCConfig struct {
-	IPCAPIEnabled      bool     `json:"ipcAPIEnabled"`
-	IPCPath            string   `json:"ipcPath"`
-	IPCDefaultChainIDs []string `json:"ipcDefaultChainIDs"`
-}
-
-type APIAuthConfig struct {
-	APIRequireAuthToken bool   `json:"apiRequireAuthToken"`
-	APIAuthPassword     string `json:"-"`
-}
 
 type APIIndexerConfig struct {
 	IndexAPIEnabled      bool `json:"indexAPIEnabled"`
@@ -42,6 +32,7 @@ type APIIndexerConfig struct {
 }
 
 type HTTPConfig struct {
+	server.HTTPConfig
 	APIConfig `json:"apiConfig"`
 	HTTPHost  string `json:"httpHost"`
 	HTTPPort  uint16 `json:"httpPort"`
@@ -50,16 +41,15 @@ type HTTPConfig struct {
 	HTTPSKey     []byte `json:"-"`
 	HTTPSCert    []byte `json:"-"`
 
-	APIAllowedOrigins []string `json:"apiAllowedOrigins"`
+	HTTPAllowedOrigins []string `json:"httpAllowedOrigins"`
+	HTTPAllowedHosts   []string `json:"httpAllowedHosts"`
 
 	ShutdownTimeout time.Duration `json:"shutdownTimeout"`
 	ShutdownWait    time.Duration `json:"shutdownWait"`
 }
 
 type APIConfig struct {
-	APIAuthConfig    `json:"authConfig"`
 	APIIndexerConfig `json:"indexerConfig"`
-	IPCConfig        `json:"ipcConfig"`
 
 	// Enable/Disable APIs
 	AdminAPIEnabled    bool `json:"adminAPIEnabled"`
@@ -70,37 +60,37 @@ type APIConfig struct {
 }
 
 type IPConfig struct {
-	IPPort           ips.DynamicIPPort `json:"ip"`
-	IPUpdater        dynamicip.Updater `json:"-"`
-	IPResolutionFreq time.Duration     `json:"ipResolutionFrequency"`
-	// True if we attempted NAT traversal
-	AttemptedNATTraversal bool `json:"attemptedNATTraversal"`
-	// Tries to perform network address translation
-	Nat nat.Router `json:"-"`
+	PublicIP                  string        `json:"publicIP"`
+	PublicIPResolutionService string        `json:"publicIPResolutionService"`
+	PublicIPResolutionFreq    time.Duration `json:"publicIPResolutionFreq"`
+	// The host portion of the address to listen on. The port to
+	// listen on will be sourced from IPPort.
+	//
+	// - If empty, listen on all interfaces (both ipv4 and ipv6).
+	// - If populated, listen only on the specified address.
+	ListenHost string `json:"listenHost"`
+	ListenPort uint16 `json:"listenPort"`
 }
 
 type StakingConfig struct {
 	genesis.StakingConfig
-	EnableStaking         bool            `json:"enableStaking"`
-	StakingTLSCert        tls.Certificate `json:"-"`
-	DisabledStakingWeight uint64          `json:"disabledStakingWeight"`
-	StakingKeyPath        string          `json:"stakingKeyPath"`
-	StakingCertPath       string          `json:"stakingCertPath"`
+	SybilProtectionEnabled        bool            `json:"sybilProtectionEnabled"`
+	PartialSyncPrimaryNetwork     bool            `json:"partialSyncPrimaryNetwork"`
+	StakingTLSCert                tls.Certificate `json:"-"`
+	StakingSigningKey             *bls.SecretKey  `json:"-"`
+	SybilProtectionDisabledWeight uint64          `json:"sybilProtectionDisabledWeight"`
+	StakingKeyPath                string          `json:"stakingKeyPath"`
+	StakingCertPath               string          `json:"stakingCertPath"`
+	StakingSignerPath             string          `json:"stakingSignerPath"`
 }
 
 type StateSyncConfig struct {
-	StateSyncIDs []ids.NodeID `json:"stateSyncIDs"`
-	StateSyncIPs []ips.IPPort `json:"stateSyncIPs"`
+	StateSyncIDs []ids.NodeID     `json:"stateSyncIDs"`
+	StateSyncIPs []netip.AddrPort `json:"stateSyncIPs"`
 }
 
 type BootstrapConfig struct {
-	// Should Bootstrap be retried
-	RetryBootstrap bool `json:"retryBootstrap"`
-
-	// Max number of times to retry bootstrap before warning the node operator
-	RetryBootstrapWarnFrequency int `json:"retryBootstrapWarnFrequency"`
-
-	// Timeout when connecting to bootstrapping beacons
+	// Timeout before emitting a warn log when connecting to bootstrapping beacons
 	BootstrapBeaconConnectionTimeout time.Duration `json:"bootstrapBeaconConnectionTimeout"`
 
 	// Max number of containers in an ancestors message sent by this node.
@@ -114,11 +104,13 @@ type BootstrapConfig struct {
 	// ancestors while responding to a GetAncestors message
 	BootstrapMaxTimeGetAncestors time.Duration `json:"bootstrapMaxTimeGetAncestors"`
 
-	BootstrapIDs []ids.NodeID `json:"bootstrapIDs"`
-	BootstrapIPs []ips.IPPort `json:"bootstrapIPs"`
+	Bootstrappers []genesis.Bootstrapper `json:"bootstrappers"`
 }
 
 type DatabaseConfig struct {
+	// If true, all writes are to memory and are discarded at node shutdown.
+	ReadOnly bool `json:"readOnly"`
+
 	// Path to database
 	Path string `json:"path"`
 
@@ -139,6 +131,8 @@ type Config struct {
 	BootstrapConfig     `json:"bootstrapConfig"`
 	DatabaseConfig      `json:"databaseConfig"`
 
+	UpgradeConfig upgrade.Config `json:"upgradeConfig"`
+
 	// Genesis information
 	GenesisBytes []byte `json:"-"`
 	AvaxAssetID  ids.ID `json:"avaxAssetID"`
@@ -146,61 +140,44 @@ type Config struct {
 	// ID of the network this node should connect to
 	NetworkID uint32 `json:"networkID"`
 
-	// Assertions configuration
-	EnableAssertions bool `json:"enableAssertions"`
-
-	// Crypto configuration
-	EnableCrypto bool `json:"enableCrypto"`
-
 	// Health
 	HealthCheckFreq time.Duration `json:"healthCheckFreq"`
 
 	// Network configuration
 	NetworkConfig network.Config `json:"networkConfig"`
 
-	GossipConfig sender.GossipConfig `json:"gossipConfig"`
-
 	AdaptiveTimeoutConfig timer.AdaptiveTimeoutConfig `json:"adaptiveTimeoutConfig"`
 
-	// Benchlist Configuration
 	BenchlistConfig benchlist.Config `json:"benchlistConfig"`
 
-	// Profiling configurations
 	ProfilerConfig profiler.Config `json:"profilerConfig"`
 
-	// Logging configuration
 	LoggingConfig logging.Config `json:"loggingConfig"`
 
-	// Plugin directory
 	PluginDir string `json:"pluginDir"`
 
 	// File Descriptor Limit
 	FdLimit uint64 `json:"fdLimit"`
 
-	// Consensus configuration
-	ConsensusParams avalanche.Parameters `json:"consensusParams"`
-
 	// Metrics
 	MeterVMEnabled bool `json:"meterVMEnabled"`
 
-	// Router that is used to handle incoming consensus messages
-	ConsensusRouter          router.Router       `json:"-"`
 	RouterHealthConfig       router.HealthConfig `json:"routerHealthConfig"`
 	ConsensusShutdownTimeout time.Duration       `json:"consensusShutdownTimeout"`
-	// Gossip a container in the accepted frontier every [ConsensusGossipFrequency]
-	ConsensusGossipFrequency time.Duration `json:"consensusGossipFreq"`
+	// Poll for new frontiers every [FrontierPollFrequency]
+	FrontierPollFrequency time.Duration `json:"consensusGossipFreq"`
+	// ConsensusAppConcurrency defines the maximum number of goroutines to
+	// handle App messages per chain.
+	ConsensusAppConcurrency int `json:"consensusAppConcurrency"`
 
-	// Subnet Whitelist
-	WhitelistedSubnets ids.Set `json:"whitelistedSubnets"`
+	TrackedSubnets set.Set[ids.ID] `json:"trackedSubnets"`
 
-	// SubnetConfigs
-	SubnetConfigs map[ids.ID]chains.SubnetConfig `json:"subnetConfigs"`
+	SubnetConfigs map[ids.ID]subnets.Config `json:"subnetConfigs"`
 
-	// ChainConfigs
 	ChainConfigs map[string]chains.ChainConfig `json:"-"`
+	ChainAliases map[ids.ID][]string           `json:"chainAliases"`
 
-	// VM management
-	VMManager vms.Manager `json:"-"`
+	VMAliases map[ids.ID][]string `json:"vmAliases"`
 
 	// Halflife to use for the processing requests tracker.
 	// Larger halflife --> usage metrics change more slowly.
@@ -225,4 +202,20 @@ type Config struct {
 
 	RequiredAvailableDiskSpace         uint64 `json:"requiredAvailableDiskSpace"`
 	WarningThresholdAvailableDiskSpace uint64 `json:"warningThresholdAvailableDiskSpace"`
+
+	TraceConfig trace.Config `json:"traceConfig"`
+
+	// See comment on [UseCurrentHeight] in platformvm.Config
+	UseCurrentHeight bool `json:"useCurrentHeight"`
+
+	// ProvidedFlags contains all the flags set by the user
+	ProvidedFlags map[string]interface{} `json:"-"`
+
+	// ChainDataDir is the root path for per-chain directories where VMs can
+	// write arbitrary data.
+	ChainDataDir string `json:"chainDataDir"`
+
+	// Path to write process context to (including PID, API URI, and
+	// staking address).
+	ProcessContextFilePath string `json:"processContextFilePath"`
 }

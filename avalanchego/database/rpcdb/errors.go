@@ -1,25 +1,27 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package rpcdb
 
 import (
 	"github.com/ava-labs/avalanchego/database"
+
+	rpcdbpb "github.com/ava-labs/avalanchego/proto/pb/rpcdb"
 )
 
 var (
-	errCodeToError = map[uint32]error{
-		1: database.ErrClosed,
-		2: database.ErrNotFound,
+	ErrEnumToError = map[rpcdbpb.Error]error{
+		rpcdbpb.Error_ERROR_CLOSED:    database.ErrClosed,
+		rpcdbpb.Error_ERROR_NOT_FOUND: database.ErrNotFound,
 	}
-	errorToErrCode = map[error]uint32{
-		database.ErrClosed:   1,
-		database.ErrNotFound: 2,
+	ErrorToErrEnum = map[error]rpcdbpb.Error{
+		database.ErrClosed:   rpcdbpb.Error_ERROR_CLOSED,
+		database.ErrNotFound: rpcdbpb.Error_ERROR_NOT_FOUND,
 	}
 )
 
-func errorToRPCError(err error) error {
-	if _, ok := errorToErrCode[err]; ok {
+func ErrorToRPCError(err error) error {
+	if _, ok := ErrorToErrEnum[err]; ok {
 		return nil
 	}
 	return err

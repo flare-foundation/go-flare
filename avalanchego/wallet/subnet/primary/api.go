@@ -1,34 +1,45 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package primary
 
 import (
 	"context"
+	"fmt"
+
+	"github.com/ava-labs/coreth/ethclient"
+	"github.com/ava-labs/coreth/plugin/evm"
 
 	"github.com/ava-labs/avalanchego/api/info"
 	"github.com/ava-labs/avalanchego/codec"
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/rpc"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/vms/avm"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/platformvm"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
+	"github.com/ava-labs/avalanchego/wallet/chain/c"
 	"github.com/ava-labs/avalanchego/wallet/chain/p"
 	"github.com/ava-labs/avalanchego/wallet/chain/x"
+
+	pbuilder "github.com/ava-labs/avalanchego/wallet/chain/p/builder"
+	xbuilder "github.com/ava-labs/avalanchego/wallet/chain/x/builder"
+	walletcommon "github.com/ava-labs/avalanchego/wallet/subnet/primary/common"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 )
 
 const (
-	MainnetAPIURI = "https://api.avax.network"
-	FujiAPIURI    = "https://api.avax-test.network"
-	LocalAPIURI   = "http://localhost:9650"
+	FlareAPIURI  = "https://flare-api.flare.network"
+	CostwoAPIURI = "https://coston2-api.flare.network"
+	LocalAPIURI  = "http://localhost:9650"
 
 	fetchLimit = 1024
 )
 
-// TODO: refactor UTXOClient definition to allow the client implementations to
-//       perform their own assertions.
+// TODO: Refactor UTXOClient definition to allow the client implementations to
+// perform their own assertions.
 var (
 	_ UTXOClient = platformvm.Client(nil)
 	_ UTXOClient = avm.Client(nil)
@@ -46,21 +57,45 @@ type UTXOClient interface {
 	) ([][]byte, ids.ShortID, ids.ID, error)
 }
 
-func FetchState(ctx context.Context, uri string, addrs ids.ShortSet) (p.Context, x.Context, UTXOs, error) {
-	infoClient := info.NewClient(uri)
-	xClient := avm.NewClient(uri, "X")
+type AVAXState struct {
+	PClient platformvm.Client
+	PCTX    *pbuilder.Context
+	XClient avm.Client
+	XCTX    *xbuilder.Context
+	CClient evm.Client
+	CCTX    *c.Context
+	UTXOs   walletcommon.UTXOs
+}
 
-	pCTX, err := p.NewContextFromClients(ctx, infoClient, xClient)
+func FetchState(
+	ctx context.Context,
+	uri string,
+	addrs set.Set[ids.ShortID],
+) (
+	*AVAXState,
+	error,
+) {
+	infoClient := info.NewClient(uri)
+	pClient := platformvm.NewClient(uri)
+	xClient := avm.NewClient(uri, "X")
+	cClient := evm.NewCChainClient(uri)
+
+	pCTX, err := p.NewContextFromClients(ctx, infoClient, pClient)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 
 	xCTX, err := x.NewContextFromClients(ctx, infoClient, xClient)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 
-	utxos := NewUTXOs()
+	cCTX, err := c.NewContextFromClients(ctx, infoClient, xClient)
+	if err != nil {
+		return nil, err
+	}
+
+	utxos := walletcommon.NewUTXOs()
 	addrList := addrs.List()
 	chains := []struct {
 		id     ids.ID
@@ -69,13 +104,18 @@ func FetchState(ctx context.Context, uri string, addrs ids.ShortSet) (p.Context,
 	}{
 		{
 			id:     constants.PlatformChainID,
-			client: platformvm.NewClient(uri),
+			client: pClient,
 			codec:  txs.Codec,
 		},
 		{
-			id:     xCTX.BlockchainID(),
+			id:     xCTX.BlockchainID,
 			client: xClient,
-			codec:  x.Parser.Codec(),
+			codec:  xbuilder.Parser.Codec(),
+		},
+		{
+			id:     cCTX.BlockchainID,
+			client: cClient,
+			codec:  evm.Codec,
 		},
 	}
 	for _, destinationChain := range chains {
@@ -90,11 +130,92 @@ func FetchState(ctx context.Context, uri string, addrs ids.ShortSet) (p.Context,
 				addrList,
 			)
 			if err != nil {
-				return nil, nil, nil, err
+				return nil, err
 			}
 		}
 	}
-	return pCTX, xCTX, utxos, nil
+	return &AVAXState{
+		PClient: pClient,
+		PCTX:    pCTX,
+		XClient: xClient,
+		XCTX:    xCTX,
+		CClient: cClient,
+		CCTX:    cCTX,
+		UTXOs:   utxos,
+	}, nil
+}
+
+func FetchPState(
+	ctx context.Context,
+	uri string,
+	addrs set.Set[ids.ShortID],
+) (
+	platformvm.Client,
+	*pbuilder.Context,
+	walletcommon.UTXOs,
+	error,
+) {
+	infoClient := info.NewClient(uri)
+	chainClient := platformvm.NewClient(uri)
+
+	context, err := p.NewContextFromClients(ctx, infoClient, chainClient)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	utxos := walletcommon.NewUTXOs()
+	addrList := addrs.List()
+	err = AddAllUTXOs(
+		ctx,
+		utxos,
+		chainClient,
+		txs.Codec,
+		constants.PlatformChainID,
+		constants.PlatformChainID,
+		addrList,
+	)
+	return chainClient, context, utxos, err
+}
+
+type EthState struct {
+	Client   ethclient.Client
+	Accounts map[ethcommon.Address]*c.Account
+}
+
+func FetchEthState(
+	ctx context.Context,
+	uri string,
+	addrs set.Set[ethcommon.Address],
+) (*EthState, error) {
+	path := fmt.Sprintf(
+		"%s/ext/%s/C/rpc",
+		uri,
+		constants.ChainAliasPrefix,
+	)
+	client, err := ethclient.Dial(path)
+	if err != nil {
+		return nil, err
+	}
+
+	accounts := make(map[ethcommon.Address]*c.Account, addrs.Len())
+	for addr := range addrs {
+		balance, err := client.BalanceAt(ctx, addr, nil)
+		if err != nil {
+			return nil, err
+		}
+		nonce, err := client.NonceAt(ctx, addr, nil)
+		if err != nil {
+			return nil, err
+		}
+		accounts[addr] = &c.Account{
+			Balance: balance,
+			Nonce:   nonce,
+		}
+	}
+	return &EthState{
+		Client:   client,
+		Accounts: accounts,
+	}, nil
 }
 
 // AddAllUTXOs fetches all the UTXOs referenced by [addresses] that were sent
@@ -103,7 +224,7 @@ func FetchState(ctx context.Context, uri string, addrs ids.ShortSet) (p.Context,
 // expires, then the returned error will be immediately reported.
 func AddAllUTXOs(
 	ctx context.Context,
-	utxos UTXOs,
+	utxos walletcommon.UTXOs,
 	client UTXOClient,
 	codec codec.Manager,
 	sourceChainID ids.ID,

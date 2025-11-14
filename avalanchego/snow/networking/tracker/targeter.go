@@ -1,16 +1,18 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package tracker
 
 import (
-	"math"
+	"math/big"
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/validators"
+	"github.com/ava-labs/avalanchego/utils/constants"
+	"github.com/ava-labs/avalanchego/utils/logging"
 )
 
-var _ Targeter = &targeter{}
+var _ Targeter = (*targeter)(nil)
 
 type Targeter interface {
 	// Returns the target usage of the given node.
@@ -32,11 +34,13 @@ type TargeterConfig struct {
 }
 
 func NewTargeter(
+	logger logging.Logger,
 	config *TargeterConfig,
-	vdrs validators.Set,
+	vdrs validators.Manager,
 	tracker Tracker,
 ) Targeter {
 	return &targeter{
+		log:                logger,
 		vdrs:               vdrs,
 		tracker:            tracker,
 		vdrAlloc:           config.VdrAlloc,
@@ -46,7 +50,8 @@ func NewTargeter(
 }
 
 type targeter struct {
-	vdrs               validators.Set
+	vdrs               validators.Manager
+	log                logging.Logger
 	tracker            Tracker
 	vdrAlloc           float64
 	maxNonVdrUsage     float64
@@ -56,11 +61,22 @@ type targeter struct {
 func (t *targeter) TargetUsage(nodeID ids.NodeID) float64 {
 	// This node's at-large allocation is min([remaining at large], [max at large for a given peer])
 	usage := t.tracker.TotalUsage()
-	baseAlloc := math.Max(0, t.maxNonVdrUsage-usage)
-	baseAlloc = math.Min(baseAlloc, t.maxNonVdrNodeUsage)
+	baseAlloc := max(0, t.maxNonVdrUsage-usage)
+	baseAlloc = min(baseAlloc, t.maxNonVdrNodeUsage)
 
 	// This node gets a stake-weighted portion of the validator allocation.
-	weight, _ := t.vdrs.GetWeight(nodeID)
-	vdrAlloc := t.vdrAlloc * float64(weight) / float64(t.vdrs.Weight())
+	weight := t.vdrs.GetWeight(constants.PrimaryNetworkID, nodeID)
+	if weight == 0 {
+		return baseAlloc
+	}
+
+	totalWeight := t.vdrs.TotalWeight(constants.PrimaryNetworkID)
+	if totalWeight.Cmp(big.NewInt(0)) == 0 {
+		return baseAlloc
+	}
+
+	totalWeightFloat, _ := totalWeight.Float64()
+
+	vdrAlloc := t.vdrAlloc * float64(weight) / totalWeightFloat
 	return vdrAlloc + baseAlloc
 }

@@ -34,6 +34,7 @@ import (
 
 	"github.com/ava-labs/coreth/core"
 	"github.com/ava-labs/coreth/core/types"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ava-labs/coreth/params"
 	"github.com/ava-labs/coreth/rpc"
@@ -41,11 +42,11 @@ import (
 )
 
 func TestFeeHistory(t *testing.T) {
-	var cases = []struct {
+	cases := []struct {
 		pending      bool
-		maxCallBlock int
-		maxBlock     int
-		count        int
+		maxCallBlock uint64
+		maxBlock     uint64
+		count        uint64
 		last         rpc.BlockNumber
 		percent      []float64
 		expFirst     uint64
@@ -80,8 +81,8 @@ func TestFeeHistory(t *testing.T) {
 			MaxBlockHistory:     c.maxBlock,
 		}
 		tip := big.NewInt(1 * params.GWei)
-		backend := newTestBackendFakerEngine(t, params.TestChainConfig, 32, common.Big0, func(i int, b *core.BlockGen) {
-			signer := types.LatestSigner(params.TestChainConfig)
+		backend := newTestBackendFakerEngine(t, params.TestFlareChainConfig, 32, common.Big0, func(i int, b *core.BlockGen) {
+			signer := types.LatestSigner(params.TestFlareChainConfig)
 
 			b.SetCoinbase(common.Address{1})
 
@@ -90,7 +91,7 @@ func TestFeeHistory(t *testing.T) {
 
 			var tx *types.Transaction
 			txdata := &types.DynamicFeeTx{
-				ChainID:   params.TestChainConfig.ChainID,
+				ChainID:   params.TestFlareChainConfig.ChainID,
 				Nonce:     b.TxNonce(addr),
 				To:        &common.Address{},
 				Gas:       params.TxGas,
@@ -105,10 +106,11 @@ func TestFeeHistory(t *testing.T) {
 			}
 			b.AddTx(tx)
 		})
-		oracle := NewOracle(backend, config)
+		oracle, err := NewOracle(backend, config)
+		require.NoError(t, err)
 
 		first, reward, baseFee, ratio, err := oracle.FeeHistory(context.Background(), c.count, c.last, c.percent)
-
+		backend.teardown()
 		expReward := c.expCount
 		if len(c.percent) == 0 {
 			expReward = 0

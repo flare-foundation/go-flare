@@ -32,7 +32,6 @@ import (
 	"testing"
 
 	"github.com/ava-labs/coreth/consensus/dummy"
-	"github.com/ava-labs/coreth/core/rawdb"
 	"github.com/ava-labs/coreth/core/types"
 	"github.com/ava-labs/coreth/params"
 	"github.com/ethereum/go-ethereum/common"
@@ -43,29 +42,26 @@ import (
 
 func getBlock(transactions int, uncles int, dataSize int) *types.Block {
 	var (
-		aa = common.HexToAddress("0x000000000000000000000000000000000000aaaa")
-		// Generate a canonical chain to act as the main dataset
+		aa     = common.HexToAddress("0x000000000000000000000000000000000000aaaa")
 		engine = dummy.NewFaker()
-		db     = rawdb.NewMemoryDatabase()
+
 		// A sender who makes transactions, has some funds
 		key, _  = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
 		address = crypto.PubkeyToAddress(key.PublicKey)
 		funds   = big.NewInt(50000 * 225000000000 * 200)
 		gspec   = &Genesis{
-			Config: params.TestChainConfig,
-			Alloc:  GenesisAlloc{address: {Balance: funds}},
+			Config: params.TestFlareChainConfig,
+			Alloc:  types.GenesisAlloc{address: {Balance: funds}},
 		}
-		genesis = gspec.MustCommit(db)
 	)
-
 	// We need to generate as many blocks +1 as uncles
-	blocks, _, _ := GenerateChain(params.TestChainConfig, genesis, engine, db, uncles+1, 10,
+	_, blocks, _, _ := GenerateChainWithGenesis(gspec, engine, uncles+1, 10,
 		func(n int, b *BlockGen) {
 			if n == uncles {
 				// Add transactions and stuff on the last block
 				for i := 0; i < transactions; i++ {
 					tx, _ := types.SignTx(types.NewTransaction(uint64(i), aa,
-						big.NewInt(0), 50000, b.header.BaseFee, make([]byte, dataSize)), types.LatestSigner(params.TestChainConfig), key)
+						big.NewInt(0), 50000, b.header.BaseFee, make([]byte, dataSize)), types.LatestSigner(params.TestFlareChainConfig), key)
 					b.AddTx(tx)
 				}
 				for i := 0; i < uncles; i++ {
@@ -169,7 +165,7 @@ func BenchmarkHashing(b *testing.B) {
 		blockRlp, _ = rlp.EncodeToBytes(block)
 	}
 	var got common.Hash
-	var hasher = sha3.NewLegacyKeccak256()
+	hasher := sha3.NewLegacyKeccak256()
 	b.Run("iteratorhashing", func(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {

@@ -9,11 +9,14 @@ import (
 
 	"github.com/ava-labs/coreth/params"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/holiman/uint256"
 
 	"github.com/ava-labs/avalanchego/chains/atomic"
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/constants"
-	"github.com/ava-labs/avalanchego/utils/crypto"
+	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 )
@@ -51,7 +54,7 @@ func createImportTxOptions(t *testing.T, vm *VM, sharedMemory *atomic.Memory) []
 
 	importTxs := make([]*Tx, 0, 3)
 	for _, ethAddr := range testEthAddrs {
-		importTx, err := vm.newImportTx(vm.ctx.XChainID, ethAddr, initialBaseFee, []*crypto.PrivateKeySECP256K1R{testKeys[0]})
+		importTx, err := vm.newImportTx(vm.ctx.XChainID, ethAddr, initialBaseFee, []*secp256k1.PrivateKey{testKeys[0]})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -112,9 +115,9 @@ func TestImportTxVerify(t *testing.T) {
 		},
 	}
 
-	// // Sort the inputs and outputs to ensure the transaction is canonical
-	avax.SortTransferableInputs(importTx.ImportedInputs)
-	SortEVMOutputs(importTx.Outs)
+	// Sort the inputs and outputs to ensure the transaction is canonical
+	utils.Sort(importTx.ImportedInputs)
+	utils.Sort(importTx.Outs)
 
 	tests := map[string]atomicTxVerifyTest{
 		"nil tx": {
@@ -132,7 +135,15 @@ func TestImportTxVerify(t *testing.T) {
 			},
 			ctx:         ctx,
 			rules:       apricotRulesPhase0,
-			expectedErr: "", // Expect this transaction to be valid
+			expectedErr: "", // Expect this transaction to be valid in Apricot Phase 0
+		},
+		"valid import tx banff": {
+			generate: func(t *testing.T) UnsignedAtomicTx {
+				return importTx
+			},
+			ctx:         ctx,
+			rules:       banffRules,
+			expectedErr: "", // Expect this transaction to be valid in Banff
 		},
 		"invalid network ID": {
 			generate: func(t *testing.T) UnsignedAtomicTx {
@@ -323,6 +334,86 @@ func TestImportTxVerify(t *testing.T) {
 			rules:       apricotRulesPhase3,
 			expectedErr: errNoEVMOutputs.Error(),
 		},
+		"non-AVAX input Apricot Phase 6": {
+			generate: func(t *testing.T) UnsignedAtomicTx {
+				tx := *importTx
+				tx.ImportedInputs = []*avax.TransferableInput{
+					{
+						UTXOID: avax.UTXOID{
+							TxID:        txID,
+							OutputIndex: uint32(0),
+						},
+						Asset: avax.Asset{ID: ids.GenerateTestID()},
+						In: &secp256k1fx.TransferInput{
+							Amt: importAmount,
+							Input: secp256k1fx.Input{
+								SigIndices: []uint32{0},
+							},
+						},
+					},
+				}
+				return &tx
+			},
+			ctx:         ctx,
+			rules:       apricotRulesPhase6,
+			expectedErr: "",
+		},
+		"non-AVAX output Apricot Phase 6": {
+			generate: func(t *testing.T) UnsignedAtomicTx {
+				tx := *importTx
+				tx.Outs = []EVMOutput{
+					{
+						Address: importTx.Outs[0].Address,
+						Amount:  importTx.Outs[0].Amount,
+						AssetID: ids.GenerateTestID(),
+					},
+				}
+				return &tx
+			},
+			ctx:         ctx,
+			rules:       apricotRulesPhase6,
+			expectedErr: "",
+		},
+		"non-AVAX input Banff": {
+			generate: func(t *testing.T) UnsignedAtomicTx {
+				tx := *importTx
+				tx.ImportedInputs = []*avax.TransferableInput{
+					{
+						UTXOID: avax.UTXOID{
+							TxID:        txID,
+							OutputIndex: uint32(0),
+						},
+						Asset: avax.Asset{ID: ids.GenerateTestID()},
+						In: &secp256k1fx.TransferInput{
+							Amt: importAmount,
+							Input: secp256k1fx.Input{
+								SigIndices: []uint32{0},
+							},
+						},
+					},
+				}
+				return &tx
+			},
+			ctx:         ctx,
+			rules:       banffRules,
+			expectedErr: errImportNonAVAXInputBanff.Error(),
+		},
+		"non-AVAX output Banff": {
+			generate: func(t *testing.T) UnsignedAtomicTx {
+				tx := *importTx
+				tx.Outs = []EVMOutput{
+					{
+						Address: importTx.Outs[0].Address,
+						Amount:  importTx.Outs[0].Amount,
+						AssetID: ids.GenerateTestID(),
+					},
+				}
+				return &tx
+			},
+			ctx:         ctx,
+			rules:       banffRules,
+			expectedErr: errImportNonAVAXOutputBanff.Error(),
+		},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -342,7 +433,7 @@ func TestNewImportTx(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		tx, err := vm.newImportTx(vm.ctx.XChainID, testEthAddrs[0], initialBaseFee, []*crypto.PrivateKeySECP256K1R{testKeys[0]})
+		tx, err := vm.newImportTx(vm.ctx.XChainID, testEthAddrs[0], initialBaseFee, []*secp256k1.PrivateKey{testKeys[0]})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -359,7 +450,7 @@ func TestNewImportTx(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			actualFee, err = calculateDynamicFee(actualCost, initialBaseFee)
+			actualFee, err = CalculateDynamicFee(actualCost, initialBaseFee)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -388,7 +479,7 @@ func TestNewImportTx(t *testing.T) {
 		}
 
 		// Ensure that the UTXO has been removed from shared memory within Accept
-		addrSet := ids.ShortSet{}
+		addrSet := set.Set[ids.ShortID]{}
 		addrSet.Add(testShortIDAddrs[0])
 		utxos, _, _, err := vm.GetAtomicUTXOs(vm.ctx.XChainID, addrSet, ids.ShortEmpty, ids.Empty, -1)
 		if err != nil {
@@ -404,7 +495,8 @@ func TestNewImportTx(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		expectedRemainingBalance := new(big.Int).Mul(new(big.Int).SetUint64(importAmount-actualAVAXBurned), x2cRate)
+		expectedRemainingBalance := new(uint256.Int).Mul(
+			uint256.NewInt(importAmount-actualAVAXBurned), x2cRate)
 		addr := GetEthAddress(testKeys[0])
 		if actualBalance := sdb.GetBalance(addr); actualBalance.Cmp(expectedRemainingBalance) != 0 {
 			t.Fatalf("address remaining balance %s equal %s not %s", addr.String(), actualBalance, expectedRemainingBalance)
@@ -452,7 +544,7 @@ func TestImportTxGasCost(t *testing.T) {
 
 	tests := map[string]struct {
 		UnsignedImportTx *UnsignedImportTx
-		Keys             [][]*crypto.PrivateKeySECP256K1R
+		Keys             [][]*secp256k1.PrivateKey
 
 		ExpectedGasUsed uint64
 		ExpectedFee     uint64
@@ -478,7 +570,7 @@ func TestImportTxGasCost(t *testing.T) {
 					AssetID: avaxAssetID,
 				}},
 			},
-			Keys:            [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}},
+			Keys:            [][]*secp256k1.PrivateKey{{testKeys[0]}},
 			ExpectedGasUsed: 1230,
 			ExpectedFee:     30750,
 			BaseFee:         big.NewInt(25 * params.GWei),
@@ -502,7 +594,7 @@ func TestImportTxGasCost(t *testing.T) {
 					AssetID: avaxAssetID,
 				}},
 			},
-			Keys:            [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}},
+			Keys:            [][]*secp256k1.PrivateKey{{testKeys[0]}},
 			ExpectedGasUsed: 1230,
 			ExpectedFee:     1,
 			BaseFee:         big.NewInt(1),
@@ -526,7 +618,7 @@ func TestImportTxGasCost(t *testing.T) {
 					AssetID: avaxAssetID,
 				}},
 			},
-			Keys:            [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}},
+			Keys:            [][]*secp256k1.PrivateKey{{testKeys[0]}},
 			ExpectedGasUsed: 11230,
 			ExpectedFee:     1,
 			BaseFee:         big.NewInt(1),
@@ -563,7 +655,7 @@ func TestImportTxGasCost(t *testing.T) {
 					},
 				},
 			},
-			Keys:            [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}, {testKeys[0]}},
+			Keys:            [][]*secp256k1.PrivateKey{{testKeys[0]}, {testKeys[0]}},
 			ExpectedGasUsed: 2318,
 			ExpectedFee:     57950,
 			BaseFee:         big.NewInt(25 * params.GWei),
@@ -604,7 +696,7 @@ func TestImportTxGasCost(t *testing.T) {
 					},
 				},
 			},
-			Keys:            [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}, {testKeys[0]}},
+			Keys:            [][]*secp256k1.PrivateKey{{testKeys[0]}, {testKeys[0]}},
 			ExpectedGasUsed: 2378,
 			ExpectedFee:     59450,
 			BaseFee:         big.NewInt(25 * params.GWei),
@@ -628,7 +720,7 @@ func TestImportTxGasCost(t *testing.T) {
 					AssetID: avaxAssetID,
 				}},
 			},
-			Keys:            [][]*crypto.PrivateKeySECP256K1R{{testKeys[0], testKeys[1]}},
+			Keys:            [][]*secp256k1.PrivateKey{{testKeys[0], testKeys[1]}},
 			ExpectedGasUsed: 2234,
 			ExpectedFee:     55850,
 			BaseFee:         big.NewInt(25 * params.GWei),
@@ -728,7 +820,7 @@ func TestImportTxGasCost(t *testing.T) {
 					},
 				},
 			},
-			Keys: [][]*crypto.PrivateKeySECP256K1R{
+			Keys: [][]*secp256k1.PrivateKey{
 				{testKeys[0]},
 				{testKeys[0]},
 				{testKeys[0]},
@@ -763,7 +855,7 @@ func TestImportTxGasCost(t *testing.T) {
 				t.Fatalf("Expected gasUsed to be %d, but found %d", test.ExpectedGasUsed, gasUsed)
 			}
 
-			fee, err := calculateDynamicFee(gasUsed, test.BaseFee)
+			fee, err := CalculateDynamicFee(gasUsed, test.BaseFee)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -798,7 +890,7 @@ func TestImportTxSemanticVerify(t *testing.T) {
 						AssetID: vm.ctx.AVAXAssetID,
 					}},
 				}}
-				if err := tx.Sign(vm.codec, [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}}); err != nil {
+				if err := tx.Sign(vm.codec, [][]*secp256k1.PrivateKey{{testKeys[0]}}); err != nil {
 					t.Fatal(err)
 				}
 				return tx
@@ -827,7 +919,7 @@ func TestImportTxSemanticVerify(t *testing.T) {
 						AssetID: vm.ctx.AVAXAssetID,
 					}},
 				}}
-				if err := tx.Sign(vm.codec, [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}}); err != nil {
+				if err := tx.Sign(vm.codec, [][]*secp256k1.PrivateKey{{testKeys[0]}}); err != nil {
 					t.Fatal(err)
 				}
 				return tx
@@ -867,7 +959,7 @@ func TestImportTxSemanticVerify(t *testing.T) {
 						AssetID: vm.ctx.AVAXAssetID,
 					}},
 				}}
-				if err := tx.Sign(vm.codec, [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}}); err != nil {
+				if err := tx.Sign(vm.codec, [][]*secp256k1.PrivateKey{{testKeys[0]}}); err != nil {
 					t.Fatal(err)
 				}
 				return tx
@@ -901,7 +993,7 @@ func TestImportTxSemanticVerify(t *testing.T) {
 						AssetID: vm.ctx.AVAXAssetID,
 					}},
 				}}
-				if err := tx.Sign(vm.codec, [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}}); err != nil {
+				if err := tx.Sign(vm.codec, [][]*secp256k1.PrivateKey{{testKeys[0]}}); err != nil {
 					t.Fatal(err)
 				}
 				return tx
@@ -934,7 +1026,7 @@ func TestImportTxSemanticVerify(t *testing.T) {
 						AssetID: vm.ctx.AVAXAssetID,
 					}},
 				}}
-				if err := tx.Sign(vm.codec, [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}}); err != nil {
+				if err := tx.Sign(vm.codec, [][]*secp256k1.PrivateKey{{testKeys[0]}}); err != nil {
 					t.Fatal(err)
 				}
 				return tx
@@ -968,7 +1060,7 @@ func TestImportTxSemanticVerify(t *testing.T) {
 						AssetID: assetID,
 					}},
 				}}
-				if err := tx.Sign(vm.codec, [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}}); err != nil {
+				if err := tx.Sign(vm.codec, [][]*secp256k1.PrivateKey{{testKeys[0]}}); err != nil {
 					t.Fatal(err)
 				}
 				return tx
@@ -1035,7 +1127,7 @@ func TestImportTxSemanticVerify(t *testing.T) {
 					}},
 				}}
 				// Sign the transaction with the incorrect key
-				if err := tx.Sign(vm.codec, [][]*crypto.PrivateKeySECP256K1R{{testKeys[1]}}); err != nil {
+				if err := tx.Sign(vm.codec, [][]*secp256k1.PrivateKey{{testKeys[1]}}); err != nil {
 					t.Fatal(err)
 				}
 				return tx
@@ -1075,7 +1167,7 @@ func TestImportTxSemanticVerify(t *testing.T) {
 						},
 					},
 				}}
-				if err := tx.Sign(vm.codec, [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}}); err != nil {
+				if err := tx.Sign(vm.codec, [][]*secp256k1.PrivateKey{{testKeys[0]}}); err != nil {
 					t.Fatal(err)
 				}
 				return tx
@@ -1121,7 +1213,7 @@ func TestImportTxEVMStateTransfer(t *testing.T) {
 						AssetID: vm.ctx.AVAXAssetID,
 					}},
 				}}
-				if err := tx.Sign(vm.codec, [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}}); err != nil {
+				if err := tx.Sign(vm.codec, [][]*secp256k1.PrivateKey{{testKeys[0]}}); err != nil {
 					t.Fatal(err)
 				}
 				return tx
@@ -1166,7 +1258,7 @@ func TestImportTxEVMStateTransfer(t *testing.T) {
 						AssetID: assetID,
 					}},
 				}}
-				if err := tx.Sign(vm.codec, [][]*crypto.PrivateKeySECP256K1R{{testKeys[0]}}); err != nil {
+				if err := tx.Sign(vm.codec, [][]*secp256k1.PrivateKey{{testKeys[0]}}); err != nil {
 					t.Fatal(err)
 				}
 				return tx
@@ -1184,7 +1276,7 @@ func TestImportTxEVMStateTransfer(t *testing.T) {
 					t.Fatalf("Expected asset balance to be %d, found balance: %d", common.Big1, assetBalance)
 				}
 				avaxBalance := sdb.GetBalance(testEthAddrs[0])
-				if avaxBalance.Cmp(common.Big0) != 0 {
+				if avaxBalance.Cmp(common.U2560) != 0 {
 					t.Fatalf("Expected AVAX balance to be 0, found balance: %d", avaxBalance)
 				}
 			},

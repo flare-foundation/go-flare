@@ -1,25 +1,20 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package avm
 
 import (
-	"time"
-
-	"github.com/ava-labs/avalanchego/snow"
+	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/vms"
+	"github.com/ava-labs/avalanchego/vms/avm/config"
 )
 
-var _ vms.Factory = &Factory{}
+var _ vms.Factory = (*Factory)(nil)
 
 type Factory struct {
-	TxFee            uint64
-	CreateAssetTxFee uint64
-
-	// Time of the Blueberry network upgrade
-	BlueberryTime time.Time
+	config.Config
 }
 
-func (f *Factory) New(*snow.Context) (interface{}, error) {
-	return &VM{Factory: *f}, nil
+func (f *Factory) New(logging.Logger) (interface{}, error) {
+	return &VM{Config: f.Config}, nil
 }

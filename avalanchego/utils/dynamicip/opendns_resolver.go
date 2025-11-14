@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package dynamicip
@@ -7,21 +7,20 @@ import (
 	"context"
 	"errors"
 	"net"
-	"time"
+	"net/netip"
+
+	"github.com/ava-labs/avalanchego/utils/ips"
 )
 
-const (
-	ipResolutionTimeout = 10 * time.Second
-	openDNSUrl          = "resolver1.opendns.com:53"
-)
+const openDNSUrl = "resolver1.opendns.com:53"
 
 var (
 	errOpenDNSNoIP = errors.New("openDNS returned no ip")
 
-	_ Resolver = &openDNSResolver{}
+	_ Resolver = (*openDNSResolver)(nil)
 )
 
-// IFConfigResolves resolves our public IP using openDNS
+// openDNSResolver resolves our public IP using openDNS
 type openDNSResolver struct {
 	resolver *net.Resolver
 }
@@ -31,22 +30,22 @@ func newOpenDNSResolver() Resolver {
 		resolver: &net.Resolver{
 			PreferGo: true,
 			Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
-				d := net.Dialer{
-					Timeout: ipResolutionTimeout,
-				}
+				d := net.Dialer{}
 				return d.DialContext(ctx, "udp", openDNSUrl)
 			},
 		},
 	}
 }
 
-func (r *openDNSResolver) Resolve() (net.IP, error) {
-	ips, err := r.resolver.LookupIP(context.TODO(), "ip", "myip.opendns.com")
+func (r *openDNSResolver) Resolve(ctx context.Context) (netip.Addr, error) {
+	resolvedIPs, err := r.resolver.LookupIP(ctx, "ip", "myip.opendns.com")
 	if err != nil {
-		return nil, err
+		return netip.Addr{}, err
 	}
-	if len(ips) == 0 {
-		return nil, errOpenDNSNoIP
+	for _, ip := range resolvedIPs {
+		if addr, ok := ips.AddrFromSlice(ip); ok {
+			return addr, nil
+		}
 	}
-	return ips[0], nil
+	return netip.Addr{}, errOpenDNSNoIP
 }

@@ -1,11 +1,10 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package throttling
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/prometheus/client_golang/prometheus"
 
@@ -15,7 +14,7 @@ import (
 	"github.com/ava-labs/avalanchego/utils/logging"
 )
 
-var _ InboundMsgThrottler = &inboundMsgThrottler{}
+var _ InboundMsgThrottler = (*inboundMsgThrottler)(nil)
 
 // InboundMsgThrottler rate-limits inbound messages from the network.
 type InboundMsgThrottler interface {
@@ -54,9 +53,8 @@ type InboundMsgThrottlerConfig struct {
 // Returns a new, sybil-safe inbound message throttler.
 func NewInboundMsgThrottler(
 	log logging.Logger,
-	namespace string,
 	registerer prometheus.Registerer,
-	vdrs validators.Set,
+	vdrs validators.Manager,
 	throttlerConfig InboundMsgThrottlerConfig,
 	resourceTracker tracker.ResourceTracker,
 	cpuTargeter tracker.Targeter,
@@ -64,7 +62,6 @@ func NewInboundMsgThrottler(
 ) (InboundMsgThrottler, error) {
 	byteThrottler, err := newInboundMsgByteThrottler(
 		log,
-		namespace,
 		registerer,
 		vdrs,
 		throttlerConfig.MsgByteThrottlerConfig,
@@ -73,7 +70,6 @@ func NewInboundMsgThrottler(
 		return nil, err
 	}
 	bufferThrottler, err := newInboundMsgBufferThrottler(
-		namespace,
 		registerer,
 		throttlerConfig.MaxProcessingMsgsPerNode,
 	)
@@ -82,7 +78,6 @@ func NewInboundMsgThrottler(
 	}
 	bandwidthThrottler, err := newBandwidthThrottler(
 		log,
-		namespace,
 		registerer,
 		throttlerConfig.BandwidthThrottlerConfig,
 	)
@@ -90,10 +85,9 @@ func NewInboundMsgThrottler(
 		return nil, err
 	}
 	cpuThrottler, err := NewSystemThrottler(
-		fmt.Sprintf("%s_cpu", namespace),
+		"cpu",
 		registerer,
 		throttlerConfig.CPUThrottlerConfig,
-		vdrs,
 		resourceTracker.CPUTracker(),
 		cpuTargeter,
 	)
@@ -101,10 +95,9 @@ func NewInboundMsgThrottler(
 		return nil, err
 	}
 	diskThrottler, err := NewSystemThrottler(
-		fmt.Sprintf("%s_disk", namespace),
+		"disk",
 		registerer,
 		throttlerConfig.DiskThrottlerConfig,
-		vdrs,
 		resourceTracker.DiskTracker(),
 		diskTargeter,
 	)
@@ -121,20 +114,23 @@ func NewInboundMsgThrottler(
 }
 
 // A sybil-safe inbound message throttler.
-// Rate-limits reading of inbound messages to prevent peers from
-// consuming excess resources.
+// Rate-limits reading of inbound messages to prevent peers from consuming
+// excess resources.
 // The three resources considered are:
-// 1. An inbound message buffer, where each message that we're currently
-//    processing takes up 1 unit of space on the buffer.
-// 2. An inbound message byte buffer, where a message of length n
-//    that we're currently processing takes up n units of space on the buffer.
-// 3. Bandwidth. The bandwidth rate-limiting is implemented using a token bucket,
-//    where each token is 1 byte. See BandwidthThrottler.
+//
+//  1. An inbound message buffer, where each message that we're currently
+//     processing takes up 1 unit of space on the buffer.
+//  2. An inbound message byte buffer, where a message of length n
+//     that we're currently processing takes up n units of space on the buffer.
+//  3. Bandwidth. The bandwidth rate-limiting is implemented using a token
+//     bucket, where each token is 1 byte. See BandwidthThrottler.
+//
 // A call to Acquire([msgSize], [nodeID]) blocks until we've secured
-// enough of both these resources to read a message of size [msgSize] from [nodeID].
+// enough of both these resources to read a message of size [msgSize] from
+// [nodeID].
 type inboundMsgThrottler struct {
-	// Rate-limits based on number of messages from a given
-	// node that we're currently processing.
+	// Rate-limits based on number of messages from a given node that we're
+	// currently processing.
 	bufferThrottler *inboundMsgBufferThrottler
 	// Rate-limits based on recent bandwidth usage
 	bandwidthThrottler bandwidthThrottler

@@ -1,51 +1,115 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package validators
 
 import (
+	"errors"
 	"fmt"
+	"math/big"
 	"strings"
 	"sync"
 
+	"golang.org/x/exp/maps"
+
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils"
+	"github.com/ava-labs/avalanchego/utils/crypto/bls"
+	"github.com/ava-labs/avalanchego/utils/set"
 )
 
-var _ Manager = &manager{}
+var (
+	_ Manager = (*manager)(nil)
+
+	ErrZeroWeight        = errors.New("weight must be non-zero")
+	ErrMissingValidators = errors.New("missing validators")
+)
+
+type ManagerCallbackListener interface {
+	OnValidatorAdded(subnetID ids.ID, nodeID ids.NodeID, pk *bls.PublicKey, txID ids.ID, weight uint64)
+	OnValidatorRemoved(subnetID ids.ID, nodeID ids.NodeID, weight uint64)
+	OnValidatorWeightChanged(subnetID ids.ID, nodeID ids.NodeID, oldWeight, newWeight uint64)
+}
+
+type SetCallbackListener interface {
+	OnValidatorAdded(nodeID ids.NodeID, pk *bls.PublicKey, txID ids.ID, weight uint64)
+	OnValidatorRemoved(nodeID ids.NodeID, weight uint64)
+	OnValidatorWeightChanged(nodeID ids.NodeID, oldWeight, newWeight uint64)
+}
 
 // Manager holds the validator set of each subnet
 type Manager interface {
 	fmt.Stringer
 
-	// Set a subnet's validator set
-	Set(ids.ID, Set) error
+	// Add a new staker to the subnet.
+	// Returns an error if:
+	// - [weight] is 0
+	// - [nodeID] is already in the validator set
+	// If an error is returned, the set will be unmodified.
+	AddStaker(subnetID ids.ID, nodeID ids.NodeID, pk *bls.PublicKey, txID ids.ID, weight uint64) error
 
-	// AddWeight adds weight to a given validator on the given subnet
-	AddWeight(ids.ID, ids.NodeID, uint64) error
+	// AddWeight to an existing staker to the subnet.
+	// Returns an error if:
+	// - [weight] is 0
+	// - [nodeID] is not already in the validator set
+	// If an error is returned, the set will be unmodified.
+	// AddWeight can result in a total weight that overflows uint64.
+	// In this case no error will be returned for this call.
+	// However, the next TotalWeight call will return an error.
+	AddWeight(subnetID ids.ID, nodeID ids.NodeID, weight uint64) error
 
-	// RemoveWeight removes weight from a given validator on a given subnet
-	RemoveWeight(ids.ID, ids.NodeID, uint64) error
+	// GetWeight retrieves the validator weight from the subnet.
+	GetWeight(subnetID ids.ID, nodeID ids.NodeID) uint64
 
-	// GetValidators returns the validator set for the given subnet
-	// Returns false if the subnet doesn't exist
-	GetValidators(ids.ID) (Set, bool)
+	// GetValidator returns the validator tied to the specified ID in subnet.
+	// If the validator doesn't exist, returns false.
+	GetValidator(subnetID ids.ID, nodeID ids.NodeID) (*Validator, bool)
 
-	// MaskValidator hides the named validator from future samplings
-	MaskValidator(ids.NodeID) error
+	// GetValidatorIDs returns the validator IDs in the subnet.
+	GetValidatorIDs(subnetID ids.ID) []ids.NodeID
 
-	// RevealValidator ensures the named validator is not hidden from future
-	// samplings
-	RevealValidator(ids.NodeID) error
+	// SubsetWeight returns the sum of the weights of the validators in the subnet.
+	// Returns err if subset weight overflows uint64.
+	SubsetWeight(subnetID ids.ID, validatorIDs set.Set[ids.NodeID]) *big.Int
 
-	// Contains returns true if there is a validator with the specified ID
-	// currently in the set.
-	Contains(ids.ID, ids.NodeID) bool
+	// RemoveWeight from a staker in the subnet. If the staker's weight becomes 0, the staker
+	// will be removed from the subnet set.
+	// Returns an error if:
+	// - [weight] is 0
+	// - [nodeID] is not already in the subnet set
+	// - the weight of the validator would become negative
+	// If an error is returned, the set will be unmodified.
+	RemoveWeight(subnetID ids.ID, nodeID ids.NodeID, weight uint64) error
+
+	// NumSubnets returns the number of subnets with non-zero weight.
+	NumSubnets() int
+
+	// NumValidators returns the number of validators currently in the subnet.
+	NumValidators(subnetID ids.ID) int
+
+	// TotalWeight returns the cumulative weight of all validators in the subnet.
+	TotalWeight(subnetID ids.ID) *big.Int
+
+	// Sample returns a collection of validatorIDs in the subnet, potentially with duplicates.
+	// If sampling the requested size isn't possible, an error will be returned.
+	Sample(subnetID ids.ID, size int) ([]ids.NodeID, error)
+
+	// Map of the validators in this subnet
+	GetMap(subnetID ids.ID) map[ids.NodeID]*GetValidatorOutput
+
+	// When a validator is added, removed, or its weight changes, the listener
+	// will be notified of the event.
+	RegisterCallbackListener(listener ManagerCallbackListener)
+
+	// When a validator is added, removed, or its weight changes on [subnetID],
+	// the listener will be notified of the event.
+	RegisterSetCallbackListener(subnetID ids.ID, listener SetCallbackListener)
 }
 
 // NewManager returns a new, empty manager
 func NewManager() Manager {
 	return &manager{
-		subnetToVdrs: make(map[ids.ID]Set),
+		subnetToVdrs: make(map[ids.ID]*vdrSet),
 	}
 }
 
@@ -54,112 +118,202 @@ type manager struct {
 
 	// Key: Subnet ID
 	// Value: The validators that validate the subnet
-	subnetToVdrs map[ids.ID]Set
-
-	maskedVdrs ids.NodeIDSet
+	subnetToVdrs      map[ids.ID]*vdrSet
+	callbackListeners []ManagerCallbackListener
 }
 
-func (m *manager) Set(subnetID ids.ID, newSet Set) error {
+func (m *manager) AddStaker(subnetID ids.ID, nodeID ids.NodeID, pk *bls.PublicKey, txID ids.ID, weight uint64) error {
+	if weight == 0 {
+		return ErrZeroWeight
+	}
+
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	oldSet, exists := m.subnetToVdrs[subnetID]
+	set, exists := m.subnetToVdrs[subnetID]
 	if !exists {
-		m.subnetToVdrs[subnetID] = newSet
-		return nil
+		set = newSet(subnetID, m.callbackListeners)
+		m.subnetToVdrs[subnetID] = set
 	}
-	return oldSet.Set(newSet.List())
+
+	return set.Add(nodeID, pk, txID, weight)
 }
 
-func (m *manager) AddWeight(subnetID ids.ID, vdrID ids.NodeID, weight uint64) error {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-
-	vdrs, ok := m.subnetToVdrs[subnetID]
-	if !ok {
-		vdrs = NewSet()
-		for _, maskedVdrID := range m.maskedVdrs.List() {
-			if err := vdrs.MaskValidator(maskedVdrID); err != nil {
-				return err
-			}
-		}
-		m.subnetToVdrs[subnetID] = vdrs
+func (m *manager) AddWeight(subnetID ids.ID, nodeID ids.NodeID, weight uint64) error {
+	if weight == 0 {
+		return ErrZeroWeight
 	}
-	return vdrs.AddWeight(vdrID, weight)
-}
 
-func (m *manager) RemoveWeight(subnetID ids.ID, vdrID ids.NodeID, weight uint64) error {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-
-	if vdrs, ok := m.subnetToVdrs[subnetID]; ok {
-		return vdrs.RemoveWeight(vdrID, weight)
-	}
-	return nil
-}
-
-func (m *manager) GetValidators(subnetID ids.ID) (Set, bool) {
+	// We do not need to grab a write lock here because we never modify the
+	// subnetToVdrs map. However, we must hold the read lock during the entirity
+	// of this function to ensure that errors are returned consistently.
+	//
+	// Consider the case that:
+	//	AddStaker(subnetID, nodeID, 1)
+	//	go func() {
+	//		AddWeight(subnetID, nodeID, 1)
+	//	}
+	//	go func() {
+	//		RemoveWeight(subnetID, nodeID, 1)
+	//	}
+	//
+	// In this case, after both goroutines have finished, either AddWeight
+	// should have errored, or the weight of the node should equal 1. It would
+	// be unexpected to not have received an error from AddWeight but for the
+	// node to no longer be tracked as a validator.
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
-	vdrs, ok := m.subnetToVdrs[subnetID]
-	return vdrs, ok
+	set, exists := m.subnetToVdrs[subnetID]
+	if !exists {
+		return errMissingValidator
+	}
+
+	return set.AddWeight(nodeID, weight)
 }
 
-func (m *manager) MaskValidator(vdrID ids.NodeID) error {
+func (m *manager) GetWeight(subnetID ids.ID, nodeID ids.NodeID) uint64 {
+	m.lock.RLock()
+	set, exists := m.subnetToVdrs[subnetID]
+	m.lock.RUnlock()
+	if !exists {
+		return 0
+	}
+
+	return set.GetWeight(nodeID)
+}
+
+func (m *manager) GetValidator(subnetID ids.ID, nodeID ids.NodeID) (*Validator, bool) {
+	m.lock.RLock()
+	set, exists := m.subnetToVdrs[subnetID]
+	m.lock.RUnlock()
+	if !exists {
+		return nil, false
+	}
+
+	return set.Get(nodeID)
+}
+
+func (m *manager) SubsetWeight(subnetID ids.ID, validatorIDs set.Set[ids.NodeID]) *big.Int {
+	m.lock.RLock()
+	set, exists := m.subnetToVdrs[subnetID]
+	m.lock.RUnlock()
+	if !exists {
+		return big.NewInt(0)
+	}
+
+	return set.SubsetWeight(validatorIDs)
+}
+
+func (m *manager) RemoveWeight(subnetID ids.ID, nodeID ids.NodeID, weight uint64) error {
+	if weight == 0 {
+		return ErrZeroWeight
+	}
+
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	if m.maskedVdrs.Contains(vdrID) {
-		return nil
+	set, exists := m.subnetToVdrs[subnetID]
+	if !exists {
+		return errMissingValidator
 	}
-	m.maskedVdrs.Add(vdrID)
 
-	for _, vdrs := range m.subnetToVdrs {
-		if err := vdrs.MaskValidator(vdrID); err != nil {
-			return err
-		}
+	if err := set.RemoveWeight(nodeID, weight); err != nil {
+		return err
 	}
+	// If this was the last validator in the subnet and no callback listeners
+	// are registered, remove the subnet
+	if set.Len() == 0 && !set.HasCallbackRegistered() {
+		delete(m.subnetToVdrs, subnetID)
+	}
+
 	return nil
 }
 
-func (m *manager) RevealValidator(vdrID ids.NodeID) error {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-
-	if !m.maskedVdrs.Contains(vdrID) {
-		return nil
-	}
-	m.maskedVdrs.Remove(vdrID)
-
-	for _, vdrs := range m.subnetToVdrs {
-		if err := vdrs.RevealValidator(vdrID); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (m *manager) Contains(subnetID ids.ID, vdrID ids.NodeID) bool {
+func (m *manager) NumSubnets() int {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
-	vdrs, ok := m.subnetToVdrs[subnetID]
-	if ok {
-		return vdrs.Contains(vdrID)
+	return len(m.subnetToVdrs)
+}
+
+func (m *manager) NumValidators(subnetID ids.ID) int {
+	m.lock.RLock()
+	set, exists := m.subnetToVdrs[subnetID]
+	m.lock.RUnlock()
+	if !exists {
+		return 0
 	}
-	return false
+
+	return set.Len()
+}
+
+func (m *manager) TotalWeight(subnetID ids.ID) *big.Int {
+	m.lock.RLock()
+	set, exists := m.subnetToVdrs[subnetID]
+	m.lock.RUnlock()
+	if !exists {
+		return big.NewInt(0)
+	}
+
+	return set.TotalWeight()
+}
+
+func (m *manager) Sample(subnetID ids.ID, size int) ([]ids.NodeID, error) {
+	if size == 0 {
+		return nil, nil
+	}
+
+	m.lock.RLock()
+	set, exists := m.subnetToVdrs[subnetID]
+	m.lock.RUnlock()
+	if !exists {
+		return nil, ErrMissingValidators
+	}
+
+	return set.Sample(size)
+}
+
+func (m *manager) GetMap(subnetID ids.ID) map[ids.NodeID]*GetValidatorOutput {
+	m.lock.RLock()
+	set, exists := m.subnetToVdrs[subnetID]
+	m.lock.RUnlock()
+	if !exists {
+		return make(map[ids.NodeID]*GetValidatorOutput)
+	}
+
+	return set.Map()
+}
+
+func (m *manager) RegisterCallbackListener(listener ManagerCallbackListener) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	m.callbackListeners = append(m.callbackListeners, listener)
+	for _, set := range m.subnetToVdrs {
+		set.RegisterManagerCallbackListener(listener)
+	}
+}
+
+func (m *manager) RegisterSetCallbackListener(subnetID ids.ID, listener SetCallbackListener) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	set, exists := m.subnetToVdrs[subnetID]
+	if !exists {
+		set = newSet(subnetID, m.callbackListeners)
+		m.subnetToVdrs[subnetID] = set
+	}
+
+	set.RegisterCallbackListener(listener)
 }
 
 func (m *manager) String() string {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
-	subnets := make([]ids.ID, 0, len(m.subnetToVdrs))
-	for subnetID := range m.subnetToVdrs {
-		subnets = append(subnets, subnetID)
-	}
-	ids.SortIDs(subnets)
+	subnets := maps.Keys(m.subnetToVdrs)
+	utils.Sort(subnets)
 
 	sb := strings.Builder{}
 
@@ -176,4 +330,15 @@ func (m *manager) String() string {
 	}
 
 	return sb.String()
+}
+
+func (m *manager) GetValidatorIDs(subnetID ids.ID) []ids.NodeID {
+	m.lock.RLock()
+	vdrs, exist := m.subnetToVdrs[subnetID]
+	m.lock.RUnlock()
+	if !exist {
+		return nil
+	}
+
+	return vdrs.GetValidatorIDs()
 }

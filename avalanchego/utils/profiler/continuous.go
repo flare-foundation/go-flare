@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package profiler
@@ -37,7 +37,7 @@ type continuousProfiler struct {
 
 func NewContinuous(dir string, freq time.Duration, maxNumFiles int) ContinuousProfiler {
 	return &continuousProfiler{
-		profiler:    new(dir),
+		profiler:    newProfiler(dir),
 		freq:        freq,
 		maxNumFiles: maxNumFiles,
 		closer:      make(chan struct{}),
@@ -82,9 +82,15 @@ func (p *continuousProfiler) stop() error {
 
 func (p *continuousProfiler) rotate() error {
 	g := errgroup.Group{}
-	g.Go(func() error { return rotate(p.profiler.cpuProfileName, p.maxNumFiles) })
-	g.Go(func() error { return rotate(p.profiler.memProfileName, p.maxNumFiles) })
-	g.Go(func() error { return rotate(p.profiler.lockProfileName, p.maxNumFiles) })
+	g.Go(func() error {
+		return rotate(p.profiler.cpuProfileName, p.maxNumFiles)
+	})
+	g.Go(func() error {
+		return rotate(p.profiler.memProfileName, p.maxNumFiles)
+	})
+	g.Go(func() error {
+		return rotate(p.profiler.lockProfileName, p.maxNumFiles)
+	})
 	return g.Wait()
 }
 
@@ -102,7 +108,7 @@ func rotate(name string, maxNumFiles int) error {
 			return err
 		}
 	}
-	destFilename := fmt.Sprintf("%s.1", name)
+	destFilename := name + ".1"
 	_, err := filesystem.RenameIfExists(name, destFilename)
 	return err
 }

@@ -1,12 +1,14 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package txs
 
 import (
-	"bytes"
 	"errors"
+	"fmt"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ava-labs/avalanchego/codec"
 	"github.com/ava-labs/avalanchego/codec/linearcodec"
@@ -16,15 +18,15 @@ import (
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 )
 
+var errTest = errors.New("non-nil error")
+
 func TestInitialStateVerifySerialization(t *testing.T) {
+	require := require.New(t)
+
 	c := linearcodec.NewDefault()
-	if err := c.RegisterType(&secp256k1fx.TransferOutput{}); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(c.RegisterType(&secp256k1fx.TransferOutput{}))
 	m := codec.NewDefaultManager()
-	if err := m.RegisterCodec(CodecVersion, c); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(m.RegisterCodec(CodecVersion, c))
 
 	expected := []byte{
 		// Codec version:
@@ -71,93 +73,78 @@ func TestInitialStateVerifySerialization(t *testing.T) {
 	}
 
 	isBytes, err := m.Marshal(CodecVersion, is)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(isBytes, expected) {
-		t.Fatalf("Expected:\n0x%x\nResult:\n0x%x",
-			expected,
-			isBytes,
-		)
-	}
+	require.NoError(err)
+	require.Equal(expected, isBytes)
 }
 
 func TestInitialStateVerifyNil(t *testing.T) {
+	require := require.New(t)
+
 	c := linearcodec.NewDefault()
 	m := codec.NewDefaultManager()
-	if err := m.RegisterCodec(CodecVersion, c); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(m.RegisterCodec(CodecVersion, c))
 	numFxs := 1
 
 	is := (*InitialState)(nil)
-	if err := is.Verify(m, numFxs); err == nil {
-		t.Fatalf("Should have erred due to nil initial state")
-	}
+	err := is.Verify(m, numFxs)
+	require.ErrorIs(err, ErrNilInitialState)
 }
 
 func TestInitialStateVerifyUnknownFxID(t *testing.T) {
+	require := require.New(t)
+
 	c := linearcodec.NewDefault()
 	m := codec.NewDefaultManager()
-	if err := m.RegisterCodec(CodecVersion, c); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(m.RegisterCodec(CodecVersion, c))
 	numFxs := 1
 
 	is := InitialState{
 		FxIndex: 1,
 	}
-	if err := is.Verify(m, numFxs); err == nil {
-		t.Fatalf("Should have erred due to unknown FxIndex")
-	}
+	err := is.Verify(m, numFxs)
+	require.ErrorIs(err, ErrUnknownFx)
 }
 
 func TestInitialStateVerifyNilOutput(t *testing.T) {
+	require := require.New(t)
+
 	c := linearcodec.NewDefault()
 	m := codec.NewDefaultManager()
-	if err := m.RegisterCodec(CodecVersion, c); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(m.RegisterCodec(CodecVersion, c))
 	numFxs := 1
 
 	is := InitialState{
 		FxIndex: 0,
 		Outs:    []verify.State{nil},
 	}
-	if err := is.Verify(m, numFxs); err == nil {
-		t.Fatalf("Should have erred due to a nil output")
-	}
+	err := is.Verify(m, numFxs)
+	require.ErrorIs(err, ErrNilFxOutput)
 }
 
 func TestInitialStateVerifyInvalidOutput(t *testing.T) {
+	require := require.New(t)
+
 	c := linearcodec.NewDefault()
-	if err := c.RegisterType(&avax.TestVerifiable{}); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(c.RegisterType(&avax.TestState{}))
 	m := codec.NewDefaultManager()
-	if err := m.RegisterCodec(CodecVersion, c); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(m.RegisterCodec(CodecVersion, c))
 	numFxs := 1
 
 	is := InitialState{
 		FxIndex: 0,
-		Outs:    []verify.State{&avax.TestVerifiable{Err: errors.New("")}},
+		Outs:    []verify.State{&avax.TestState{Err: errTest}},
 	}
-	if err := is.Verify(m, numFxs); err == nil {
-		t.Fatalf("Should have erred due to an invalid output")
-	}
+	err := is.Verify(m, numFxs)
+	require.ErrorIs(err, errTest)
 }
 
 func TestInitialStateVerifyUnsortedOutputs(t *testing.T) {
+	require := require.New(t)
+
 	c := linearcodec.NewDefault()
-	if err := c.RegisterType(&avax.TestTransferable{}); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(c.RegisterType(&avax.TestTransferable{}))
 	m := codec.NewDefaultManager()
-	if err := m.RegisterCodec(CodecVersion, c); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(m.RegisterCodec(CodecVersion, c))
 	numFxs := 1
 
 	is := InitialState{
@@ -167,13 +154,37 @@ func TestInitialStateVerifyUnsortedOutputs(t *testing.T) {
 			&avax.TestTransferable{Val: 0},
 		},
 	}
-	if err := is.Verify(m, numFxs); err == nil {
-		t.Fatalf("Should have erred due to unsorted outputs")
-	}
-
+	err := is.Verify(m, numFxs)
+	require.ErrorIs(err, ErrOutputsNotSorted)
 	is.Sort(m)
+	require.NoError(is.Verify(m, numFxs))
+}
 
-	if err := is.Verify(m, numFxs); err != nil {
-		t.Fatal(err)
+func TestInitialStateCompare(t *testing.T) {
+	tests := []struct {
+		a        *InitialState
+		b        *InitialState
+		expected int
+	}{
+		{
+			a:        &InitialState{},
+			b:        &InitialState{},
+			expected: 0,
+		},
+		{
+			a: &InitialState{
+				FxIndex: 1,
+			},
+			b:        &InitialState{},
+			expected: 1,
+		},
+	}
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("%d_%d_%d", test.a.FxIndex, test.b.FxIndex, test.expected), func(t *testing.T) {
+			require := require.New(t)
+
+			require.Equal(test.expected, test.a.Compare(test.b))
+			require.Equal(-test.expected, test.b.Compare(test.a))
+		})
 	}
 }

@@ -5,18 +5,19 @@ package statesync
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"sync"
 
 	"github.com/ava-labs/avalanchego/utils/wrappers"
 	"github.com/ava-labs/coreth/core/rawdb"
-	"github.com/ava-labs/coreth/ethdb"
 	"github.com/ava-labs/coreth/plugin/evm/message"
 	syncclient "github.com/ava-labs/coreth/sync/client"
 	"github.com/ava-labs/coreth/trie"
 	"github.com/ava-labs/coreth/utils"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -62,13 +63,16 @@ type trieToSync struct {
 
 // NewTrieToSync initializes a trieToSync and restores any previously started segments.
 func NewTrieToSync(sync *stateSync, root common.Hash, account common.Hash, syncTask syncTask) (*trieToSync, error) {
-	batch := sync.db.NewBatch()
+	batch := sync.db.NewBatch() // TODO: migrate state sync to use database schemes.
+	writeFn := func(path []byte, hash common.Hash, blob []byte) {
+		rawdb.WriteTrieNode(batch, account, path, hash, blob, rawdb.HashScheme)
+	}
 	trieToSync := &trieToSync{
 		sync:         sync,
 		root:         root,
 		account:      account,
 		batch:        batch,
-		stackTrie:    trie.NewStackTrie(batch),
+		stackTrie:    trie.NewStackTrie(&trie.StackTrieOptions{Writer: writeFn}),
 		isMainTrie:   (root == sync.root),
 		task:         syncTask,
 		segmentsDone: make(map[int]struct{}),
@@ -158,7 +162,7 @@ func (t *trieToSync) addSegment(start, end []byte) *trieSegment {
 
 // segmentFinished is called when one the trie segment with index [idx] finishes syncing.
 // creates intermediary hash nodes for the trie up to the last contiguous segment received from start.
-func (t *trieToSync) segmentFinished(idx int) error {
+func (t *trieToSync) segmentFinished(ctx context.Context, idx int) error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -183,13 +187,17 @@ func (t *trieToSync) segmentFinished(idx int) error {
 		defer it.Release()
 
 		for it.Next() {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+
 			if len(segment.end) > 0 && bytes.Compare(it.Key(), segment.end) > 0 {
 				// don't go past the end of the segment. (data belongs to the next segment)
 				break
 			}
 			// update the stack trie and cap the batch it writes to.
 			value := common.CopyBytes(it.Value())
-			if err := t.stackTrie.TryUpdate(it.Key(), value); err != nil {
+			if err := t.stackTrie.Update(it.Key(), value); err != nil {
 				return err
 			}
 			if t.batch.ValueSize() > t.sync.batchSize {
@@ -211,10 +219,7 @@ func (t *trieToSync) segmentFinished(idx int) error {
 
 	// when the trie is finished, this hashes any remaining nodes in the stack
 	// trie and creates the root
-	actualRoot, err := t.stackTrie.Commit()
-	if err != nil {
-		return err
-	}
+	actualRoot := t.stackTrie.Commit()
 	if actualRoot != t.root {
 		return fmt.Errorf("unexpected root, expected=%s, actual=%s, account=%s", t.root, actualRoot, t.account)
 	}
@@ -337,12 +342,12 @@ func (t *trieSegment) String() string {
 }
 
 // these functions implement the LeafSyncTask interface.
-func (t *trieSegment) Root() common.Hash          { return t.trie.root }
-func (t *trieSegment) Account() common.Hash       { return t.trie.account }
-func (t *trieSegment) End() []byte                { return t.end }
-func (t *trieSegment) NodeType() message.NodeType { return message.StateTrieNode }
-func (t *trieSegment) OnStart() (bool, error)     { return t.trie.task.OnStart() }
-func (t *trieSegment) OnFinish() error            { return t.trie.segmentFinished(t.idx) }
+func (t *trieSegment) Root() common.Hash                  { return t.trie.root }
+func (t *trieSegment) Account() common.Hash               { return t.trie.account }
+func (t *trieSegment) End() []byte                        { return t.end }
+func (t *trieSegment) NodeType() message.NodeType         { return message.StateTrieNode }
+func (t *trieSegment) OnStart() (bool, error)             { return t.trie.task.OnStart() }
+func (t *trieSegment) OnFinish(ctx context.Context) error { return t.trie.segmentFinished(ctx, t.idx) }
 
 func (t *trieSegment) Start() []byte {
 	if t.pos != nil {

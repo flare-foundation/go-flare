@@ -27,17 +27,20 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/big"
 
 	"github.com/ava-labs/coreth/consensus"
-	"github.com/ava-labs/coreth/consensus/misc"
 	"github.com/ava-labs/coreth/core/state"
 	"github.com/ava-labs/coreth/core/types"
 	"github.com/ava-labs/coreth/core/vm"
 	"github.com/ava-labs/coreth/params"
+	"github.com/ava-labs/coreth/precompile/contract"
+	"github.com/ava-labs/coreth/precompile/modules"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // StateProcessor is a basic Processor, which takes care of transitioning
@@ -75,26 +78,31 @@ func (p *StateProcessor) Process(block *types.Block, parent *types.Header, state
 		blockNumber = block.Number()
 		allLogs     []*types.Log
 		gp          = new(GasPool).AddGas(block.GasLimit())
-		timestamp   = new(big.Int).SetUint64(header.Time)
 	)
 
-	// Configure any stateful precompiles that should go into effect during this block.
-	p.config.CheckConfigurePrecompiles(new(big.Int).SetUint64(parent.Time), block, statedb)
-
-	// Mutate the block and state according to any hard-fork specs
-	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
-		misc.ApplyDAOHardFork(statedb)
+	// Configure any upgrades that should go into effect during this block.
+	err := ApplyUpgrades(p.config, &parent.Time, block, statedb)
+	if err != nil {
+		log.Error("failed to configure precompiles processing block", "hash", block.Hash(), "number", block.NumberU64(), "timestamp", block.Time(), "err", err)
+		return nil, nil, 0, err
 	}
-	blockContext := NewEVMBlockContext(header, p.bc, nil)
-	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, p.config, cfg)
+
+	var (
+		context = NewEVMBlockContext(header, p.bc, nil)
+		vmenv   = vm.NewEVM(context, vm.TxContext{}, statedb, p.config, cfg)
+		signer  = types.MakeSigner(p.config, header.Number, header.Time)
+	)
+	if beaconRoot := block.BeaconRoot(); beaconRoot != nil {
+		ProcessBeaconBlockRoot(*beaconRoot, vmenv, statedb)
+	}
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
-		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number, timestamp), header.BaseFee)
+		msg, err := TransactionToMessage(tx, signer, header.BaseFee)
 		if err != nil {
 			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
-		statedb.Prepare(tx.Hash(), i)
-		receipt, err := applyTransaction(msg, p.config, p.bc, nil, gp, statedb, blockNumber, blockHash, tx, usedGas, vmenv)
+		statedb.SetTxContext(tx.Hash(), i)
+		receipt, err := applyTransaction(msg, p.config, gp, statedb, blockNumber, blockHash, tx, usedGas, vmenv)
 		if err != nil {
 			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
@@ -109,7 +117,7 @@ func (p *StateProcessor) Process(block *types.Block, parent *types.Header, state
 	return receipts, allLogs, *usedGas, nil
 }
 
-func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM) (*types.Receipt, error) {
+func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM) (*types.Receipt, error) {
 	// Create a new context to be used in the EVM environment.
 	txContext := NewEVMTxContext(msg)
 	evm.Reset(txContext, statedb)
@@ -140,13 +148,18 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	receipt.TxHash = tx.Hash()
 	receipt.GasUsed = result.UsedGas
 
+	if tx.Type() == types.BlobTxType {
+		receipt.BlobGasUsed = uint64(len(tx.BlobHashes()) * params.BlobTxBlobGasPerBlob)
+		receipt.BlobGasPrice = evm.Context.BlobBaseFee
+	}
+
 	// If the transaction created a contract, store the creation address in the receipt.
-	if msg.To() == nil {
+	if msg.To == nil {
 		receipt.ContractAddress = crypto.CreateAddress(evm.TxContext.Origin, tx.Nonce())
 	}
 
 	// Set the receipt logs and create the bloom filter.
-	receipt.Logs = statedb.GetLogs(tx.Hash(), blockHash)
+	receipt.Logs = statedb.GetLogs(tx.Hash(), blockNumber.Uint64(), blockHash)
 	receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 	receipt.BlockHash = blockHash
 	receipt.BlockNumber = blockNumber
@@ -158,13 +171,92 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 // and uses the input parameters for its environment. It returns the receipt
 // for the transaction, gas used and an error if the transaction failed,
 // indicating the block was invalid.
-func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config) (*types.Receipt, error) {
-	msg, err := tx.AsMessage(types.MakeSigner(config, header.Number, new(big.Int).SetUint64(header.Time)), header.BaseFee)
+func ApplyTransaction(config *params.ChainConfig, bc ChainContext, blockContext vm.BlockContext, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config) (*types.Receipt, error) {
+	msg, err := TransactionToMessage(tx, types.MakeSigner(config, header.Number, header.Time), header.BaseFee)
 	if err != nil {
 		return nil, err
 	}
 	// Create a new context to be used in the EVM environment
-	blockContext := NewEVMBlockContext(header, bc, author)
-	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg)
-	return applyTransaction(msg, config, bc, author, gp, statedb, header.Number, header.Hash(), tx, usedGas, vmenv)
+	txContext := NewEVMTxContext(msg)
+	vmenv := vm.NewEVM(blockContext, txContext, statedb, config, cfg)
+	return applyTransaction(msg, config, gp, statedb, header.Number, header.Hash(), tx, usedGas, vmenv)
+}
+
+// ProcessBeaconBlockRoot applies the EIP-4788 system call to the beacon block root
+// contract. This method is exported to be used in tests.
+func ProcessBeaconBlockRoot(beaconRoot common.Hash, vmenv *vm.EVM, statedb *state.StateDB) {
+	// If EIP-4788 is enabled, we need to invoke the beaconroot storage contract with
+	// the new root
+	msg := &Message{
+		From:      params.SystemAddress,
+		GasLimit:  30_000_000,
+		GasPrice:  common.Big0,
+		GasFeeCap: common.Big0,
+		GasTipCap: common.Big0,
+		To:        &params.BeaconRootsStorageAddress,
+		Data:      beaconRoot[:],
+	}
+	vmenv.Reset(NewEVMTxContext(msg), statedb)
+	statedb.AddAddressToAccessList(params.BeaconRootsStorageAddress)
+	_, _, _ = vmenv.Call(vm.AccountRef(msg.From), *msg.To, msg.Data, 30_000_000, common.U2560)
+	statedb.Finalise(true)
+}
+
+// ApplyPrecompileActivations checks if any of the precompiles specified by the chain config are enabled or disabled by the block
+// transition from [parentTimestamp] to the timestamp set in [blockContext]. If this is the case, it calls [Configure]
+// to apply the necessary state transitions for the upgrade.
+// This function is called within genesis setup to configure the starting state for precompiles enabled at genesis.
+// In block processing and building, ApplyUpgrades is called instead which also applies state upgrades.
+func ApplyPrecompileActivations(c *params.ChainConfig, parentTimestamp *uint64, blockContext contract.ConfigurationBlockContext, statedb *state.StateDB) error {
+	blockTimestamp := blockContext.Timestamp()
+	// Note: RegisteredModules returns precompiles sorted by module addresses.
+	// This ensures that the order we call Configure for each precompile is consistent.
+	// This ensures even if precompiles read/write state other than their own they will observe
+	// an identical global state in a deterministic order when they are configured.
+	for _, module := range modules.RegisteredModules() {
+		for _, activatingConfig := range c.GetActivatingPrecompileConfigs(module.Address, parentTimestamp, blockTimestamp, c.PrecompileUpgrades) {
+			// If this transition activates the upgrade, configure the stateful precompile.
+			// (or deconfigure it if it is being disabled.)
+			if activatingConfig.IsDisabled() {
+				log.Info("Disabling precompile", "name", module.ConfigKey)
+				statedb.SelfDestruct(module.Address)
+				// Calling Finalise here effectively commits Suicide call and wipes the contract state.
+				// This enables re-configuration of the same contract state in the same block.
+				// Without an immediate Finalise call after the Suicide, a reconfigured precompiled state can be wiped out
+				// since Suicide will be committed after the reconfiguration.
+				statedb.Finalise(true)
+			} else {
+				var printIntf interface{}
+				marshalled, err := json.Marshal(activatingConfig)
+				if err == nil {
+					printIntf = string(marshalled)
+				} else {
+					printIntf = activatingConfig
+				}
+
+				log.Info("Activating new precompile", "name", module.ConfigKey, "config", printIntf)
+				// Set the nonce of the precompile's address (as is done when a contract is created) to ensure
+				// that it is marked as non-empty and will not be cleaned up when the statedb is finalized.
+				statedb.SetNonce(module.Address, 1)
+				// Set the code of the precompile's address to a non-zero length byte slice to ensure that the precompile
+				// can be called from within Solidity contracts. Solidity adds a check before invoking a contract to ensure
+				// that it does not attempt to invoke a non-existent contract.
+				statedb.SetCode(module.Address, []byte{0x1})
+				if err := module.Configure(c, activatingConfig, statedb, blockContext); err != nil {
+					return fmt.Errorf("could not configure precompile, name: %s, reason: %w", module.ConfigKey, err)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// ApplyUpgrades checks if any of the precompile or state upgrades specified by the chain config are activated by the block
+// transition from [parentTimestamp] to the timestamp set in [header]. If this is the case, it calls [Configure]
+// to apply the necessary state transitions for the upgrade.
+// This function is called:
+// - in block processing to update the state when processing a block.
+// - in the miner to apply the state upgrades when producing a block.
+func ApplyUpgrades(c *params.ChainConfig, parentTimestamp *uint64, blockContext contract.ConfigurationBlockContext, statedb *state.StateDB) error {
+	return ApplyPrecompileActivations(c, parentTimestamp, blockContext, statedb)
 }

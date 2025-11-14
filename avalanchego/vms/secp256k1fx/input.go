@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package secp256k1fx
@@ -15,8 +15,8 @@ const (
 )
 
 var (
-	errNilInput        = errors.New("nil input")
-	errNotSortedUnique = errors.New("signatures not sorted and unique")
+	ErrNilInput                    = errors.New("nil input")
+	ErrInputIndicesNotSortedUnique = errors.New("address indices not sorted and unique")
 )
 
 type Input struct {
@@ -28,16 +28,16 @@ type Input struct {
 
 func (in *Input) Cost() (uint64, error) {
 	numSigs := uint64(len(in.SigIndices))
-	return math.Mul64(numSigs, CostPerSignature)
+	return math.Mul(numSigs, CostPerSignature)
 }
 
 // Verify this input is syntactically valid
 func (in *Input) Verify() error {
 	switch {
 	case in == nil:
-		return errNilInput
-	case !utils.IsSortedAndUniqueUint32(in.SigIndices):
-		return errNotSortedUnique
+		return ErrNilInput
+	case !utils.IsSortedAndUniqueOrdered(in.SigIndices):
+		return ErrInputIndicesNotSortedUnique
 	default:
 		return nil
 	}

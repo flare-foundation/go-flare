@@ -1,16 +1,16 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package staking
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"math/big"
 	"os"
@@ -19,8 +19,6 @@ import (
 
 	"github.com/ava-labs/avalanchego/utils/perms"
 )
-
-var errDuplicateExtension = errors.New("duplicate certificate extension")
 
 // InitNodeStakingKeyPair generates a self-signed TLS key/cert pair to use in
 // staking. The key and files will be placed at [keyPath] and [certPath],
@@ -86,7 +84,7 @@ func LoadTLSCertFromBytes(keyBytes, certBytes []byte) (*tls.Certificate, error) 
 	if err != nil {
 		return nil, fmt.Errorf("failed parsing cert: %w", err)
 	}
-	return &cert, VerifyCertificate(cert.Leaf)
+	return &cert, nil
 }
 
 func LoadTLSCertFromFiles(keyPath, certPath string) (*tls.Certificate, error) {
@@ -98,7 +96,7 @@ func LoadTLSCertFromFiles(keyPath, certPath string) (*tls.Certificate, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed parsing cert: %w", err)
 	}
-	return &cert, VerifyCertificate(cert.Leaf)
+	return &cert, nil
 }
 
 func NewTLSCert() (*tls.Certificate, error) {
@@ -118,9 +116,9 @@ func NewTLSCert() (*tls.Certificate, error) {
 // Returns the PEM byte representations of both.
 func NewCertAndKeyBytes() ([]byte, []byte, error) {
 	// Create key to sign cert with
-	key, err := rsa.GenerateKey(rand.Reader, 4096)
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return nil, nil, fmt.Errorf("couldn't generate rsa key: %w", err)
+		return nil, nil, fmt.Errorf("couldn't generate ecdsa key: %w", err)
 	}
 
 	// Create self-signed staking cert
@@ -128,10 +126,10 @@ func NewCertAndKeyBytes() ([]byte, []byte, error) {
 		SerialNumber:          big.NewInt(0),
 		NotBefore:             time.Date(2000, time.January, 0, 0, 0, 0, 0, time.UTC),
 		NotAfter:              time.Now().AddDate(100, 0, 0),
-		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageDataEncipherment,
+		KeyUsage:              x509.KeyUsageDigitalSignature,
 		BasicConstraintsValid: true,
 	}
-	certBytes, err := x509.CreateCertificate(rand.Reader, certTemplate, certTemplate, &key.PublicKey, key)
+	certBytes, err := x509.CreateCertificate(rand.Reader, certTemplate, certTemplate, key.Public(), key)
 	if err != nil {
 		return nil, nil, fmt.Errorf("couldn't create certificate: %w", err)
 	}
@@ -150,16 +148,4 @@ func NewCertAndKeyBytes() ([]byte, []byte, error) {
 		return nil, nil, fmt.Errorf("couldn't write private key: %w", err)
 	}
 	return certBuff.Bytes(), keyBuff.Bytes(), nil
-}
-
-func VerifyCertificate(cert *x509.Certificate) error {
-	extensionSet := make(map[string]struct{}, len(cert.Extensions))
-	for _, extension := range cert.Extensions {
-		idStr := extension.Id.String()
-		if _, ok := extensionSet[idStr]; ok {
-			return errDuplicateExtension
-		}
-		extensionSet[idStr] = struct{}{}
-	}
-	return nil
 }

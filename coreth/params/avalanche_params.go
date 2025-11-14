@@ -13,40 +13,43 @@ import (
 const (
 	// MinGasPrice is the number of nAVAX required per gas unit for a
 	// transaction to be valid, measured in wei
-	LaunchMinGasPrice        int64 = 470_000_000_000
-	ApricotPhase1MinGasPrice int64 = 225_000_000_000
+	LaunchMinGasPrice        int64 = 470 * GWei
+	ApricotPhase1MinGasPrice int64 = 225 * GWei
 
 	AvalancheAtomicTxFee = units.MilliAvax
 
 	ApricotPhase1GasLimit uint64 = 8_000_000
+	CortinaGasLimit       uint64 = 15_000_000
+
+	// Revert to the default gas limit after the Songbird transition due to re-enabled transfer between chains
+	SgbTransitionGasLimit    uint64 = 8_000_000
+	SgbApricotPhase5GasLimit uint64 = 30_000_000
 
 	ApricotPhase3ExtraDataSize            uint64 = 80
-	ApricotPhase3MinBaseFee               int64  = 75_000_000_000
-	ApricotPhase3MaxBaseFee               int64  = 225_000_000_000
-	ApricotPhase3InitialBaseFee           int64  = 225_000_000_000
+	ApricotPhase3MinBaseFee               int64  = 75 * GWei
+	ApricotPhase3MaxBaseFee               int64  = 225 * GWei
+	ApricotPhase3InitialBaseFee           int64  = 225 * GWei
 	ApricotPhase3TargetGas                uint64 = 10_000_000
-	ApricotPhase4MinBaseFee               int64  = 25_000_000_000
-	ApricotPhase4MaxBaseFee               int64  = 1_000_000_000_000
+	ApricotPhase4MinBaseFee               int64  = 25 * GWei
+	ApricotPhase4MaxBaseFee               int64  = 1_000 * GWei
 	ApricotPhase4BaseFeeChangeDenominator uint64 = 12
 	ApricotPhase5TargetGas                uint64 = 15_000_000
+	SgbApricotPhase5TargetGas             uint64 = 150_000_000
 	ApricotPhase5BaseFeeChangeDenominator uint64 = 36
+	EtnaMinBaseFee                        int64  = 25 * GWei // No change after Etna in contrast to Avalanche value of 1 GWei
+
+	DynamicFeeExtraDataSize        = 80
+	RollupWindow            uint64 = 10
 
 	// The base cost to charge per atomic transaction. Added in Apricot Phase 5.
 	AtomicTxBaseCost uint64 = 10_000
 )
 
-// Constants for message sizes
-const (
-	MaxCodeHashesPerRequest = 5
-)
-
-var (
-	// The atomic gas limit specifies the maximum amount of gas that can be consumed by the atomic
-	// transactions included in a block and is enforced as of ApricotPhase5. Prior to ApricotPhase5,
-	// a block included a single atomic transaction. As of ApricotPhase5, each block can include a set
-	// of atomic transactions where the cumulative atomic gas consumed is capped by the atomic gas limit,
-	// similar to the block gas limit.
-	//
-	// This value must always remain <= MaxUint64.
-	AtomicGasLimit *big.Int = big.NewInt(100_000)
-)
+// The atomic gas limit specifies the maximum amount of gas that can be consumed by the atomic
+// transactions included in a block and is enforced as of ApricotPhase5. Prior to ApricotPhase5,
+// a block included a single atomic transaction. As of ApricotPhase5, each block can include a set
+// of atomic transactions where the cumulative atomic gas consumed is capped by the atomic gas limit,
+// similar to the block gas limit.
+//
+// This value must always remain <= MaxUint64.
+var AtomicGasLimit *big.Int = big.NewInt(100_000)

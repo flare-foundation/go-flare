@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package indexer
@@ -6,26 +6,21 @@ package indexer
 import (
 	"fmt"
 	"io"
-	"math"
 	"sync"
 
 	"github.com/gorilla/rpc/v2"
-
 	"go.uber.org/zap"
 
 	"github.com/ava-labs/avalanchego/api/server"
 	"github.com/ava-labs/avalanchego/chains"
-	"github.com/ava-labs/avalanchego/codec"
-	"github.com/ava-labs/avalanchego/codec/linearcodec"
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/database/prefixdb"
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow"
-	"github.com/ava-labs/avalanchego/snow/engine/avalanche"
+	"github.com/ava-labs/avalanchego/snow/engine/avalanche/vertex"
 	"github.com/ava-labs/avalanchego/snow/engine/common"
-	"github.com/ava-labs/avalanchego/snow/engine/snowman"
+	"github.com/ava-labs/avalanchego/snow/engine/snowman/block"
 	"github.com/ava-labs/avalanchego/utils/constants"
-	"github.com/ava-labs/avalanchego/utils/hashing"
 	"github.com/ava-labs/avalanchego/utils/json"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
@@ -33,38 +28,31 @@ import (
 )
 
 const (
-	indexNamePrefix = "index-"
-	codecVersion    = uint16(0)
-	// Max size, in bytes, of something serialized by this indexer
-	// Assumes no containers are larger than math.MaxUint32
-	// wrappers.IntLen accounts for the size of the container bytes
-	// wrappers.LongLen accounts for the timestamp of the container
-	// hashing.HashLen accounts for the container ID
-	// wrappers.ShortLen accounts for the codec version
-	codecMaxSize = int(constants.DefaultMaxMessageSize) + wrappers.IntLen + wrappers.LongLen + hashing.HashLen + wrappers.ShortLen
+	indexNamePrefix         = "index-"
+	txPrefix                = 0x01
+	vtxPrefix               = 0x02
+	blockPrefix             = 0x03
+	isIncompletePrefix      = 0x04
+	previouslyIndexedPrefix = 0x05
 )
 
 var (
-	txPrefix                = byte(0x01)
-	vtxPrefix               = byte(0x02)
-	blockPrefix             = byte(0x03)
-	isIncompletePrefix      = byte(0x04)
-	previouslyIndexedPrefix = byte(0x05)
-	hasRunKey               = []byte{0x07}
+	_ Indexer = (*indexer)(nil)
 
-	_ Indexer = &indexer{}
+	hasRunKey = []byte{0x07}
 )
 
 // Config for an indexer
 type Config struct {
-	DB                     database.Database
-	Log                    logging.Logger
-	IndexingEnabled        bool
-	AllowIncompleteIndex   bool
-	DecisionAcceptorGroup  snow.AcceptorGroup
-	ConsensusAcceptorGroup snow.AcceptorGroup
-	APIServer              server.PathAdder
-	ShutdownF              func()
+	DB                   database.Database
+	Log                  logging.Logger
+	IndexingEnabled      bool
+	AllowIncompleteIndex bool
+	BlockAcceptorGroup   snow.AcceptorGroup
+	TxAcceptorGroup      snow.AcceptorGroup
+	VertexAcceptorGroup  snow.AcceptorGroup
+	APIServer            server.PathAdder
+	ShutdownF            func()
 }
 
 // Indexer causes accepted containers for a given chain
@@ -80,26 +68,20 @@ type Indexer interface {
 // NewIndexer returns a new Indexer and registers a new endpoint on the given API server.
 func NewIndexer(config Config) (Indexer, error) {
 	indexer := &indexer{
-		codec:                  codec.NewManager(codecMaxSize),
-		log:                    config.Log,
-		db:                     config.DB,
-		allowIncompleteIndex:   config.AllowIncompleteIndex,
-		indexingEnabled:        config.IndexingEnabled,
-		decisionAcceptorGroup:  config.DecisionAcceptorGroup,
-		consensusAcceptorGroup: config.ConsensusAcceptorGroup,
-		txIndices:              map[ids.ID]Index{},
-		vtxIndices:             map[ids.ID]Index{},
-		blockIndices:           map[ids.ID]Index{},
-		pathAdder:              config.APIServer,
-		shutdownF:              config.ShutdownF,
+		log:                  config.Log,
+		db:                   config.DB,
+		allowIncompleteIndex: config.AllowIncompleteIndex,
+		indexingEnabled:      config.IndexingEnabled,
+		blockAcceptorGroup:   config.BlockAcceptorGroup,
+		txAcceptorGroup:      config.TxAcceptorGroup,
+		vertexAcceptorGroup:  config.VertexAcceptorGroup,
+		txIndices:            map[ids.ID]*index{},
+		vtxIndices:           map[ids.ID]*index{},
+		blockIndices:         map[ids.ID]*index{},
+		pathAdder:            config.APIServer,
+		shutdownF:            config.ShutdownF,
 	}
 
-	if err := indexer.codec.RegisterCodec(
-		codecVersion,
-		linearcodec.NewCustomMaxLength(math.MaxUint32),
-	); err != nil {
-		return nil, fmt.Errorf("couldn't register codec: %w", err)
-	}
 	hasRun, err := indexer.hasRun()
 	if err != nil {
 		return nil, err
@@ -109,7 +91,6 @@ func NewIndexer(config Config) (Indexer, error) {
 }
 
 type indexer struct {
-	codec  codec.Manager
 	clock  mockable.Clock
 	lock   sync.RWMutex
 	log    logging.Logger
@@ -133,34 +114,35 @@ type indexer struct {
 	indexingEnabled bool
 
 	// Chain ID --> index of blocks of that chain (if applicable)
-	blockIndices map[ids.ID]Index
+	blockIndices map[ids.ID]*index
 	// Chain ID --> index of vertices of that chain (if applicable)
-	vtxIndices map[ids.ID]Index
+	vtxIndices map[ids.ID]*index
 	// Chain ID --> index of txs of that chain (if applicable)
-	txIndices map[ids.ID]Index
+	txIndices map[ids.ID]*index
 
+	// Notifies of newly accepted blocks
+	blockAcceptorGroup snow.AcceptorGroup
 	// Notifies of newly accepted transactions
-	decisionAcceptorGroup snow.AcceptorGroup
-	// Notifies of newly accepted blocks and vertices
-	consensusAcceptorGroup snow.AcceptorGroup
+	txAcceptorGroup snow.AcceptorGroup
+	// Notifies of newly accepted vertices
+	vertexAcceptorGroup snow.AcceptorGroup
 }
 
-// Assumes [engine]'s context lock is not held
-func (i *indexer) RegisterChain(name string, engine common.Engine) {
+// Assumes [ctx.Lock] is not held
+func (i *indexer) RegisterChain(chainName string, ctx *snow.ConsensusContext, vm common.VM) {
 	i.lock.Lock()
 	defer i.lock.Unlock()
 
-	ctx := engine.Context()
 	if i.closed {
 		i.log.Debug("not registering chain to indexer",
 			zap.String("reason", "indexer is closed"),
-			zap.String("chainName", name),
+			zap.String("chainName", chainName),
 		)
 		return
 	} else if ctx.SubnetID != constants.PrimaryNetworkID {
 		i.log.Debug("not registering chain to indexer",
 			zap.String("reason", "not in the primary network"),
-			zap.String("chainName", name),
+			zap.String("chainName", chainName),
 		)
 		return
 	}
@@ -177,7 +159,7 @@ func (i *indexer) RegisterChain(name string, engine common.Engine) {
 	isIncomplete, err := i.isIncomplete(chainID)
 	if err != nil {
 		i.log.Error("couldn't get whether chain is incomplete",
-			zap.String("chainName", name),
+			zap.String("chainName", chainName),
 			zap.Error(err),
 		)
 		if err := i.close(); err != nil {
@@ -192,7 +174,7 @@ func (i *indexer) RegisterChain(name string, engine common.Engine) {
 	previouslyIndexed, err := i.previouslyIndexed(chainID)
 	if err != nil {
 		i.log.Error("couldn't get whether chain was previously indexed",
-			zap.String("chainName", name),
+			zap.String("chainName", chainName),
 			zap.Error(err),
 		)
 		if err := i.close(); err != nil {
@@ -208,7 +190,7 @@ func (i *indexer) RegisterChain(name string, engine common.Engine) {
 			// We indexed this chain in a previous run but not in this run.
 			// This would create an incomplete index, which is not allowed, so exit.
 			i.log.Fatal("running would cause index to become incomplete but incomplete indices are disabled",
-				zap.String("chainName", name),
+				zap.String("chainName", chainName),
 			)
 			if err := i.close(); err != nil {
 				i.log.Error("failed to close indexer",
@@ -224,7 +206,7 @@ func (i *indexer) RegisterChain(name string, engine common.Engine) {
 			return
 		}
 		i.log.Fatal("couldn't mark chain as incomplete",
-			zap.String("chainName", name),
+			zap.String("chainName", chainName),
 			zap.Error(err),
 		)
 		if err := i.close(); err != nil {
@@ -237,7 +219,7 @@ func (i *indexer) RegisterChain(name string, engine common.Engine) {
 
 	if !i.allowIncompleteIndex && isIncomplete && (previouslyIndexed || i.hasRunBefore) {
 		i.log.Fatal("index is incomplete but incomplete indices are disabled. Shutting down",
-			zap.String("chainName", name),
+			zap.String("chainName", chainName),
 		)
 		if err := i.close(); err != nil {
 			i.log.Error("failed to close indexer",
@@ -250,7 +232,7 @@ func (i *indexer) RegisterChain(name string, engine common.Engine) {
 	// Mark that in this run, this chain was indexed
 	if err := i.markPreviouslyIndexed(chainID); err != nil {
 		i.log.Error("couldn't mark chain as indexed",
-			zap.String("chainName", name),
+			zap.String("chainName", chainName),
 			zap.Error(err),
 		)
 		if err := i.close(); err != nil {
@@ -261,27 +243,29 @@ func (i *indexer) RegisterChain(name string, engine common.Engine) {
 		return
 	}
 
-	switch engine.(type) {
-	case snowman.Engine:
-		index, err := i.registerChainHelper(chainID, blockPrefix, name, "block", i.consensusAcceptorGroup)
-		if err != nil {
-			i.log.Fatal("failed to create block index",
-				zap.String("chainName", name),
+	index, err := i.registerChainHelper(chainID, blockPrefix, chainName, "block", i.blockAcceptorGroup)
+	if err != nil {
+		i.log.Fatal("failed to create index",
+			zap.String("chainName", chainName),
+			zap.String("endpoint", "block"),
+			zap.Error(err),
+		)
+		if err := i.close(); err != nil {
+			i.log.Error("failed to close indexer",
 				zap.Error(err),
 			)
-			if err := i.close(); err != nil {
-				i.log.Error("failed to close indexer",
-					zap.Error(err),
-				)
-			}
-			return
 		}
-		i.blockIndices[chainID] = index
-	case avalanche.Engine:
-		vtxIndex, err := i.registerChainHelper(chainID, vtxPrefix, name, "vtx", i.consensusAcceptorGroup)
+		return
+	}
+	i.blockIndices[chainID] = index
+
+	switch vm.(type) {
+	case vertex.DAGVM:
+		vtxIndex, err := i.registerChainHelper(chainID, vtxPrefix, chainName, "vtx", i.vertexAcceptorGroup)
 		if err != nil {
-			i.log.Fatal("couldn't create vertex index",
-				zap.String("chainName", name),
+			i.log.Fatal("couldn't create index",
+				zap.String("chainName", chainName),
+				zap.String("endpoint", "vtx"),
 				zap.Error(err),
 			)
 			if err := i.close(); err != nil {
@@ -293,31 +277,32 @@ func (i *indexer) RegisterChain(name string, engine common.Engine) {
 		}
 		i.vtxIndices[chainID] = vtxIndex
 
-		txIndex, err := i.registerChainHelper(chainID, txPrefix, name, "tx", i.decisionAcceptorGroup)
+		txIndex, err := i.registerChainHelper(chainID, txPrefix, chainName, "tx", i.txAcceptorGroup)
 		if err != nil {
-			i.log.Fatal("couldn't create tx index for",
-				zap.String("chainName", name),
+			i.log.Fatal("couldn't create index",
+				zap.String("chainName", chainName),
+				zap.String("endpoint", "tx"),
 				zap.Error(err),
 			)
 			if err := i.close(); err != nil {
-				i.log.Error("failed to close indexer:",
+				i.log.Error("failed to close indexer",
 					zap.Error(err),
 				)
 			}
 			return
 		}
 		i.txIndices[chainID] = txIndex
+	case block.ChainVM:
 	default:
-		engineType := fmt.Sprintf("%T", engine)
-		i.log.Error("got unexpected engine type",
-			zap.String("engineType", engineType),
+		vmType := fmt.Sprintf("%T", vm)
+		i.log.Error("got unexpected vm type",
+			zap.String("vmType", vmType),
 		)
 		if err := i.close(); err != nil {
 			i.log.Error("failed to close indexer",
 				zap.Error(err),
 			)
 		}
-		return
 	}
 }
 
@@ -326,12 +311,12 @@ func (i *indexer) registerChainHelper(
 	prefixEnd byte,
 	name, endpoint string,
 	acceptorGroup snow.AcceptorGroup,
-) (Index, error) {
-	prefix := make([]byte, hashing.HashLen+wrappers.ByteLen)
+) (*index, error) {
+	prefix := make([]byte, ids.IDLen+wrappers.ByteLen)
 	copy(prefix, chainID[:])
-	prefix[hashing.HashLen] = prefixEnd
+	prefix[ids.IDLen] = prefixEnd
 	indexDB := prefixdb.New(prefix, i.db)
-	index, err := newIndex(indexDB, i.log, i.codec, i.clock)
+	index, err := newIndex(indexDB, i.log, i.clock)
 	if err != nil {
 		_ = indexDB.Close()
 		return nil, err
@@ -348,12 +333,11 @@ func (i *indexer) registerChainHelper(
 	codec := json.NewCodec()
 	apiServer.RegisterCodec(codec, "application/json")
 	apiServer.RegisterCodec(codec, "application/json;charset=UTF-8")
-	if err := apiServer.RegisterService(&service{Index: index}, "index"); err != nil {
+	if err := apiServer.RegisterService(&service{index: index}, "index"); err != nil {
 		_ = index.Close()
 		return nil, err
 	}
-	handler := &common.HTTPHandler{LockOptions: common.NoLock, Handler: apiServer}
-	if err := i.pathAdder.AddRoute(handler, &sync.RWMutex{}, "index/"+name, "/"+endpoint); err != nil {
+	if err := i.pathAdder.AddRoute(apiServer, "index/"+name, "/"+endpoint); err != nil {
 		_ = index.Close()
 		return nil, err
 	}
@@ -381,19 +365,19 @@ func (i *indexer) close() error {
 	for chainID, txIndex := range i.txIndices {
 		errs.Add(
 			txIndex.Close(),
-			i.decisionAcceptorGroup.DeregisterAcceptor(chainID, fmt.Sprintf("%s%s", indexNamePrefix, chainID)),
+			i.txAcceptorGroup.DeregisterAcceptor(chainID, fmt.Sprintf("%s%s", indexNamePrefix, chainID)),
 		)
 	}
 	for chainID, vtxIndex := range i.vtxIndices {
 		errs.Add(
 			vtxIndex.Close(),
-			i.consensusAcceptorGroup.DeregisterAcceptor(chainID, fmt.Sprintf("%s%s", indexNamePrefix, chainID)),
+			i.vertexAcceptorGroup.DeregisterAcceptor(chainID, fmt.Sprintf("%s%s", indexNamePrefix, chainID)),
 		)
 	}
 	for chainID, blockIndex := range i.blockIndices {
 		errs.Add(
 			blockIndex.Close(),
-			i.consensusAcceptorGroup.DeregisterAcceptor(chainID, fmt.Sprintf("%s%s", indexNamePrefix, chainID)),
+			i.blockAcceptorGroup.DeregisterAcceptor(chainID, fmt.Sprintf("%s%s", indexNamePrefix, chainID)),
 		)
 	}
 	errs.Add(i.db.Close())
@@ -403,32 +387,32 @@ func (i *indexer) close() error {
 }
 
 func (i *indexer) markIncomplete(chainID ids.ID) error {
-	key := make([]byte, hashing.HashLen+wrappers.ByteLen)
+	key := make([]byte, ids.IDLen+wrappers.ByteLen)
 	copy(key, chainID[:])
-	key[hashing.HashLen] = isIncompletePrefix
+	key[ids.IDLen] = isIncompletePrefix
 	return i.db.Put(key, nil)
 }
 
 // Returns true if this chain is incomplete
 func (i *indexer) isIncomplete(chainID ids.ID) (bool, error) {
-	key := make([]byte, hashing.HashLen+wrappers.ByteLen)
+	key := make([]byte, ids.IDLen+wrappers.ByteLen)
 	copy(key, chainID[:])
-	key[hashing.HashLen] = isIncompletePrefix
+	key[ids.IDLen] = isIncompletePrefix
 	return i.db.Has(key)
 }
 
 func (i *indexer) markPreviouslyIndexed(chainID ids.ID) error {
-	key := make([]byte, hashing.HashLen+wrappers.ByteLen)
+	key := make([]byte, ids.IDLen+wrappers.ByteLen)
 	copy(key, chainID[:])
-	key[hashing.HashLen] = previouslyIndexedPrefix
+	key[ids.IDLen] = previouslyIndexedPrefix
 	return i.db.Put(key, nil)
 }
 
 // Returns true if this chain is incomplete
 func (i *indexer) previouslyIndexed(chainID ids.ID) (bool, error) {
-	key := make([]byte, hashing.HashLen+wrappers.ByteLen)
+	key := make([]byte, ids.IDLen+wrappers.ByteLen)
 	copy(key, chainID[:])
-	key[hashing.HashLen] = previouslyIndexedPrefix
+	key[ids.IDLen] = previouslyIndexedPrefix
 	return i.db.Has(key)
 }
 

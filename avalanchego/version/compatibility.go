@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package version
@@ -13,7 +13,7 @@ import (
 var (
 	errIncompatible = errors.New("peers version is incompatible")
 
-	_ Compatibility = &compatibility{}
+	_ Compatibility = (*compatibility)(nil)
 )
 
 // Compatibility a utility for checking the compatibility of peer versions
@@ -30,9 +30,9 @@ type Compatibility interface {
 type compatibility struct {
 	version *Application
 
-	minCompatable     *Application
-	minCompatableTime time.Time
-	prevMinCompatable *Application
+	minCompatible     *Application
+	minCompatibleTime time.Time
+	prevMinCompatible *Application
 
 	clock mockable.Clock
 }
@@ -40,38 +40,40 @@ type compatibility struct {
 // NewCompatibility returns a compatibility checker with the provided options
 func NewCompatibility(
 	version *Application,
-	minCompatable *Application,
-	minCompatableTime time.Time,
-	prevMinCompatable *Application,
+	minCompatible *Application,
+	minCompatibleTime time.Time,
+	prevMinCompatible *Application,
 ) Compatibility {
 	return &compatibility{
 		version:           version,
-		minCompatable:     minCompatable,
-		minCompatableTime: minCompatableTime,
-		prevMinCompatable: prevMinCompatable,
+		minCompatible:     minCompatible,
+		minCompatibleTime: minCompatibleTime,
+		prevMinCompatible: prevMinCompatible,
 	}
 }
 
-func (c *compatibility) Version() *Application { return c.version }
+func (c *compatibility) Version() *Application {
+	return c.version
+}
 
 func (c *compatibility) Compatible(peer *Application) error {
 	if err := c.version.Compatible(peer); err != nil {
 		return err
 	}
 
-	if !peer.Before(c.minCompatable) {
+	if !peer.Before(c.minCompatible) {
 		// The peer is at least the minimum compatible version.
 		return nil
 	}
 
-	// The peer is going to be marked as incompatible at [c.minCompatableTime].
+	// The peer is going to be marked as incompatible at [c.minCompatibleTime].
 	now := c.clock.Time()
-	if !now.Before(c.minCompatableTime) {
+	if !now.Before(c.minCompatibleTime) {
 		return errIncompatible
 	}
 
-	// The minCompatable check isn't being enforced yet.
-	if !peer.Before(c.prevMinCompatable) {
+	// The minCompatible check isn't being enforced yet.
+	if !peer.Before(c.prevMinCompatible) {
 		// The peer is at least the previous minimum compatible version.
 		return nil
 	}

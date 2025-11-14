@@ -4,7 +4,8 @@
 package peer
 
 import (
-	"github.com/ava-labs/avalanchego/ids"
+	"context"
+
 	"github.com/ava-labs/coreth/plugin/evm/message"
 )
 
@@ -19,21 +20,38 @@ type waitingResponseHandler struct {
 	failed       bool        // whether the original request is failed
 }
 
+// newWaitingResponseHandler returns new instance of the waitingResponseHandler
+func newWaitingResponseHandler() *waitingResponseHandler {
+	return &waitingResponseHandler{
+		// Make buffer length 1 so that OnResponse can complete
+		// even if no goroutine is waiting on the channel (i.e.
+		// the context of a request is cancelled.)
+		responseChan: make(chan []byte, 1),
+	}
+}
+
 // OnResponse passes the response bytes to the responseChan and closes the channel
-func (w *waitingResponseHandler) OnResponse(_ ids.NodeID, _ uint32, response []byte) error {
+func (w *waitingResponseHandler) OnResponse(response []byte) error {
 	w.responseChan <- response
 	close(w.responseChan)
 	return nil
 }
 
 // OnFailure sets the failed flag to true and closes the channel
-func (w *waitingResponseHandler) OnFailure(ids.NodeID, uint32) error {
+func (w *waitingResponseHandler) OnFailure() error {
 	w.failed = true
 	close(w.responseChan)
 	return nil
 }
 
-// newWaitingResponseHandler returns new instance of the waitingResponseHandler
-func newWaitingResponseHandler() *waitingResponseHandler {
-	return &waitingResponseHandler{responseChan: make(chan []byte)}
+func (waitingHandler *waitingResponseHandler) WaitForResult(ctx context.Context) ([]byte, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case response := <-waitingHandler.responseChan:
+		if waitingHandler.failed {
+			return nil, ErrRequestFailed
+		}
+		return response, nil
+	}
 }

@@ -10,11 +10,12 @@ import (
 	"sync"
 
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/coreth/core/rawdb"
-	"github.com/ava-labs/coreth/ethdb"
-	"github.com/ava-labs/coreth/params"
+	"github.com/ava-labs/coreth/plugin/evm/message"
 	statesyncclient "github.com/ava-labs/coreth/sync/client"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethdb"
 )
 
 const (
@@ -45,7 +46,7 @@ type codeSyncer struct {
 
 	CodeSyncerConfig
 
-	outstandingCodeHashes ids.Set          // Set of code hashes that we need to fetch from the network.
+	outstandingCodeHashes set.Set[ids.ID]  // Set of code hashes that we need to fetch from the network.
 	codeHashes            chan common.Hash // Channel of incoming code hash requests
 
 	// Used to set terminal error or pass nil to [errChan] if successful.
@@ -57,12 +58,12 @@ type codeSyncer struct {
 	done   <-chan struct{}
 }
 
-// newCodeSyncer returns a a code syncer that will sync code bytes from the network in a separate thread.
+// newCodeSyncer returns a code syncer that will sync code bytes from the network in a separate thread.
 func newCodeSyncer(config CodeSyncerConfig) *codeSyncer {
 	return &codeSyncer{
 		CodeSyncerConfig:      config,
 		codeHashes:            make(chan common.Hash, config.MaxOutstandingCodeHashes),
-		outstandingCodeHashes: ids.NewSet(0),
+		outstandingCodeHashes: set.NewSet[ids.ID](0),
 		errChan:               make(chan error, 1),
 	}
 }
@@ -139,7 +140,7 @@ func (c *codeSyncer) addCodeToFetchFromDBToQueue() error {
 // work fulfills any incoming requests from the producer channel by fetching code bytes from the network
 // and fulfilling them by updating the database.
 func (c *codeSyncer) work(ctx context.Context) error {
-	codeHashes := make([]common.Hash, 0, params.MaxCodeHashesPerRequest)
+	codeHashes := make([]common.Hash, 0, message.MaxCodeHashesPerRequest)
 
 	for {
 		select {
@@ -158,7 +159,7 @@ func (c *codeSyncer) work(ctx context.Context) error {
 			codeHashes = append(codeHashes, codeHash)
 			// Try to wait for at least [MaxCodeHashesPerRequest] code hashes to batch into a single request
 			// if there's more work remaining.
-			if len(codeHashes) < params.MaxCodeHashesPerRequest {
+			if len(codeHashes) < message.MaxCodeHashesPerRequest {
 				continue
 			}
 			if err := c.fulfillCodeRequest(ctx, codeHashes); err != nil {

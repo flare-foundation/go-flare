@@ -1,47 +1,44 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package peer
 
 import (
 	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/message"
+	"github.com/ava-labs/avalanchego/utils/bloom"
 	"github.com/ava-labs/avalanchego/utils/ips"
+	"github.com/ava-labs/avalanchego/utils/set"
 )
 
 // Network defines the interface that is used by a peer to help establish a well
 // connected p2p network.
 type Network interface {
 	// Connected is called by the peer once the handshake is finished.
-	Connected(ids.NodeID)
+	Connected(peerID ids.NodeID)
 
 	// AllowConnection enables the network is signal to the peer that its
 	// connection is no longer desired and should be terminated.
-	AllowConnection(ids.NodeID) bool
+	AllowConnection(peerID ids.NodeID) bool
 
-	// Track allows the peer to notify the network of a potential new peer to
+	// Track allows the peer to notify the network of potential new peers to
 	// connect to.
-	//
-	// Returns false if this call was not "useful". That is, we were already
-	// connected to this node, we already had this tracking information, the
-	// signature is invalid or we don't want to connect.
-	Track(ips.ClaimedIPPort) bool
+	Track(ips []*ips.ClaimedIPPort) error
 
 	// Disconnected is called when the peer finishes shutting down. It is not
 	// guaranteed that [Connected] was called for the provided peer. However, it
 	// is guaranteed that [Connected] will not be called after [Disconnected]
 	// for a given [Peer] object.
-	Disconnected(ids.NodeID)
+	Disconnected(peerID ids.NodeID)
 
-	// Version provides the peer with the Version message to send to the peer
-	// during the handshake.
-	Version() (message.OutboundMessage, error)
+	// KnownPeers returns the bloom filter of the known peers.
+	KnownPeers() (bloomFilter []byte, salt []byte)
 
-	// Peers provides the peer with the PeerList message to send to the peer
-	// during the handshake.
-	Peers() (message.OutboundMessage, error)
-
-	// Pong provides the peer with a Pong message to send to the peer in
-	// response to a Ping message.
-	Pong(ids.NodeID) (message.OutboundMessage, error)
+	// Peers returns peers that are not known.
+	Peers(
+		peerID ids.NodeID,
+		trackedSubnets set.Set[ids.ID],
+		requestAllPeers bool,
+		knownPeers *bloom.ReadFilter,
+		peerSalt []byte,
+	) []*ips.ClaimedIPPort
 }

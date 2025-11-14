@@ -28,111 +28,29 @@ package snapshot
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
-	"math/big"
 	"time"
 
-	"github.com/VictoriaMetrics/fastcache"
 	"github.com/ava-labs/coreth/core/rawdb"
-	"github.com/ava-labs/coreth/ethdb"
+	"github.com/ava-labs/coreth/core/types"
 	"github.com/ava-labs/coreth/trie"
+	"github.com/ava-labs/coreth/triedb"
+	"github.com/ava-labs/coreth/utils"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/math"
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
-var (
-	// emptyRoot is the known root hash of an empty trie.
-	emptyRoot = common.HexToHash("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
-
-	// emptyCode is the known hash of the empty EVM bytecode.
-	emptyCode = crypto.Keccak256Hash(nil)
+const (
+	snapshotCacheNamespace            = "state/snapshot/clean/fastcache" // prefix for detailed stats from the snapshot fastcache
+	snapshotCacheStatsUpdateFrequency = 1000                             // update stats from the snapshot fastcache once per 1000 ops
 )
-
-// generatorStats is a collection of statistics gathered by the snapshot generator
-// for logging purposes.
-type generatorStats struct {
-	wiping   chan struct{}      // Notification channel if wiping is in progress
-	origin   uint64             // Origin prefix where generation started
-	start    time.Time          // Timestamp when generation started
-	accounts uint64             // Number of accounts indexed(generated or recovered)
-	slots    uint64             // Number of storage slots indexed(generated or recovered)
-	storage  common.StorageSize // Total account and storage slot size(generation or recovery)
-}
-
-// Info creates an contextual info-level log with the given message and the context pulled
-// from the internally maintained statistics.
-func (gs *generatorStats) Info(msg string, root common.Hash, marker []byte) {
-	gs.log(log.LvlInfo, msg, root, marker)
-}
-
-// Debug creates an contextual debug-level log with the given message and the context pulled
-// from the internally maintained statistics.
-func (gs *generatorStats) Debug(msg string, root common.Hash, marker []byte) {
-	gs.log(log.LvlDebug, msg, root, marker)
-}
-
-// log creates an contextual log with the given message and the context pulled
-// from the internally maintained statistics.
-func (gs *generatorStats) log(level log.Lvl, msg string, root common.Hash, marker []byte) {
-	var ctx []interface{}
-	if root != (common.Hash{}) {
-		ctx = append(ctx, []interface{}{"root", root}...)
-	}
-	// Figure out whether we're after or within an account
-	switch len(marker) {
-	case common.HashLength:
-		ctx = append(ctx, []interface{}{"at", common.BytesToHash(marker)}...)
-	case 2 * common.HashLength:
-		ctx = append(ctx, []interface{}{
-			"in", common.BytesToHash(marker[:common.HashLength]),
-			"at", common.BytesToHash(marker[common.HashLength:]),
-		}...)
-	}
-	// Add the usual measurements
-	ctx = append(ctx, []interface{}{
-		"accounts", gs.accounts,
-		"slots", gs.slots,
-		"storage", gs.storage,
-		"elapsed", common.PrettyDuration(time.Since(gs.start)),
-	}...)
-	// Calculate the estimated indexing time based on current stats
-	if len(marker) > 0 {
-		if done := binary.BigEndian.Uint64(marker[:8]) - gs.origin; done > 0 {
-			left := math.MaxUint64 - binary.BigEndian.Uint64(marker[:8])
-
-			speed := done/uint64(time.Since(gs.start)/time.Millisecond+1) + 1 // +1s to avoid division by zero
-			ctx = append(ctx, []interface{}{
-				"eta", common.PrettyDuration(time.Duration(left/speed) * time.Millisecond),
-			}...)
-		}
-	}
-
-	switch level {
-	case log.LvlTrace:
-		log.Trace(msg, ctx...)
-	case log.LvlDebug:
-		log.Debug(msg, ctx...)
-	case log.LvlInfo:
-		log.Info(msg, ctx...)
-	case log.LvlWarn:
-		log.Warn(msg, ctx...)
-	case log.LvlError:
-		log.Error(msg, ctx...)
-	case log.LvlCrit:
-		log.Crit(msg, ctx...)
-	default:
-		log.Error(fmt.Sprintf("log with invalid log level %s: %s", level, msg), ctx...)
-	}
-}
 
 // generateSnapshot regenerates a brand new snapshot based on an existing state
 // database and head block asynchronously. The snapshot is returned immediately
 // and generation is continued in the background until done.
-func generateSnapshot(diskdb ethdb.KeyValueStore, triedb *trie.Database, cache int, blockHash, root common.Hash, wiper chan struct{}) *diskLayer {
+func generateSnapshot(diskdb ethdb.KeyValueStore, triedb *triedb.Database, cache int, blockHash, root common.Hash, wiper chan struct{}) *diskLayer {
 	// Wipe any previously existing snapshot from the database if no wiper is
 	// currently in progress.
 	if wiper == nil {
@@ -155,7 +73,7 @@ func generateSnapshot(diskdb ethdb.KeyValueStore, triedb *trie.Database, cache i
 		triedb:     triedb,
 		blockHash:  blockHash,
 		root:       root,
-		cache:      fastcache.New(cache * 1024 * 1024),
+		cache:      newMeteredSnapshotCache(cache * 1024 * 1024),
 		genMarker:  genMarker,
 		genPending: make(chan struct{}),
 		genAbort:   make(chan chan struct{}),
@@ -274,7 +192,8 @@ func (dl *diskLayer) generate(stats *generatorStats) {
 		}
 	}
 	// Create an account and state iterator pointing to the current generator marker
-	accTrie, err := trie.NewSecure(common.Hash{}, dl.root, dl.triedb)
+	trieId := trie.StateTrieID(dl.root)
+	accTrie, err := trie.NewStateTrie(trieId, dl.triedb)
 	if err != nil {
 		// The account trie is missing (GC), surf the chain until one becomes available
 		stats.Info("Trie missing, state snapshotting paused", dl.root, dl.genMarker)
@@ -289,7 +208,15 @@ func (dl *diskLayer) generate(stats *generatorStats) {
 	if len(dl.genMarker) > 0 { // []byte{} is the start, use nil for that
 		accMarker = dl.genMarker[:common.HashLength]
 	}
-	accIt := trie.NewIterator(accTrie.NodeIterator(accMarker))
+	nodeIt, err := accTrie.NodeIterator(accMarker)
+	if err != nil {
+		log.Error("Generator failed to create account iterator", "root", dl)
+		abort := <-dl.genAbort
+		dl.genStats = stats
+		close(abort)
+		return
+	}
+	accIt := trie.NewIterator(nodeIt)
 	batch := dl.diskdb.NewBatch()
 
 	// Iterate from the previous marker and continue generating the state snapshot
@@ -298,17 +225,11 @@ func (dl *diskLayer) generate(stats *generatorStats) {
 		// Retrieve the current account and flatten it into the internal format
 		accountHash := common.BytesToHash(accIt.Key)
 
-		var acc struct {
-			Nonce       uint64
-			Balance     *big.Int
-			Root        common.Hash
-			CodeHash    []byte
-			IsMultiCoin bool
-		}
+		var acc types.StateAccount
 		if err := rlp.DecodeBytes(accIt.Value, &acc); err != nil {
 			log.Crit("Invalid account encountered during snapshot creation", "err", err)
 		}
-		data := SlimAccountRLP(acc.Nonce, acc.Balance, acc.Root, acc.CodeHash, acc.IsMultiCoin)
+		data := types.SlimAccountRLP(acc)
 
 		// If the account is not yet in-progress, write it out
 		if accMarker == nil || !bytes.Equal(accountHash[:], accMarker) {
@@ -328,8 +249,9 @@ func (dl *diskLayer) generate(stats *generatorStats) {
 		}
 		// If the iterated account is a contract, iterate through corresponding contract
 		// storage to generate snapshot entries.
-		if acc.Root != emptyRoot {
-			storeTrie, err := trie.NewSecure(accountHash, acc.Root, dl.triedb)
+		if acc.Root != types.EmptyRootHash {
+			storeTrieId := trie.StorageTrieID(dl.root, accountHash, acc.Root)
+			storeTrie, err := trie.NewStateTrie(storeTrieId, dl.triedb)
 			if err != nil {
 				log.Error("Generator failed to access storage trie", "root", dl.root, "account", accountHash, "stroot", acc.Root, "err", err)
 				abort := <-dl.genAbort
@@ -341,7 +263,15 @@ func (dl *diskLayer) generate(stats *generatorStats) {
 			if accMarker != nil && bytes.Equal(accountHash[:], accMarker) && len(dl.genMarker) > common.HashLength {
 				storeMarker = dl.genMarker[common.HashLength:]
 			}
-			storeIt := trie.NewIterator(storeTrie.NodeIterator(storeMarker))
+			nodeIt, err := storeTrie.NodeIterator(storeMarker)
+			if err != nil {
+				log.Error("Generator failed to create storage iterator", "root", dl.root, "account", accountHash, "stroot", acc.Root, "err", err)
+				abort := <-dl.genAbort
+				dl.genStats = stats
+				close(abort)
+				return
+			}
+			storeIt := trie.NewIterator(nodeIt)
 			for storeIt.Next() {
 				rawdb.WriteStorageSnapshot(batch, accountHash, common.BytesToHash(storeIt.Key), storeIt.Value)
 				stats.storage += common.StorageSize(1 + 2*common.HashLength + len(storeIt.Value))
@@ -398,4 +328,8 @@ func (dl *diskLayer) generate(stats *generatorStats) {
 	// Someone will be looking for us, wait it out
 	abort := <-dl.genAbort
 	close(abort)
+}
+
+func newMeteredSnapshotCache(size int) *utils.MeteredCache {
+	return utils.NewMeteredCache(size, snapshotCacheNamespace, snapshotCacheStatsUpdateFrequency)
 }

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package appsender
@@ -8,11 +8,12 @@ import (
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/engine/common"
+	"github.com/ava-labs/avalanchego/utils/set"
 
 	appsenderpb "github.com/ava-labs/avalanchego/proto/pb/appsender"
 )
 
-var _ common.AppSender = &Client{}
+var _ common.AppSender = (*Client)(nil)
 
 type Client struct {
 	client appsenderpb.AppSenderClient
@@ -23,16 +24,15 @@ func NewClient(client appsenderpb.AppSenderClient) *Client {
 	return &Client{client: client}
 }
 
-func (c *Client) SendAppRequest(nodeIDs ids.NodeIDSet, requestID uint32, request []byte) error {
+func (c *Client) SendAppRequest(ctx context.Context, nodeIDs set.Set[ids.NodeID], requestID uint32, request []byte) error {
 	nodeIDsBytes := make([][]byte, nodeIDs.Len())
 	i := 0
 	for nodeID := range nodeIDs {
-		nodeID := nodeID // Prevent overwrite in next iteration
-		nodeIDsBytes[i] = nodeID[:]
+		nodeIDsBytes[i] = nodeID.Bytes()
 		i++
 	}
 	_, err := c.client.SendAppRequest(
-		context.Background(),
+		ctx,
 		&appsenderpb.SendAppRequestMsg{
 			NodeIds:   nodeIDsBytes,
 			RequestId: requestID,
@@ -42,11 +42,11 @@ func (c *Client) SendAppRequest(nodeIDs ids.NodeIDSet, requestID uint32, request
 	return err
 }
 
-func (c *Client) SendAppResponse(nodeID ids.NodeID, requestID uint32, response []byte) error {
+func (c *Client) SendAppResponse(ctx context.Context, nodeID ids.NodeID, requestID uint32, response []byte) error {
 	_, err := c.client.SendAppResponse(
-		context.Background(),
+		ctx,
 		&appsenderpb.SendAppResponseMsg{
-			NodeId:    nodeID[:],
+			NodeId:    nodeID.Bytes(),
 			RequestId: requestID,
 			Response:  response,
 		},
@@ -54,29 +54,38 @@ func (c *Client) SendAppResponse(nodeID ids.NodeID, requestID uint32, response [
 	return err
 }
 
-func (c *Client) SendAppGossip(msg []byte) error {
-	_, err := c.client.SendAppGossip(
-		context.Background(),
-		&appsenderpb.SendAppGossipMsg{
-			Msg: msg,
+func (c *Client) SendAppError(ctx context.Context, nodeID ids.NodeID, requestID uint32, errorCode int32, errorMessage string) error {
+	_, err := c.client.SendAppError(ctx,
+		&appsenderpb.SendAppErrorMsg{
+			NodeId:       nodeID[:],
+			RequestId:    requestID,
+			ErrorCode:    errorCode,
+			ErrorMessage: errorMessage,
 		},
 	)
+
 	return err
 }
 
-func (c *Client) SendAppGossipSpecific(nodeIDs ids.NodeIDSet, msg []byte) error {
-	nodeIDsBytes := make([][]byte, nodeIDs.Len())
+func (c *Client) SendAppGossip(
+	ctx context.Context,
+	config common.SendConfig,
+	msg []byte,
+) error {
+	nodeIDs := make([][]byte, config.NodeIDs.Len())
 	i := 0
-	for nodeID := range nodeIDs {
-		nodeID := nodeID // Prevent overwrite in next iteration
-		nodeIDsBytes[i] = nodeID[:]
+	for nodeID := range config.NodeIDs {
+		nodeIDs[i] = nodeID.Bytes()
 		i++
 	}
-	_, err := c.client.SendAppGossipSpecific(
-		context.Background(),
-		&appsenderpb.SendAppGossipSpecificMsg{
-			NodeIds: nodeIDsBytes,
-			Msg:     msg,
+	_, err := c.client.SendAppGossip(
+		ctx,
+		&appsenderpb.SendAppGossipMsg{
+			NodeIds:       nodeIDs,
+			Validators:    uint64(config.Validators),
+			NonValidators: uint64(config.NonValidators),
+			Peers:         uint64(config.Peers),
+			Msg:           msg,
 		},
 	)
 	return err

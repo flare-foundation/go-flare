@@ -1,119 +1,119 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package snowman
 
 import (
-	"math/rand"
+	"context"
+	"testing"
 
 	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/snow"
-	"github.com/ava-labs/avalanchego/snow/choices"
 	"github.com/ava-labs/avalanchego/snow/consensus/snowball"
+	"github.com/ava-labs/avalanchego/snow/consensus/snowman/snowmantest"
+	"github.com/ava-labs/avalanchego/snow/snowtest"
+	"github.com/ava-labs/avalanchego/utils"
+	"github.com/ava-labs/avalanchego/utils/bag"
 	"github.com/ava-labs/avalanchego/utils/sampler"
 )
 
 type Network struct {
 	params         snowball.Parameters
-	colors         []*TestBlock
+	colors         []*snowmantest.Block
+	rngSource      sampler.Source
 	nodes, running []Consensus
 }
 
-func (n *Network) shuffleColors() {
-	s := sampler.NewUniform()
-	_ = s.Initialize(uint64(len(n.colors)))
-	indices, _ := s.Sample(len(n.colors))
-	colors := []*TestBlock(nil)
-	for _, index := range indices {
-		colors = append(colors, n.colors[int(index)])
+func NewNetwork(params snowball.Parameters, numColors int, rngSource sampler.Source) *Network {
+	n := &Network{
+		params: params,
+		colors: []*snowmantest.Block{{
+			Decidable: snowtest.Decidable{
+				IDV:    ids.Empty.Prefix(rngSource.Uint64()),
+				Status: snowtest.Undecided,
+			},
+			ParentV: snowmantest.GenesisID,
+			HeightV: snowmantest.GenesisHeight + 1,
+		}},
+		rngSource: rngSource,
 	}
-	n.colors = colors
-	SortTestBlocks(n.colors)
-}
 
-func (n *Network) Initialize(params snowball.Parameters, numColors int) {
-	n.params = params
-	// #nosec G404
-	n.colors = append(n.colors, &TestBlock{
-		TestDecidable: choices.TestDecidable{
-			IDV:     ids.Empty.Prefix(uint64(rand.Int63())),
-			StatusV: choices.Processing,
-		},
-		ParentV: Genesis.IDV,
-		HeightV: 1,
-	})
-
+	s := sampler.NewDeterministicUniform(n.rngSource)
 	for i := 1; i < numColors; i++ {
-		dependency := n.colors[rand.Intn(len(n.colors))] // #nosec G404
-		// #nosec G404
-		n.colors = append(n.colors, &TestBlock{
-			TestDecidable: choices.TestDecidable{
-				IDV:     ids.Empty.Prefix(uint64(rand.Int63())),
-				StatusV: choices.Processing,
+		s.Initialize(uint64(len(n.colors)))
+		dependencyInd, _ := s.Next()
+		dependency := n.colors[dependencyInd]
+		n.colors = append(n.colors, &snowmantest.Block{
+			Decidable: snowtest.Decidable{
+				IDV:    ids.Empty.Prefix(rngSource.Uint64()),
+				Status: snowtest.Undecided,
 			},
 			ParentV: dependency.IDV,
 			HeightV: dependency.HeightV + 1,
 		})
 	}
+	return n
 }
 
-func (n *Network) AddNode(sm Consensus) error {
-	if err := sm.Initialize(snow.DefaultConsensusContextTest(), n.params, Genesis.ID(), Genesis.Height()); err != nil {
+func (n *Network) shuffleColors() {
+	s := sampler.NewDeterministicUniform(n.rngSource)
+	s.Initialize(uint64(len(n.colors)))
+	indices, _ := s.Sample(len(n.colors))
+	colors := []*snowmantest.Block(nil)
+	for _, index := range indices {
+		colors = append(colors, n.colors[int(index)])
+	}
+	n.colors = colors
+	utils.Sort(n.colors)
+}
+
+func (n *Network) AddNode(t testing.TB, sm Consensus) error {
+	snowCtx := snowtest.Context(t, snowtest.CChainID)
+	ctx := snowtest.ConsensusContext(snowCtx)
+	if err := sm.Initialize(ctx, n.params, snowmantest.GenesisID, snowmantest.GenesisHeight, snowmantest.GenesisTimestamp); err != nil {
 		return err
 	}
 
 	n.shuffleColors()
-	deps := map[ids.ID]ids.ID{}
 	for _, blk := range n.colors {
-		myDep, found := deps[blk.ParentV]
-		if !found {
-			myDep = blk.Parent()
-		}
-		myVtx := &TestBlock{
-			TestDecidable: choices.TestDecidable{
-				IDV:     blk.ID(),
-				StatusV: blk.Status(),
-			},
-			ParentV: myDep,
-			HeightV: blk.Height(),
-			VerifyV: blk.Verify(),
-			BytesV:  blk.Bytes(),
-		}
-		if err := sm.Add(myVtx); err != nil {
+		copiedBlk := *blk
+		if err := sm.Add(&copiedBlk); err != nil {
 			return err
 		}
-		deps[myVtx.ID()] = myDep
 	}
 	n.nodes = append(n.nodes, sm)
 	n.running = append(n.running, sm)
 	return nil
 }
 
-func (n *Network) Finalized() bool { return len(n.running) == 0 }
+func (n *Network) Finalized() bool {
+	return len(n.running) == 0
+}
 
 func (n *Network) Round() error {
 	if len(n.running) == 0 {
 		return nil
 	}
 
-	runningInd := rand.Intn(len(n.running)) // #nosec G404
+	s := sampler.NewDeterministicUniform(n.rngSource)
+	s.Initialize(uint64(len(n.running)))
+
+	runningInd, _ := s.Next()
 	running := n.running[runningInd]
 
-	s := sampler.NewUniform()
-	_ = s.Initialize(uint64(len(n.nodes)))
+	s.Initialize(uint64(len(n.nodes)))
 	indices, _ := s.Sample(n.params.K)
-	sampledColors := ids.Bag{}
+	sampledColors := bag.Bag[ids.ID]{}
 	for _, index := range indices {
 		peer := n.nodes[int(index)]
 		sampledColors.Add(peer.Preference())
 	}
 
-	if err := running.RecordPoll(sampledColors); err != nil {
+	if err := running.RecordPoll(context.Background(), sampledColors); err != nil {
 		return err
 	}
 
 	// If this node has been finalized, remove it from the poller
-	if running.Finalized() {
+	if running.NumProcessing() == 0 {
 		newSize := len(n.running) - 1
 		n.running[runningInd] = n.running[newSize]
 		n.running = n.running[:newSize]

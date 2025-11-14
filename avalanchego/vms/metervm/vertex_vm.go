@@ -1,14 +1,14 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package metervm
 
 import (
+	"context"
+
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/ava-labs/avalanchego/api/metrics"
-	"github.com/ava-labs/avalanchego/database/manager"
-	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/snow/consensus/snowstorm"
 	"github.com/ava-labs/avalanchego/snow/engine/avalanche/vertex"
@@ -17,25 +17,31 @@ import (
 )
 
 var (
-	_ vertex.DAGVM = &vertexVM{}
-	_ snowstorm.Tx = &meterTx{}
+	_ vertex.LinearizableVMWithEngine = (*vertexVM)(nil)
+	_ snowstorm.Tx                    = (*meterTx)(nil)
 )
 
-func NewVertexVM(vm vertex.DAGVM) vertex.DAGVM {
+func NewVertexVM(
+	vm vertex.LinearizableVMWithEngine,
+	reg prometheus.Registerer,
+) vertex.LinearizableVMWithEngine {
 	return &vertexVM{
-		DAGVM: vm,
+		LinearizableVMWithEngine: vm,
+		registry:                 reg,
 	}
 }
 
 type vertexVM struct {
-	vertex.DAGVM
+	vertex.LinearizableVMWithEngine
 	vertexMetrics
-	clock mockable.Clock
+	registry prometheus.Registerer
+	clock    mockable.Clock
 }
 
 func (vm *vertexVM) Initialize(
-	ctx *snow.Context,
-	db manager.Manager,
+	ctx context.Context,
+	chainCtx *snow.Context,
+	db database.Database,
 	genesisBytes,
 	upgradeBytes,
 	configBytes []byte,
@@ -43,38 +49,26 @@ func (vm *vertexVM) Initialize(
 	fxs []*common.Fx,
 	appSender common.AppSender,
 ) error {
-	registerer := prometheus.NewRegistry()
-	if err := vm.vertexMetrics.Initialize("", registerer); err != nil {
+	if err := vm.vertexMetrics.Initialize(vm.registry); err != nil {
 		return err
 	}
 
-	optionalGatherer := metrics.NewOptionalGatherer()
-	multiGatherer := metrics.NewMultiGatherer()
-	if err := multiGatherer.Register("metervm", registerer); err != nil {
-		return err
-	}
-	if err := multiGatherer.Register("", optionalGatherer); err != nil {
-		return err
-	}
-	if err := ctx.Metrics.Register(multiGatherer); err != nil {
-		return err
-	}
-	ctx.Metrics = optionalGatherer
-
-	return vm.DAGVM.Initialize(ctx, db, genesisBytes, upgradeBytes, configBytes, toEngine, fxs, appSender)
+	return vm.LinearizableVMWithEngine.Initialize(
+		ctx,
+		chainCtx,
+		db,
+		genesisBytes,
+		upgradeBytes,
+		configBytes,
+		toEngine,
+		fxs,
+		appSender,
+	)
 }
 
-func (vm *vertexVM) PendingTxs() []snowstorm.Tx {
+func (vm *vertexVM) ParseTx(ctx context.Context, b []byte) (snowstorm.Tx, error) {
 	start := vm.clock.Time()
-	txs := vm.DAGVM.PendingTxs()
-	end := vm.clock.Time()
-	vm.vertexMetrics.pending.Observe(float64(end.Sub(start)))
-	return txs
-}
-
-func (vm *vertexVM) ParseTx(b []byte) (snowstorm.Tx, error) {
-	start := vm.clock.Time()
-	tx, err := vm.DAGVM.ParseTx(b)
+	tx, err := vm.LinearizableVMWithEngine.ParseTx(ctx, b)
 	end := vm.clock.Time()
 	duration := float64(end.Sub(start))
 	if err != nil {
@@ -88,31 +82,15 @@ func (vm *vertexVM) ParseTx(b []byte) (snowstorm.Tx, error) {
 	}, nil
 }
 
-func (vm *vertexVM) GetTx(txID ids.ID) (snowstorm.Tx, error) {
-	start := vm.clock.Time()
-	tx, err := vm.DAGVM.GetTx(txID)
-	end := vm.clock.Time()
-	duration := float64(end.Sub(start))
-	if err != nil {
-		vm.vertexMetrics.getErr.Observe(duration)
-		return nil, err
-	}
-	vm.vertexMetrics.get.Observe(duration)
-	return &meterTx{
-		Tx: tx,
-		vm: vm,
-	}, nil
-}
-
 type meterTx struct {
 	snowstorm.Tx
 
 	vm *vertexVM
 }
 
-func (mtx *meterTx) Verify() error {
+func (mtx *meterTx) Verify(ctx context.Context) error {
 	start := mtx.vm.clock.Time()
-	err := mtx.Tx.Verify()
+	err := mtx.Tx.Verify(ctx)
 	end := mtx.vm.clock.Time()
 	duration := float64(end.Sub(start))
 	if err != nil {
@@ -123,17 +101,17 @@ func (mtx *meterTx) Verify() error {
 	return err
 }
 
-func (mtx *meterTx) Accept() error {
+func (mtx *meterTx) Accept(ctx context.Context) error {
 	start := mtx.vm.clock.Time()
-	err := mtx.Tx.Accept()
+	err := mtx.Tx.Accept(ctx)
 	end := mtx.vm.clock.Time()
 	mtx.vm.vertexMetrics.accept.Observe(float64(end.Sub(start)))
 	return err
 }
 
-func (mtx *meterTx) Reject() error {
+func (mtx *meterTx) Reject(ctx context.Context) error {
 	start := mtx.vm.clock.Time()
-	err := mtx.Tx.Reject()
+	err := mtx.Tx.Reject(ctx)
 	end := mtx.vm.clock.Time()
 	mtx.vm.vertexMetrics.reject.Observe(float64(end.Sub(start)))
 	return err

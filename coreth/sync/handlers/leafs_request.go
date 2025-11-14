@@ -12,18 +12,18 @@ import (
 
 	"github.com/ava-labs/avalanchego/codec"
 	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/utils/math"
 	"github.com/ava-labs/avalanchego/utils/wrappers"
 	"github.com/ava-labs/coreth/core/state/snapshot"
 	"github.com/ava-labs/coreth/core/types"
-	"github.com/ava-labs/coreth/ethdb"
-	"github.com/ava-labs/coreth/ethdb/memorydb"
 	"github.com/ava-labs/coreth/plugin/evm/message"
 	"github.com/ava-labs/coreth/sync/handlers/stats"
 	"github.com/ava-labs/coreth/sync/syncutils"
 	"github.com/ava-labs/coreth/trie"
+	"github.com/ava-labs/coreth/triedb"
 	"github.com/ava-labs/coreth/utils"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/ethdb/memorydb"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -33,20 +33,24 @@ const (
 	// in message.LeafsRequest if it is greater than this value
 	maxLeavesLimit = uint16(1024)
 
+	// Maximum percent of the time left to deadline to spend on optimistically
+	// reading the snapshot to find the response
+	maxSnapshotReadTimePercent = 75
+
 	segmentLen = 64 // divide data from snapshot to segments of this size
 )
 
 // LeafsRequestHandler is a peer.RequestHandler for types.LeafsRequest
 // serving requested trie data
 type LeafsRequestHandler struct {
-	trieDB           *trie.Database
+	trieDB           *triedb.Database
 	snapshotProvider SnapshotProvider
 	codec            codec.Manager
 	stats            stats.LeafsRequestHandlerStats
 	pool             sync.Pool
 }
 
-func NewLeafsRequestHandler(trieDB *trie.Database, snapshotProvider SnapshotProvider, codec codec.Manager, syncerStats stats.LeafsRequestHandlerStats) *LeafsRequestHandler {
+func NewLeafsRequestHandler(trieDB *triedb.Database, snapshotProvider SnapshotProvider, codec codec.Manager, syncerStats stats.LeafsRequestHandlerStats) *LeafsRequestHandler {
 	return &LeafsRequestHandler{
 		trieDB:           trieDB,
 		snapshotProvider: snapshotProvider,
@@ -95,7 +99,11 @@ func (lrh *LeafsRequestHandler) OnLeafsRequest(ctx context.Context, nodeID ids.N
 		return nil, nil
 	}
 
-	t, err := trie.New(leafsRequest.Account, leafsRequest.Root, lrh.trieDB)
+	// TODO: We should know the state root that accounts correspond to,
+	// as this information will be necessary to access storage tries when
+	// the trie is path based.
+	// stateRoot := common.Hash{}
+	t, err := trie.New(trie.TrieID(leafsRequest.Root), lrh.trieDB)
 	if err != nil {
 		log.Debug("error opening trie when processing request, dropping request", "nodeID", nodeID, "requestID", requestID, "root", leafsRequest.Root, "err", err)
 		lrh.stats.IncMissingRoot()
@@ -229,7 +237,19 @@ func (rb *responseBuilder) fillFromSnapshot(ctx context.Context) (bool, error) {
 	// modified since the requested root. If this assumption can be verified with
 	// range proofs and data from the trie, we can skip iterating the trie as
 	// an optimization.
-	snapKeys, snapVals, err := rb.readLeafsFromSnapshot(ctx)
+	// Since we are performing this read optimistically, we use a separate context
+	// with reduced timeout so there is enough time to read the trie if the snapshot
+	// read does not contain up-to-date data.
+	snapCtx := ctx
+	if deadline, ok := ctx.Deadline(); ok {
+		timeTillDeadline := time.Until(deadline)
+		bufferedDeadline := time.Now().Add(timeTillDeadline * maxSnapshotReadTimePercent / 100)
+
+		var cancel context.CancelFunc
+		snapCtx, cancel = context.WithDeadline(ctx, bufferedDeadline)
+		defer cancel()
+	}
+	snapKeys, snapVals, err := rb.readLeafsFromSnapshot(snapCtx)
 	// Update read snapshot time here, so that we include the case that an error occurred.
 	rb.stats.UpdateSnapshotReadTime(time.Since(snapshotReadStart))
 	if err != nil {
@@ -264,7 +284,7 @@ func (rb *responseBuilder) fillFromSnapshot(ctx context.Context) (bool, error) {
 	// segments of the data and use them in the response.
 	hasGap := false
 	for i := 0; i < len(snapKeys); i += segmentLen {
-		segmentEnd := math.Min(i+segmentLen, len(snapKeys))
+		segmentEnd := min(i+segmentLen, len(snapKeys))
 		proof, ok, _, err := rb.isRangeValid(snapKeys[i:segmentEnd], snapVals[i:segmentEnd], hasGap)
 		if err != nil {
 			rb.stats.IncProofError()
@@ -300,7 +320,7 @@ func (rb *responseBuilder) fillFromSnapshot(ctx context.Context) (bool, error) {
 		// all the key/vals in the segment are valid, but possibly shorten segmentEnd
 		// here to respect limit. this is necessary in case the number of leafs we read
 		// from the trie is more than the length of a segment which cannot be validated. limit
-		segmentEnd = math.Min(segmentEnd, i+int(rb.limit)-len(rb.response.Keys))
+		segmentEnd = min(segmentEnd, i+int(rb.limit)-len(rb.response.Keys))
 		rb.response.Keys = append(rb.response.Keys, snapKeys[i:segmentEnd]...)
 		rb.response.Vals = append(rb.response.Vals, snapVals[i:segmentEnd]...)
 
@@ -322,14 +342,14 @@ func (rb *responseBuilder) generateRangeProof(start []byte, keys [][]byte) (*mem
 		start = bytes.Repeat([]byte{0x00}, rb.keyLength)
 	}
 
-	if err := rb.t.Prove(start, 0, proof); err != nil {
+	if err := rb.t.Prove(start, proof); err != nil {
 		_ = proof.Close() // closing memdb does not error
 		return nil, err
 	}
 	if len(keys) > 0 {
 		// If there is a non-zero number of keys, set [end] for the range proof to the last key.
 		end := keys[len(keys)-1]
-		if err := rb.t.Prove(end, 0, proof); err != nil {
+		if err := rb.t.Prove(end, proof); err != nil {
 			_ = proof.Close() // closing memdb does not error
 			return nil, err
 		}
@@ -347,11 +367,7 @@ func (rb *responseBuilder) verifyRangeProof(keys, vals [][]byte, start []byte, p
 	if len(start) == 0 {
 		start = bytes.Repeat([]byte{0x00}, rb.keyLength)
 	}
-	var end []byte
-	if len(keys) > 0 {
-		end = keys[len(keys)-1]
-	}
-	return trie.VerifyRangeProof(rb.request.Root, start, end, keys, vals, proof)
+	return trie.VerifyRangeProof(rb.request.Root, start, keys, vals, proof)
 }
 
 // iterateVals returns the values contained in [db]
@@ -412,7 +428,11 @@ func (rb *responseBuilder) fillFromTrie(ctx context.Context, end []byte) (bool, 
 	defer func() { rb.trieReadTime += time.Since(startTime) }()
 
 	// create iterator to iterate the trie
-	it := trie.NewIterator(rb.t.NodeIterator(rb.nextKey()))
+	nodeIt, err := rb.t.NodeIterator(rb.nextKey())
+	if err != nil {
+		return false, err
+	}
+	it := trie.NewIterator(nodeIt)
 	more := false
 	for it.Next() {
 		// if we're at the end, break this loop

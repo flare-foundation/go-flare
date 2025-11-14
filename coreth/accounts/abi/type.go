@@ -80,7 +80,7 @@ var (
 func NewType(t string, internalType string, components []ArgumentMarshaling) (typ Type, err error) {
 	// check that array brackets are equal if they exist
 	if strings.Count(t, "[") != strings.Count(t, "]") {
-		return Type{}, fmt.Errorf("invalid arg type in abi")
+		return Type{}, errors.New("invalid arg type in abi")
 	}
 	typ.stringKind = t
 
@@ -119,7 +119,7 @@ func NewType(t string, internalType string, components []ArgumentMarshaling) (ty
 			}
 			typ.stringKind = embeddedType.stringKind + sliced
 		} else {
-			return Type{}, fmt.Errorf("invalid formatting of array type")
+			return Type{}, errors.New("invalid formatting of array type")
 		}
 		return typ, err
 	}
@@ -164,6 +164,9 @@ func NewType(t string, internalType string, components []ArgumentMarshaling) (ty
 		if varSize == 0 {
 			typ.T = BytesTy
 		} else {
+			if varSize > 32 {
+				return Type{}, fmt.Errorf("unsupported arg type: %s", t)
+			}
 			typ.T = FixedBytesTy
 			typ.Size = varSize
 		}
@@ -186,9 +189,7 @@ func NewType(t string, internalType string, components []ArgumentMarshaling) (ty
 				return Type{}, errors.New("abi: purely anonymous or underscored field is not supported")
 			}
 			fieldName := ResolveNameConflict(name, func(s string) bool { return used[s] })
-			if err != nil {
-				return Type{}, err
-			}
+
 			used[fieldName] = true
 			if !isValidFieldName(fieldName) {
 				return Type{}, fmt.Errorf("field %d has invalid name", idx)
@@ -355,7 +356,7 @@ func (t Type) pack(v reflect.Value) ([]byte, error) {
 	}
 }
 
-// requireLengthPrefix returns whether the type requires any sort of length
+// requiresLengthPrefix returns whether the type requires any sort of length
 // prefixing.
 func (t Type) requiresLengthPrefix() bool {
 	return t.T == StringTy || t.T == BytesTy || t.T == SliceTy

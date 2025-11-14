@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package txs
@@ -10,23 +10,21 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/snow"
-	"github.com/ava-labs/avalanchego/utils/crypto"
+	"github.com/ava-labs/avalanchego/snow/snowtest"
+	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/platformvm/stakeable"
-	"github.com/ava-labs/avalanchego/vms/platformvm/validator"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 )
 
-var preFundedKeys = crypto.BuildTestKeys()
+var preFundedKeys = secp256k1.TestKeys()
 
 func TestAddDelegatorTxSyntacticVerify(t *testing.T) {
 	require := require.New(t)
 	clk := mockable.Clock{}
-	ctx := snow.DefaultContextTest()
-	ctx.AVAXAssetID = ids.GenerateTestID()
-	signers := [][]*crypto.PrivateKeySECP256K1R{preFundedKeys}
+	ctx := snowtest.Context(t, snowtest.PChainID)
+	signers := [][]*secp256k1.PrivateKey{preFundedKeys}
 
 	var (
 		stx            *Tx
@@ -35,10 +33,12 @@ func TestAddDelegatorTxSyntacticVerify(t *testing.T) {
 	)
 
 	// Case : signed tx is nil
-	require.ErrorIs(stx.SyntacticVerify(ctx), errNilSignedTx)
+	err = stx.SyntacticVerify(ctx)
+	require.ErrorIs(err, ErrNilSignedTx)
 
 	// Case : unsigned tx is nil
-	require.ErrorIs(addDelegatorTx.SyntacticVerify(ctx), ErrNilTx)
+	err = addDelegatorTx.SyntacticVerify(ctx)
+	require.ErrorIs(err, ErrNilTx)
 
 	validatorWeight := uint64(2022)
 	inputs := []*avax.TransferableInput{{
@@ -58,7 +58,7 @@ func TestAddDelegatorTxSyntacticVerify(t *testing.T) {
 			Amt: uint64(1234),
 			OutputOwners: secp256k1fx.OutputOwners{
 				Threshold: 1,
-				Addrs:     []ids.ShortID{preFundedKeys[0].PublicKey().Address()},
+				Addrs:     []ids.ShortID{preFundedKeys[0].Address()},
 			},
 		},
 	}}
@@ -70,7 +70,7 @@ func TestAddDelegatorTxSyntacticVerify(t *testing.T) {
 				Amt: validatorWeight,
 				OutputOwners: secp256k1fx.OutputOwners{
 					Threshold: 1,
-					Addrs:     []ids.ShortID{preFundedKeys[0].PublicKey().Address()},
+					Addrs:     []ids.ShortID{preFundedKeys[0].Address()},
 				},
 			},
 		},
@@ -83,23 +83,24 @@ func TestAddDelegatorTxSyntacticVerify(t *testing.T) {
 			Ins:          inputs,
 			Memo:         []byte{1, 2, 3, 4, 5, 6, 7, 8},
 		}},
-		Validator: validator.Validator{
+		Validator: Validator{
 			NodeID: ctx.NodeID,
 			Start:  uint64(clk.Time().Unix()),
 			End:    uint64(clk.Time().Add(time.Hour).Unix()),
 			Wght:   validatorWeight,
 		},
-		Stake: stakes,
-		RewardsOwner: &secp256k1fx.OutputOwners{
+		StakeOuts: stakes,
+		DelegationRewardsOwner: &secp256k1fx.OutputOwners{
 			Locktime:  0,
 			Threshold: 1,
-			Addrs:     []ids.ShortID{preFundedKeys[0].PublicKey().Address()},
+			Addrs:     []ids.ShortID{preFundedKeys[0].Address()},
 		},
 	}
 
 	// Case: signed tx not initialized
 	stx = &Tx{Unsigned: addDelegatorTx}
-	require.ErrorIs(stx.SyntacticVerify(ctx), errSignedTxNotInitialized)
+	err = stx.SyntacticVerify(ctx)
+	require.ErrorIs(err, errSignedTxNotInitialized)
 
 	// Case: valid tx
 	stx, err = NewSigned(addDelegatorTx, Codec, signers)
@@ -112,24 +113,24 @@ func TestAddDelegatorTxSyntacticVerify(t *testing.T) {
 	stx, err = NewSigned(addDelegatorTx, Codec, signers)
 	require.NoError(err)
 	err = stx.SyntacticVerify(ctx)
-	require.Error(err)
+	require.ErrorIs(err, avax.ErrWrongNetworkID)
 	addDelegatorTx.NetworkID--
 
 	// Case: delegator weight is not equal to total stake weight
 	addDelegatorTx.SyntacticallyVerified = false
-	addDelegatorTx.Validator.Wght = 2 * validatorWeight
+	addDelegatorTx.Wght = 2 * validatorWeight
 	stx, err = NewSigned(addDelegatorTx, Codec, signers)
 	require.NoError(err)
-	require.ErrorIs(stx.SyntacticVerify(ctx), errDelegatorWeightMismatch)
-	addDelegatorTx.Validator.Wght = validatorWeight
+	err = stx.SyntacticVerify(ctx)
+	require.ErrorIs(err, errDelegatorWeightMismatch)
+	addDelegatorTx.Wght = validatorWeight
 }
 
 func TestAddDelegatorTxSyntacticVerifyNotAVAX(t *testing.T) {
 	require := require.New(t)
 	clk := mockable.Clock{}
-	ctx := snow.DefaultContextTest()
-	ctx.AVAXAssetID = ids.GenerateTestID()
-	signers := [][]*crypto.PrivateKeySECP256K1R{preFundedKeys}
+	ctx := snowtest.Context(t, snowtest.PChainID)
+	signers := [][]*secp256k1.PrivateKey{preFundedKeys}
 
 	var (
 		stx            *Tx
@@ -156,7 +157,7 @@ func TestAddDelegatorTxSyntacticVerifyNotAVAX(t *testing.T) {
 			Amt: uint64(1234),
 			OutputOwners: secp256k1fx.OutputOwners{
 				Threshold: 1,
-				Addrs:     []ids.ShortID{preFundedKeys[0].PublicKey().Address()},
+				Addrs:     []ids.ShortID{preFundedKeys[0].Address()},
 			},
 		},
 	}}
@@ -168,7 +169,7 @@ func TestAddDelegatorTxSyntacticVerifyNotAVAX(t *testing.T) {
 				Amt: validatorWeight,
 				OutputOwners: secp256k1fx.OutputOwners{
 					Threshold: 1,
-					Addrs:     []ids.ShortID{preFundedKeys[0].PublicKey().Address()},
+					Addrs:     []ids.ShortID{preFundedKeys[0].Address()},
 				},
 			},
 		},
@@ -181,21 +182,29 @@ func TestAddDelegatorTxSyntacticVerifyNotAVAX(t *testing.T) {
 			Ins:          inputs,
 			Memo:         []byte{1, 2, 3, 4, 5, 6, 7, 8},
 		}},
-		Validator: validator.Validator{
+		Validator: Validator{
 			NodeID: ctx.NodeID,
 			Start:  uint64(clk.Time().Unix()),
 			End:    uint64(clk.Time().Add(time.Hour).Unix()),
 			Wght:   validatorWeight,
 		},
-		Stake: stakes,
-		RewardsOwner: &secp256k1fx.OutputOwners{
+		StakeOuts: stakes,
+		DelegationRewardsOwner: &secp256k1fx.OutputOwners{
 			Locktime:  0,
 			Threshold: 1,
-			Addrs:     []ids.ShortID{preFundedKeys[0].PublicKey().Address()},
+			Addrs:     []ids.ShortID{preFundedKeys[0].Address()},
 		},
 	}
 
 	stx, err = NewSigned(addDelegatorTx, Codec, signers)
 	require.NoError(err)
-	require.Error(stx.SyntacticVerify(ctx))
+
+	err = stx.SyntacticVerify(ctx)
+	require.ErrorIs(err, errStakeMustBeAVAX)
+}
+
+func TestAddDelegatorTxNotValidatorTx(t *testing.T) {
+	txIntf := any((*AddDelegatorTx)(nil))
+	_, ok := txIntf.(ValidatorTx)
+	require.False(t, ok)
 }

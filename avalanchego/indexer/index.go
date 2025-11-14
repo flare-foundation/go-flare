@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package indexer
@@ -6,28 +6,22 @@ package indexer
 import (
 	"errors"
 	"fmt"
-	"io"
 	"sync"
 
 	"go.uber.org/zap"
 
-	"github.com/ava-labs/avalanchego/codec"
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/database/prefixdb"
 	"github.com/ava-labs/avalanchego/database/versiondb"
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/utils/logging"
-	"github.com/ava-labs/avalanchego/utils/math"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
-	"github.com/ava-labs/avalanchego/utils/wrappers"
 )
 
-const (
-	// Maximum number of containers IDs that can be fetched at a time
-	// in a call to GetContainerRange
-	MaxFetchedByRange = 1024
-)
+// Maximum number of containers IDs that can be fetched at a time in a call to
+// GetContainerRange
+const MaxFetchedByRange = 1024
 
 var (
 	// Maps to the byte representation of the next accepted index
@@ -35,28 +29,18 @@ var (
 	indexToContainerPrefix = []byte{0x01}
 	containerToIDPrefix    = []byte{0x02}
 	errNoneAccepted        = errors.New("no containers have been accepted")
-	errNumToFetchZero      = fmt.Errorf("numToFetch must be in [1,%d]", MaxFetchedByRange)
+	errNumToFetchInvalid   = fmt.Errorf("numToFetch must be in [1,%d]", MaxFetchedByRange)
+	errNoContainerAtIndex  = errors.New("no container at index")
 
-	_ Index = &index{}
+	_ snow.Acceptor = (*index)(nil)
 )
 
-// Index indexes containers in their order of acceptance
-// Index is thread-safe.
-// Index assumes that Accept is called before the container is committed to the
-// database of the VM that the container exists in.
-type Index interface {
-	snow.Acceptor
-	GetContainerByIndex(index uint64) (Container, error)
-	GetContainerRange(startIndex uint64, numToFetch uint64) ([]Container, error)
-	GetLastAccepted() (Container, error)
-	GetIndex(id ids.ID) (uint64, error)
-	GetContainerByID(id ids.ID) (Container, error)
-	io.Closer
-}
-
-// indexer indexes all accepted transactions by the order in which they were accepted
+// index indexes containers in their order of acceptance
+//
+// Invariant: index is thread-safe.
+// Invariant: index assumes that Accept is called, before the container is
+// committed to the database of the VM, in the order they were accepted.
 type index struct {
-	codec codec.Manager
 	clock mockable.Clock
 	lock  sync.RWMutex
 	// The index of the next accepted transaction
@@ -72,21 +56,20 @@ type index struct {
 	log              logging.Logger
 }
 
-// Returns a new, thread-safe Index.
-// Closes [baseDB] on close.
+// Create a new thread-safe index.
+//
+// Invariant: Closes [baseDB] on close.
 func newIndex(
 	baseDB database.Database,
 	log logging.Logger,
-	codec codec.Manager,
 	clock mockable.Clock,
-) (Index, error) {
+) (*index, error) {
 	vDB := versiondb.New(baseDB)
 	indexToContainer := prefixdb.New(indexToContainerPrefix, vDB)
 	containerToIndex := prefixdb.New(containerToIDPrefix, vDB)
 
 	i := &index{
 		clock:            clock,
-		codec:            codec,
 		baseDB:           baseDB,
 		vDB:              vDB,
 		indexToContainer: indexToContainer,
@@ -95,17 +78,16 @@ func newIndex(
 	}
 
 	// Get next accepted index from db
-	nextAcceptedIndex, err := database.GetUInt64(i.vDB, nextAcceptedIndexKey)
-	if err == database.ErrNotFound {
-		// Couldn't find it in the database. Must not have accepted any containers in previous runs.
-		i.log.Info("created new index",
-			zap.Uint64("nextAcceptedIndex", i.nextAcceptedIndex),
-		)
-		return i, nil
-	}
+	nextAcceptedIndex, err := database.WithDefault(
+		database.GetUInt64,
+		i.vDB,
+		nextAcceptedIndexKey,
+		0,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("couldn't get next accepted index from database: %w", err)
 	}
+
 	i.nextAcceptedIndex = nextAcceptedIndex
 	i.log.Info("created new index",
 		zap.Uint64("nextAcceptedIndex", i.nextAcceptedIndex),
@@ -115,14 +97,12 @@ func newIndex(
 
 // Close this index
 func (i *index) Close() error {
-	errs := wrappers.Errs{}
-	errs.Add(
+	return errors.Join(
 		i.indexToContainer.Close(),
 		i.containerToIndex.Close(),
 		i.vDB.Close(),
 		i.baseDB.Close(),
 	)
-	return errs.Err
 }
 
 // Index that the given transaction is accepted
@@ -153,7 +133,7 @@ func (i *index) Accept(ctx *snow.ConsensusContext, containerID ids.ID, container
 	)
 	// Persist index --> Container
 	nextAcceptedIndexBytes := database.PackUInt64(i.nextAcceptedIndex)
-	bytes, err := i.codec.Marshal(codecVersion, Container{
+	bytes, err := Codec.Marshal(CodecVersion, Container{
 		ID:        containerID,
 		Bytes:     containerBytes,
 		Timestamp: i.clock.Time().UnixNano(),
@@ -195,7 +175,7 @@ func (i *index) GetContainerByIndex(index uint64) (Container, error) {
 func (i *index) getContainerByIndex(index uint64) (Container, error) {
 	lastAcceptedIndex, ok := i.lastAcceptedIndex()
 	if !ok || index > lastAcceptedIndex {
-		return Container{}, fmt.Errorf("no container at index %d", index)
+		return Container{}, fmt.Errorf("%w %d", errNoContainerAtIndex, index)
 	}
 	indexBytes := database.PackUInt64(index)
 	return i.getContainerByIndexBytes(indexBytes)
@@ -212,7 +192,7 @@ func (i *index) getContainerByIndexBytes(indexBytes []byte) (Container, error) {
 		return Container{}, fmt.Errorf("couldn't read from database: %w", err)
 	}
 	var container Container
-	if _, err = i.codec.Unmarshal(containerBytes, &container); err != nil {
+	if _, err := Codec.Unmarshal(containerBytes, &container); err != nil {
 		return Container{}, fmt.Errorf("couldn't unmarshal container: %w", err)
 	}
 	return container, nil
@@ -224,10 +204,8 @@ func (i *index) getContainerByIndexBytes(indexBytes []byte) (Container, error) {
 // [numToFetch] should be in [0, MaxFetchedByRange]
 func (i *index) GetContainerRange(startIndex, numToFetch uint64) ([]Container, error) {
 	// Check arguments for validity
-	if numToFetch == 0 {
-		return nil, errNumToFetchZero
-	} else if numToFetch > MaxFetchedByRange {
-		return nil, fmt.Errorf("requested %d but maximum page size is %d", numToFetch, MaxFetchedByRange)
+	if numToFetch == 0 || numToFetch > MaxFetchedByRange {
+		return nil, fmt.Errorf("%w but is %d", errNumToFetchInvalid, numToFetch)
 	}
 
 	i.lock.RLock()
@@ -241,7 +219,7 @@ func (i *index) GetContainerRange(startIndex, numToFetch uint64) ([]Container, e
 	}
 
 	// Calculate the last index we will fetch
-	lastIndex := math.Min64(startIndex+numToFetch-1, lastAcceptedIndex)
+	lastIndex := min(startIndex+numToFetch-1, lastAcceptedIndex)
 	// [lastIndex] is always >= [startIndex] so this is safe.
 	// [numToFetch] is limited to [MaxFetchedByRange] so [containers] is bounded in size.
 	containers := make([]Container, int(lastIndex)-int(startIndex)+1)
@@ -293,9 +271,10 @@ func (i *index) GetLastAccepted() (Container, error) {
 
 // Assumes i.lock is held
 // Returns:
-// 1) The index of the most recently accepted transaction,
-//    or 0 if no transactions have been accepted
-// 2) Whether at least 1 transaction has been accepted
+//
+//  1. The index of the most recently accepted transaction, or 0 if no
+//     transactions have been accepted
+//  2. Whether at least 1 transaction has been accepted
 func (i *index) lastAcceptedIndex() (uint64, bool) {
 	return i.nextAcceptedIndex - 1, i.nextAcceptedIndex != 0
 }

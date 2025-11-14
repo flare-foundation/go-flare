@@ -17,14 +17,15 @@ import (
 
 	"github.com/ava-labs/coreth/consensus/dummy"
 	"github.com/ava-labs/coreth/core"
+	"github.com/ava-labs/coreth/core/rawdb"
 	"github.com/ava-labs/coreth/core/types"
-	"github.com/ava-labs/coreth/ethdb/memorydb"
 	"github.com/ava-labs/coreth/params"
 	"github.com/ava-labs/coreth/plugin/evm/message"
 	clientstats "github.com/ava-labs/coreth/sync/client/stats"
 	"github.com/ava-labs/coreth/sync/handlers"
 	handlerstats "github.com/ava-labs/coreth/sync/handlers/stats"
-	"github.com/ava-labs/coreth/trie"
+	"github.com/ava-labs/coreth/sync/syncutils"
+	"github.com/ava-labs/coreth/triedb"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 )
@@ -138,14 +139,15 @@ func TestGetBlocks(t *testing.T) {
 	// set random seed for deterministic tests
 	rand.Seed(1)
 
-	var gspec = &core.Genesis{
-		Config: params.TestChainConfig,
+	gspec := &core.Genesis{
+		Config: params.TestFlareChainConfig,
 	}
-	memdb := memorydb.New()
-	genesis := gspec.MustCommit(memdb)
+	memdb := rawdb.NewMemoryDatabase()
+	tdb := triedb.NewDatabase(memdb, nil)
+	genesis := gspec.MustCommit(memdb, tdb)
 	engine := dummy.NewETHFaker()
 	numBlocks := 110
-	blocks, _, err := core.GenerateChain(params.TestChainConfig, genesis, engine, memdb, numBlocks, 0, func(i int, b *core.BlockGen) {})
+	blocks, _, err := core.GenerateChain(params.TestFlareChainConfig, genesis, engine, memdb, numBlocks, 0, func(i int, b *core.BlockGen) {})
 	if err != nil {
 		t.Fatal("unexpected error when generating test blockchain", err)
 	}
@@ -409,9 +411,9 @@ func TestGetLeafs(t *testing.T) {
 
 	const leafsLimit = 1024
 
-	trieDB := trie.NewDatabase(memorydb.New())
-	largeTrieRoot, largeTrieKeys, _ := trie.GenerateTrie(t, trieDB, 100_000, common.HashLength)
-	smallTrieRoot, _, _ := trie.GenerateTrie(t, trieDB, leafsLimit, common.HashLength)
+	trieDB := triedb.NewDatabase(rawdb.NewMemoryDatabase(), nil)
+	largeTrieRoot, largeTrieKeys, _ := syncutils.GenerateTrie(t, trieDB, 100_000, common.HashLength)
+	smallTrieRoot, _, _ := syncutils.GenerateTrie(t, trieDB, leafsLimit, common.HashLength)
 
 	handler := handlers.NewLeafsRequestHandler(trieDB, nil, message.Codec, handlerstats.NewNoopHandlerStats())
 	client := NewClient(&ClientConfig{
@@ -792,8 +794,8 @@ func TestGetLeafs(t *testing.T) {
 func TestGetLeafsRetries(t *testing.T) {
 	rand.Seed(1)
 
-	trieDB := trie.NewDatabase(memorydb.New())
-	root, _, _ := trie.GenerateTrie(t, trieDB, 100_000, common.HashLength)
+	trieDB := triedb.NewDatabase(rawdb.NewMemoryDatabase(), nil)
+	root, _, _ := syncutils.GenerateTrie(t, trieDB, 100_000, common.HashLength)
 
 	handler := handlers.NewLeafsRequestHandler(trieDB, nil, message.Codec, handlerstats.NewNoopHandlerStats())
 	mockNetClient := &mockNetwork{}
@@ -811,7 +813,7 @@ func TestGetLeafsRetries(t *testing.T) {
 		Root:     root,
 		Start:    bytes.Repeat([]byte{0x00}, common.HashLength),
 		End:      bytes.Repeat([]byte{0xff}, common.HashLength),
-		Limit:    defaultLeafRequestLimit,
+		Limit:    1024,
 		NodeType: message.StateTrieNode,
 	}
 

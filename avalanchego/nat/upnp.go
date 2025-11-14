@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package nat
@@ -7,18 +7,28 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"net/netip"
 	"time"
 
 	"github.com/huin/goupnp"
 	"github.com/huin/goupnp/dcps/internetgateway1"
 	"github.com/huin/goupnp/dcps/internetgateway2"
+
+	"github.com/ava-labs/avalanchego/utils/ips"
 )
 
 const (
+	// upnpProtocol is intentionally uppercase and should not be confused with
+	// pmpProtocol.
+	// See:
+	// - https://github.com/huin/goupnp/blob/v1.0.3/dcps/internetgateway1/internetgateway1.go#L2361
+	// - https://github.com/huin/goupnp/blob/v1.0.3/dcps/internetgateway1/internetgateway1.go#L3618
+	// - https://github.com/huin/goupnp/blob/v1.0.3/dcps/internetgateway2/internetgateway2.go#L3919
+	upnpProtocol       = "TCP"
 	soapRequestTimeout = 10 * time.Second
 )
 
-var _ Router = &upnpRouter{}
+var _ Router = (*upnpRouter)(nil)
 
 // upnpClient is the interface used by goupnp for their client implementations
 type upnpClient interface {
@@ -66,7 +76,7 @@ type upnpRouter struct {
 	client upnpClient
 }
 
-func (r *upnpRouter) SupportsNAT() bool {
+func (*upnpRouter) SupportsNAT() bool {
 	return true
 }
 
@@ -104,21 +114,15 @@ func (r *upnpRouter) localIP() (net.IP, error) {
 	return nil, fmt.Errorf("couldn't find the local address in the same network as %s", deviceIP)
 }
 
-func (r *upnpRouter) ExternalIP() (net.IP, error) {
+func (r *upnpRouter) ExternalIP() (netip.Addr, error) {
 	str, err := r.client.GetExternalIPAddress()
 	if err != nil {
-		return nil, err
+		return netip.Addr{}, err
 	}
-
-	ip := net.ParseIP(str)
-	if ip == nil {
-		return nil, fmt.Errorf("invalid IP %s", str)
-	}
-	return ip, nil
+	return ips.ParseAddr(str)
 }
 
 func (r *upnpRouter) MapPort(
-	protocol string,
 	intPort,
 	extPort uint16,
 	desc string,
@@ -126,19 +130,19 @@ func (r *upnpRouter) MapPort(
 ) error {
 	ip, err := r.localIP()
 	if err != nil {
-		return nil
+		return err
 	}
 	lifetime := duration.Seconds()
 	if lifetime < 0 || lifetime > math.MaxUint32 {
 		return errInvalidLifetime
 	}
 
-	return r.client.AddPortMapping("", extPort, protocol, intPort,
+	return r.client.AddPortMapping("", extPort, upnpProtocol, intPort,
 		ip.String(), true, desc, uint32(lifetime))
 }
 
-func (r *upnpRouter) UnmapPort(protocol string, _, extPort uint16) error {
-	return r.client.DeletePortMapping("", extPort, protocol)
+func (r *upnpRouter) UnmapPort(_, extPort uint16) error {
+	return r.client.DeletePortMapping("", extPort, upnpProtocol)
 }
 
 // create UPnP SOAP service client with URN
@@ -155,7 +159,7 @@ func getUPnPClient(client goupnp.ServiceClient) upnpClient {
 	}
 }
 
-// discover() tries to find  gateway device
+// discover() tries to find gateway device
 func discover(target string) *upnpRouter {
 	devs, err := goupnp.DiscoverDevices(target)
 	if err != nil {
@@ -184,7 +188,14 @@ func discover(target string) *upnpRouter {
 				if _, nat, err := client.GetNATRSIPStatus(); err != nil || !nat {
 					return
 				}
-				r = &upnpRouter{dev.Root, client}
+				newRouter := &upnpRouter{
+					dev:    dev.Root,
+					client: client,
+				}
+				if _, err := newRouter.localIP(); err != nil {
+					return
+				}
+				r = newRouter
 			})
 			router <- r
 		}(&devs[i])

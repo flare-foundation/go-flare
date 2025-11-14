@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package config
@@ -6,30 +6,39 @@ package config
 import (
 	"bytes"
 	"encoding/base64"
-	"flag"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )
 
+const EnvPrefix = "avago"
+
+var DashesToUnderscores = strings.NewReplacer("-", "_")
+
+func EnvVarName(prefix string, key string) string {
+	// e.g. MY_PREFIX, network-id -> MY_PREFIX_NETWORK_ID
+	return strings.ToUpper(prefix + "_" + DashesToUnderscores.Replace(key))
+}
+
 // BuildViper returns the viper environment from parsing config file from
 // default search paths and any parsed command line flags
-func BuildViper(fs *flag.FlagSet, args []string) (*viper.Viper, error) {
-	pfs, err := buildPFlagSet(fs)
-	if err != nil {
+func BuildViper(fs *pflag.FlagSet, args []string) (*viper.Viper, error) {
+	if err := deprecateFlags(fs); err != nil {
 		return nil, err
 	}
-	if err := pfs.Parse(args); err != nil {
+	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
 
 	v := viper.New()
 	v.AutomaticEnv()
-	v.SetEnvKeyReplacer(strings.NewReplacer("-", "_"))
-	v.SetEnvPrefix("avago")
-	if err := v.BindPFlags(pfs); err != nil {
+	v.SetEnvKeyReplacer(DashesToUnderscores)
+	v.SetEnvPrefix(EnvPrefix)
+	if err := v.BindPFlags(fs); err != nil {
 		return nil, err
 	}
 
@@ -56,7 +65,7 @@ func BuildViper(fs *flag.FlagSet, args []string) (*viper.Viper, error) {
 	}
 
 	// Config deprecations must be after v.ReadInConfig
-	deprecateConfigs(v, fs.Output())
+	deprecateConfigs(v, os.Stdout)
 	return v, nil
 }
 

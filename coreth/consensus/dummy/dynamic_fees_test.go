@@ -10,9 +10,11 @@ import (
 
 	"github.com/ava-labs/coreth/core/types"
 	"github.com/ava-labs/coreth/params"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func testRollup(t *testing.T, longs []uint64, roll int) {
@@ -107,6 +109,7 @@ type test struct {
 
 func TestDynamicFees(t *testing.T) {
 	spacedTimestamps := []uint64{1, 1, 2, 5, 15, 120}
+
 	var tests []test = []test{
 		// Test minimal gas usage
 		{
@@ -203,7 +206,7 @@ func testDynamicFeesStaysWithinRange(t *testing.T, test test) {
 	}
 
 	for index, block := range blocks[1:] {
-		nextExtraData, nextBaseFee, err := CalcBaseFee(params.TestApricotPhase3Config, header, block.timestamp)
+		nextExtraData, nextBaseFee, err := CalcBaseFee(params.TestFlareApricotPhase3Config, header, block.timestamp)
 		if err != nil {
 			t.Fatalf("Failed to calculate base fee at index %d: %s", index, err)
 		}
@@ -276,7 +279,7 @@ func TestSelectBigWithinBounds(t *testing.T) {
 		lower, value, upper, expected *big.Int
 	}
 
-	var tests = map[string]test{
+	tests := map[string]test{
 		"value within bounds": {
 			lower:    big.NewInt(0),
 			value:    big.NewInt(5),
@@ -408,7 +411,7 @@ func TestCalcBaseFeeAP4(t *testing.T) {
 
 	for index, event := range events {
 		block := event.block
-		nextExtraData, nextBaseFee, err := CalcBaseFee(params.TestApricotPhase4Config, header, block.timestamp)
+		nextExtraData, nextBaseFee, err := CalcBaseFee(params.TestFlareApricotPhase4Config, header, block.timestamp)
 		assert.NoError(t, err)
 		log.Info("Update", "baseFee", nextBaseFee)
 		header = &types.Header{
@@ -419,7 +422,7 @@ func TestCalcBaseFeeAP4(t *testing.T) {
 			Extra:   nextExtraData,
 		}
 
-		nextExtraData, nextBaseFee, err = CalcBaseFee(params.TestApricotPhase4Config, extDataHeader, block.timestamp)
+		nextExtraData, nextBaseFee, err = CalcBaseFee(params.TestFlareApricotPhase4Config, extDataHeader, block.timestamp)
 		assert.NoError(t, err)
 		log.Info("Update", "baseFee (w/extData)", nextBaseFee)
 		extDataHeader = &types.Header{
@@ -535,4 +538,47 @@ func TestCalcBlockGasCost(t *testing.T) {
 			)))
 		})
 	}
+}
+
+func TestDynamicFeesEtna(t *testing.T) {
+	require := require.New(t)
+	header := &types.Header{
+		Number: big.NewInt(0),
+	}
+
+	timestamp := uint64(1)
+	extra, nextBaseFee, err := CalcBaseFee(params.TestFlareEtnaChainConfig, header, timestamp)
+	require.NoError(err)
+	// Genesis matches the initial base fee
+	require.Equal(params.ApricotPhase3InitialBaseFee, nextBaseFee.Int64())
+
+	timestamp = uint64(10_000)
+	header = &types.Header{
+		Number:  big.NewInt(1),
+		Time:    header.Time,
+		BaseFee: nextBaseFee,
+		Extra:   extra,
+	}
+	_, nextBaseFee, err = CalcBaseFee(params.TestFlareEtnaChainConfig, header, timestamp)
+	require.NoError(err)
+	// Etna fee is equal to Apricot Phase 4 fee calculation in contrast to Avalanche code
+	// where it would drop
+	require.Equal(nextBaseFee.Int64(), params.ApricotPhase4MinBaseFee)
+}
+
+func TestCalcBaseFeeRegression(t *testing.T) {
+	parentTimestamp := uint64(1)
+	timestamp := parentTimestamp + params.RollupWindow + 1000
+
+	parentHeader := &types.Header{
+		Time:    parentTimestamp,
+		GasUsed: 14_999_999,
+		Number:  big.NewInt(1),
+		BaseFee: big.NewInt(1),
+		Extra:   make([]byte, params.DynamicFeeExtraDataSize),
+	}
+
+	_, _, err := CalcBaseFee(params.TestFlareChainConfig, parentHeader, timestamp)
+	require.NoError(t, err)
+	require.Equalf(t, 0, common.Big1.Cmp(big.NewInt(1)), "big1 should be 1, got %s", common.Big1)
 }

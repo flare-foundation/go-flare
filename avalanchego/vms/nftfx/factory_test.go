@@ -1,17 +1,17 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package nftfx
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestFactory(t *testing.T) {
+	require := require.New(t)
+
 	factory := Factory{}
-	if fx, err := factory.New(nil); err != nil {
-		t.Fatal(err)
-	} else if fx == nil {
-		t.Fatalf("Factory.New returned nil")
-	}
+	require.Equal(&Fx{}, factory.New())
 }

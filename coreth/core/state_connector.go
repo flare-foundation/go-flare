@@ -15,6 +15,7 @@ import (
 
 	"github.com/ava-labs/coreth/core/vm"
 	"github.com/ava-labs/coreth/params"
+	"github.com/ava-labs/coreth/utils"
 )
 
 const (
@@ -23,11 +24,16 @@ const (
 )
 
 var (
-	flareActivationTime      = big.NewInt(time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC).Unix())
-	songbirdActivationTime   = big.NewInt(time.Date(2022, time.March, 28, 14, 0, 0, 0, time.UTC).Unix())
-	costwoActivationTime     = big.NewInt(time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC).Unix())
-	stagingActivationTime    = big.NewInt(time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC).Unix())
-	localFlareActivationTime = big.NewInt(time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC).Unix())
+	flareActivationTime      = uint64(time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC).Unix())
+	costwoActivationTime     = uint64(time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC).Unix())
+	stagingActivationTime    = uint64(time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC).Unix())
+	localFlareActivationTime = uint64(time.Date(2022, time.June, 1, 0, 0, 0, 0, time.UTC).Unix())
+
+	songbirdActivationTime = uint64(time.Date(2022, time.March, 28, 14, 0, 0, 0, time.UTC).Unix())
+	songbirdOct22ForkTime  = uint64(time.Date(2022, time.October, 19, 15, 0, 0, 0, time.UTC).Unix())
+
+	costonActivationTime = uint64(time.Date(2022, time.February, 25, 17, 0, 0, 0, time.UTC).Unix())
+	costonOct22ForkTime  = uint64(time.Date(2022, time.October, 6, 15, 0, 0, 0, time.UTC).Unix())
 )
 
 type AttestationVotes struct {
@@ -38,33 +44,61 @@ type AttestationVotes struct {
 	abstainedAttestors []common.Address
 }
 
-func GetStateConnectorIsActivatedAndCalled(chainID *big.Int, blockTime *big.Int, to common.Address) bool {
+var (
+	stateConnectorActivationVariants = utils.NewChainValue(func(uint64, common.Address) bool { return false }).
+		AddValue(params.FlareChainID, GetStateConnectorIsActivatedAndCalledFlare).
+		AddValue(params.SongbirdChainID, GetStateConnectorIsActivatedAndCalledSongbird).
+		AddValue(params.CostwoChainID, GetStateConnectorIsActivatedAndCalledCostwo).
+		AddValue(params.CostonChainID, GetStateConnectorIsActivatedAndCalledCoston).
+		AddValue(params.LocalFlareChainID, GetStateConnectorIsActivatedAndCalledLocalFlare).
+		AddValue(params.LocalChainID, GetStateConnectorIsActivatedAndCalledLocal)
+)
+
+func GetStateConnectorIsActivatedAndCalled(isDurango bool, chainID *big.Int, blockTime uint64, to common.Address) bool {
+	return !isDurango && stateConnectorActivationVariants.GetValue(chainID)(blockTime, to)
+}
+
+func GetStateConnectorIsActivatedAndCalledFlare(blockTime uint64, to common.Address) bool {
+	return blockTime >= flareActivationTime &&
+		to == common.HexToAddress("0x1000000000000000000000000000000000000001")
+}
+
+func GetStateConnectorIsActivatedAndCalledCostwo(blockTime uint64, to common.Address) bool {
+	return blockTime >= costwoActivationTime &&
+		to == common.HexToAddress("0x1000000000000000000000000000000000000001")
+}
+
+func GetStateConnectorIsActivatedAndCalledStaging(blockTime uint64, to common.Address) bool {
+	return blockTime >= stagingActivationTime &&
+		to == common.HexToAddress("0x1000000000000000000000000000000000000001")
+}
+
+func GetStateConnectorIsActivatedAndCalledLocalFlare(blockTime uint64, to common.Address) bool {
+	return blockTime >= localFlareActivationTime &&
+		to == common.HexToAddress("0x1000000000000000000000000000000000000001")
+}
+
+func GetStateConnectorIsActivatedAndCalledLocal(_ uint64, to common.Address) bool {
+	return to == common.HexToAddress("0x1000000000000000000000000000000000000001")
+}
+
+func GetStateConnectorIsActivatedAndCalledSongbird(blockTime uint64, to common.Address) bool {
 	switch {
-	case chainID.Cmp(params.FlareChainID) == 0 && blockTime.Cmp(flareActivationTime) >= 0:
-		switch blockTime {
-		default:
-			return to == common.HexToAddress("0x1000000000000000000000000000000000000001")
-		}
-	case chainID.Cmp(params.SongbirdChainID) == 0 && blockTime.Cmp(songbirdActivationTime) >= 0:
-		switch blockTime {
-		default:
-			return to == common.HexToAddress("0x3A1b3220527aBA427d1e13e4b4c48c31460B4d91")
-		}
-	case chainID.Cmp(params.CostwoChainID) == 0 && blockTime.Cmp(costwoActivationTime) >= 0:
-		switch blockTime {
-		default:
-			return to == common.HexToAddress("0x1000000000000000000000000000000000000001")
-		}
-	case chainID.Cmp(params.StagingChainID) == 0 && blockTime.Cmp(stagingActivationTime) >= 0:
-		switch blockTime {
-		default:
-			return to == common.HexToAddress("0x1000000000000000000000000000000000000001")
-		}
-	case chainID.Cmp(params.LocalFlareChainID) == 0 && blockTime.Cmp(localFlareActivationTime) >= 0:
-		switch blockTime {
-		default:
-			return to == common.HexToAddress("0x1000000000000000000000000000000000000001")
-		}
+	case blockTime > songbirdOct22ForkTime:
+		return to == common.HexToAddress("0x0c13aDA1C7143Cf0a0795FFaB93eEBb6FAD6e4e3")
+	case blockTime > songbirdActivationTime:
+		return to == common.HexToAddress("0x3A1b3220527aBA427d1e13e4b4c48c31460B4d91")
+	default:
+		return false
+	}
+}
+
+func GetStateConnectorIsActivatedAndCalledCoston(blockTime uint64, to common.Address) bool {
+	switch {
+	case blockTime > costonOct22ForkTime:
+		return to == common.HexToAddress("0x0c13aDA1C7143Cf0a0795FFaB93eEBb6FAD6e4e3")
+	case blockTime > costonActivationTime:
+		return to == common.HexToAddress("0x947c76694491d3fD67a73688003c4d36C8780A97")
 	default:
 		return false
 	}
@@ -74,17 +108,33 @@ func GetStateConnectorIsActivatedAndCalled(chainID *big.Int, blockTime *big.Int,
 // address public constant SIGNAL_COINBASE = address(0x00000000000000000000000000000000000DEaD1);
 // https://gitlab.com/flarenetwork/flare-smart-contracts/-/blob/6b6e5480c3cf769b5a650b961992b4f082761d76/contracts/genesis/implementation/StateConnector.sol#L17
 
-func GetStateConnectorCoinbaseSignalAddr(chainID *big.Int, blockTime *big.Int) common.Address {
+func GetStateConnectorCoinbaseSignalAddr(chainID *big.Int, blockTime uint64) common.Address {
 	switch {
-	default:
+	case chainID.Cmp(params.FlareChainID) == 0 || chainID.Cmp(params.CostwoChainID) == 0 || chainID.Cmp(params.LocalFlareChainID) == 0:
 		return common.HexToAddress("0x00000000000000000000000000000000000DEaD1")
+	case chainID.Cmp(params.SongbirdChainID) == 0:
+		switch {
+		case blockTime > songbirdOct22ForkTime:
+			return common.HexToAddress("0x00000000000000000000000000000000000DEaD1")
+		default:
+			return common.HexToAddress("0x000000000000000000000000000000000000dEaD")
+		}
+	case chainID.Cmp(params.CostonChainID) == 0:
+		switch {
+		case blockTime > costonOct22ForkTime:
+			return common.HexToAddress("0x00000000000000000000000000000000000DEaD1")
+		default:
+			return common.HexToAddress("0x000000000000000000000000000000000000dEaD")
+		}
+	default:
+		return common.HexToAddress("0x000000000000000000000000000000000000dEaD")
 	}
 }
 
 // function submitAttestation(uint256 _bufferNumber, bytes32 _commitHash, bytes32 _merkleRoot, bytes32 _randomNumber) external returns (bool _isInitialBufferSlot)
 // https://gitlab.com/flarenetwork/flare-smart-contracts/-/blob/6b6e5480c3cf769b5a650b961992b4f082761d76/contracts/genesis/implementation/StateConnector.sol#L98
 
-func SubmitAttestationSelector(chainID *big.Int, blockTime *big.Int) []byte {
+func SubmitAttestationSelector(chainID *big.Int, blockTime uint64) []byte {
 	switch {
 	default:
 		return []byte{0xcf, 0xd1, 0xfd, 0xad}
@@ -94,7 +144,7 @@ func SubmitAttestationSelector(chainID *big.Int, blockTime *big.Int) []byte {
 // function getAttestation(uint256 _bufferNumber) external view returns (bytes32 _merkleRoot)
 // https://gitlab.com/flarenetwork/flare-smart-contracts/-/blob/6b6e5480c3cf769b5a650b961992b4f082761d76/contracts/genesis/implementation/StateConnector.sol#L123
 
-func GetAttestationSelector(chainID *big.Int, blockTime *big.Int) []byte {
+func GetAttestationSelector(chainID *big.Int, blockTime uint64) []byte {
 	switch {
 	default:
 		return []byte{0x29, 0xbe, 0x4d, 0xb2}
@@ -104,7 +154,7 @@ func GetAttestationSelector(chainID *big.Int, blockTime *big.Int) []byte {
 // function finaliseRound(uint256 _bufferNumber, bytes32 _merkleRoot) external
 // https://gitlab.com/flarenetwork/flare-smart-contracts/-/blob/6b6e5480c3cf769b5a650b961992b4f082761d76/contracts/genesis/implementation/StateConnector.sol#L137
 
-func FinaliseRoundSelector(chainID *big.Int, blockTime *big.Int) []byte {
+func FinaliseRoundSelector(chainID *big.Int, blockTime uint64) []byte {
 	switch {
 	default:
 		return []byte{0xea, 0xeb, 0xf6, 0xd3}
@@ -112,10 +162,10 @@ func FinaliseRoundSelector(chainID *big.Int, blockTime *big.Int) []byte {
 }
 
 // The default attestation providers for the state connector will be drawn from the top weighted/performing FTSOs.
-func GetDefaultAttestors(chainID *big.Int, blockTime *big.Int) []common.Address {
+func GetDefaultAttestors(chainID *big.Int, blockTime uint64) []common.Address {
 	switch {
 	case chainID.Cmp(params.FlareChainID) == 0:
-		if blockTime.Cmp(submitterContractActivationTimeFlare) > 0 {
+		if blockTime > submitterContractActivationTimeFlare {
 			return []common.Address{
 				common.HexToAddress("0x4E07E1F3DB3Dc9BAd56Cc829747cc0148234329F"),
 				common.HexToAddress("0xB264Fad6Fdc65767998f93501945aB8F9108809d"),
@@ -141,8 +191,35 @@ func GetDefaultAttestors(chainID *big.Int, blockTime *big.Int) []common.Address 
 			}
 		}
 	case chainID.Cmp(params.SongbirdChainID) == 0:
-		return []common.Address{
-			common.HexToAddress("0x0c19f3B4927abFc596353B0f9Ddad5D817736F70"),
+		switch {
+		case blockTime > submitterContractActivationTimeSongbird:
+			return []common.Address{
+				common.HexToAddress("0xcE397b9a395ace2e328030699bDDf4E2F049A05B"),
+				common.HexToAddress("0xeDBb013BBC314124a9f842c1887e34cfeB03B052"),
+				common.HexToAddress("0xb9eF3951ac2D04C6bdD886bF042041E3954E86aF"),
+				common.HexToAddress("0x816Cec8f3A37Fd673Cfd4229441c59cA8DbD0641"),
+				common.HexToAddress("0x14c9c4583F0b1af8a69452Ec1b29884240f83bDC"),
+				common.HexToAddress("0x0049081C2D6def64800cC011Bd9aDe8682c6593a"),
+				common.HexToAddress("0x53Fcb50a22aFd6e5438d754CB22c4726032d2488"),
+				common.HexToAddress("0x35f4F0Bb73a6040F24927e1735B089d7769F7674"),
+				common.HexToAddress("0x3B583C919fD4C863F3A17d11929346C687FfB7c3"),
+			}
+		case blockTime > songbirdOct22ForkTime:
+			return []common.Address{
+				common.HexToAddress("0x2D3e7e4b19bDc920fd9C57BD3072A31F5a59FeC8"),
+				common.HexToAddress("0x442DD539Fe78D43A1a9358FF3460CfE63e2bC9CC"),
+				common.HexToAddress("0x49893c5Dfc035F4eE4E46faC014f6D4bC80F7f92"),
+				common.HexToAddress("0x5D2f75392DdDa69a2818021dd6a64937904c8352"),
+				common.HexToAddress("0x6455dC38fdF739b6fE021b30C7D9672C1c6DEb5c"),
+				common.HexToAddress("0x808441Ec3Fa1721330226E69527Bc160D8d9386a"),
+				common.HexToAddress("0x823B0f5c7758E9d3bE55bA1EA840E29ccd5D5CcB"),
+				common.HexToAddress("0x85016969b9eBDB8977975a4743c9FCEeabCEAf8A"),
+				common.HexToAddress("0x8A3D627D86A81F5D21683F4963565C63DB5e1309"),
+			}
+		default:
+			return []common.Address{
+				common.HexToAddress("0x0c19f3B4927abFc596353B0f9Ddad5D817736F70"),
+			}
 		}
 	case chainID.Cmp(params.CostwoChainID) == 0:
 		return []common.Address{
@@ -156,17 +233,24 @@ func GetDefaultAttestors(chainID *big.Int, blockTime *big.Int) []common.Address 
 			common.HexToAddress("0x3d895D00d2802120D39d4D2554F7ef09d6845E99"),
 			common.HexToAddress("0xc36141CFBe5Af6eB2F8b21550Ccd457DA7FaF3C6"),
 		}
-	case chainID.Cmp(params.StagingChainID) == 0:
-		return []common.Address{
-			common.HexToAddress("0x0988Cf4828F4e4eD0cE7c07467E70e19095Ee152"),
-			common.HexToAddress("0x6BC7DCa62010D418eB72CCdc58561e00C5868Ef1"),
-			common.HexToAddress("0xE34Bb361536610a9DCcEa5292262e36AfF65c06c"),
-			common.HexToAddress("0x8A3D627D86A81F5D21683F4963565C63DB5e1309"),
-			common.HexToAddress("0x2D3e7e4b19bDc920fd9C57BD3072A31F5a59FeC8"),
-			common.HexToAddress("0x6455dC38fdF739b6fE021b30C7D9672C1c6DEb5c"),
-			common.HexToAddress("0x49893c5Dfc035F4eE4E46faC014f6D4bC80F7f92"),
-			common.HexToAddress("0x08e8b2Af4874e920de27723576A13d66008Af523"),
-			common.HexToAddress("0x5D2f75392DdDa69a2818021dd6a64937904c8352"),
+	case chainID.Cmp(params.CostonChainID) == 0:
+		switch {
+		case blockTime > costonOct22ForkTime:
+			return []common.Address{
+				common.HexToAddress("0x30e4b4542b4aAf615838B113f14c46dE1469212e"),
+				common.HexToAddress("0x3519E14183252794aaA52aA824f34482ef44cE1d"),
+				common.HexToAddress("0xb445857476181ec378Ec453ab3d122183CfC3b78"),
+				common.HexToAddress("0x6D755cd7A61A9DCFc96FaE0f927C3a73bE986ce4"),
+				common.HexToAddress("0xdC0fD24846303D58d2D66AA8820be2685735dBd2"),
+				common.HexToAddress("0x3F52c41c0500a4f018A38c9f8273b254aD7e2FCc"),
+				common.HexToAddress("0xdA6d6aA9F1f770c279c5DA0C71f4DC1142A70d5D"),
+				common.HexToAddress("0x3d895D00d2802120D39d4D2554F7ef09d6845E99"),
+				common.HexToAddress("0xc36141CFBe5Af6eB2F8b21550Ccd457DA7FaF3C6"),
+			}
+		default:
+			return []common.Address{
+				common.HexToAddress("0x3a6e101103ec3d9267d08f484a6b70e1440a8255"),
+			}
 		}
 	case chainID.Cmp(params.LocalFlareChainID) == 0:
 		return []common.Address{
@@ -230,7 +314,7 @@ func CountAttestations(attestationVotes AttestationVotes, numAttestors int, hash
 	return attestationVotes
 }
 
-func (st *StateTransition) FinalisePreviousRound(chainID *big.Int, timestamp *big.Int, currentRoundNumber []byte) error {
+func (st *StateTransition) FinalisePreviousRound(chainID *big.Int, timestamp uint64, currentRoundNumber []byte) error {
 	getAttestationSelector := GetAttestationSelector(chainID, timestamp)
 	instructions := append(getAttestationSelector[:], currentRoundNumber[:]...)
 	defaultAttestors := GetDefaultAttestors(chainID, timestamp)

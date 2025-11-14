@@ -1,8 +1,8 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 // For ease of implementation, our database's interface matches Ethereum's
-// database implementation. This was to allow use to use Geth code as is for the
+// database implementation. This was to allow us to use Geth code as is for the
 // EVM chain.
 
 package database
@@ -21,6 +21,7 @@ type KeyValueReader interface {
 	Has(key []byte) (bool, error)
 
 	// Get retrieves the given key if it's present in the key-value data store.
+	// Returns ErrNotFound if the key is not present in the key-value data store.
 	//
 	// Note: [key] is safe to modify and read after calling Get.
 	// The returned byte slice is safe to read, but cannot be modified.
@@ -32,6 +33,11 @@ type KeyValueWriter interface {
 	// Put inserts the given value into the key-value data store.
 	//
 	// Note: [key] and [value] are safe to modify and read after calling Put.
+	//
+	// If [value] is nil or an empty slice, then when it's retrieved
+	// it may be nil or an empty slice.
+	//
+	// Similarly, a nil [key] is treated the same as an empty slice.
 	Put(key []byte, value []byte) error
 }
 
@@ -43,13 +49,13 @@ type KeyValueDeleter interface {
 	Delete(key []byte) error
 }
 
-// KeyValueReaderWriter allows read/write acccess to a backing data store.
+// KeyValueReaderWriter allows read/write access to a backing data store.
 type KeyValueReaderWriter interface {
 	KeyValueReader
 	KeyValueWriter
 }
 
-// KeyValueWriterDeleter allows write/delete acccess to a backing data store.
+// KeyValueWriterDeleter allows write/delete access to a backing data store.
 type KeyValueWriterDeleter interface {
 	KeyValueWriter
 	KeyValueDeleter

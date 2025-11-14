@@ -1,18 +1,22 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package dynamicip
 
 import (
+	"context"
+	"net/netip"
 	"time"
 
 	"go.uber.org/zap"
 
-	"github.com/ava-labs/avalanchego/utils/ips"
+	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/logging"
 )
 
-var _ Updater = &updater{}
+const ipResolutionTimeout = 10 * time.Second
+
+var _ Updater = (*updater)(nil)
 
 // Updater periodically updates this node's public IP.
 // Dispatch() and Stop() should only be called once.
@@ -27,11 +31,15 @@ type Updater interface {
 
 type updater struct {
 	// The IP we periodically modify.
-	dynamicIP ips.DynamicIPPort
+	dynamicIP *utils.Atomic[netip.AddrPort]
 	// Used to find out what our public IP is.
 	resolver Resolver
-	// Closing causes Dispatch() to return.
-	stopChan chan struct{}
+	// The parent of all contexts passed into resolver.Resolve().
+	// Cancelling causes Dispatch() to eventually return.
+	rootCtx context.Context
+	// Cancelling causes Dispatch() to eventually return.
+	// All in-flight calls to resolver.Resolve() will be cancelled.
+	rootCtxCancel context.CancelFunc
 	// Closed when Dispatch() has returned.
 	doneChan chan struct{}
 	// How often we update the public IP.
@@ -42,16 +50,18 @@ type updater struct {
 // every [updateFreq]. Uses [resolver] to find
 // out what our public IP is.
 func NewUpdater(
-	dynamicIP ips.DynamicIPPort,
+	dynamicIP *utils.Atomic[netip.AddrPort],
 	resolver Resolver,
 	updateFreq time.Duration,
 ) Updater {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &updater{
-		dynamicIP:  dynamicIP,
-		resolver:   resolver,
-		stopChan:   make(chan struct{}),
-		doneChan:   make(chan struct{}),
-		updateFreq: updateFreq,
+		dynamicIP:     dynamicIP,
+		resolver:      resolver,
+		rootCtx:       ctx,
+		rootCtxCancel: cancel,
+		doneChan:      make(chan struct{}),
+		updateFreq:    updateFreq,
 	}
 }
 
@@ -64,12 +74,17 @@ func (u *updater) Dispatch(log logging.Logger) {
 		close(u.doneChan)
 	}()
 
+	var (
+		initialAddrPort = u.dynamicIP.Get()
+		oldAddr         = initialAddrPort.Addr()
+		port            = initialAddrPort.Port()
+	)
 	for {
 		select {
 		case <-ticker.C:
-			oldIP := u.dynamicIP.IPPort().IP
-
-			newIP, err := u.resolver.Resolve()
+			ctx, cancel := context.WithTimeout(u.rootCtx, ipResolutionTimeout)
+			newAddr, err := u.resolver.Resolve(ctx)
+			cancel()
 			if err != nil {
 				log.Warn("couldn't resolve public IP. If this machine's IP recently changed, it may be sharing the wrong public IP with peers",
 					zap.Error(err),
@@ -77,20 +92,24 @@ func (u *updater) Dispatch(log logging.Logger) {
 				continue
 			}
 
-			if !newIP.Equal(oldIP) {
-				u.dynamicIP.SetIP(newIP)
+			if newAddr != oldAddr {
+				u.dynamicIP.Set(netip.AddrPortFrom(newAddr, port))
 				log.Info("updated public IP",
-					zap.Stringer("newIP", newIP),
+					zap.Stringer("oldIP", oldAddr),
+					zap.Stringer("newIP", newAddr),
 				)
+				oldAddr = newAddr
 			}
-		case <-u.stopChan:
+		case <-u.rootCtx.Done():
 			return
 		}
 	}
 }
 
 func (u *updater) Stop() {
-	close(u.stopChan)
+	// Cause Dispatch() to return and cancel all
+	// in-flight calls to resolver.Resolve().
+	u.rootCtxCancel()
 	// Wait until Dispatch() has returned.
 	<-u.doneChan
 }

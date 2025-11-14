@@ -35,28 +35,33 @@ import (
 	"github.com/ava-labs/coreth/core/rawdb"
 	"github.com/ava-labs/coreth/core/types"
 	"github.com/ava-labs/coreth/core/vm"
-	"github.com/ava-labs/coreth/ethdb"
 	"github.com/ava-labs/coreth/params"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethdb"
 )
 
 func BenchmarkInsertChain_empty_memdb(b *testing.B) {
 	benchInsertChain(b, false, nil)
 }
+
 func BenchmarkInsertChain_empty_diskdb(b *testing.B) {
 	benchInsertChain(b, true, nil)
 }
+
 func BenchmarkInsertChain_valueTx_memdb(b *testing.B) {
 	benchInsertChain(b, false, genValueTx(0))
 }
+
 func BenchmarkInsertChain_valueTx_diskdb(b *testing.B) {
 	benchInsertChain(b, true, genValueTx(0))
 }
+
 func BenchmarkInsertChain_valueTx_100kB_memdb(b *testing.B) {
 	benchInsertChain(b, false, genValueTx(100*1024))
 }
+
 func BenchmarkInsertChain_valueTx_100kB_diskdb(b *testing.B) {
 	benchInsertChain(b, true, genValueTx(100*1024))
 }
@@ -64,12 +69,15 @@ func BenchmarkInsertChain_valueTx_100kB_diskdb(b *testing.B) {
 func BenchmarkInsertChain_ring200_memdb(b *testing.B) {
 	benchInsertChain(b, false, genTxRing(200))
 }
+
 func BenchmarkInsertChain_ring200_diskdb(b *testing.B) {
 	benchInsertChain(b, true, genTxRing(200))
 }
+
 func BenchmarkInsertChain_ring1000_memdb(b *testing.B) {
 	benchInsertChain(b, false, genTxRing(1000))
 }
+
 func BenchmarkInsertChain_ring1000_diskdb(b *testing.B) {
 	benchInsertChain(b, true, genTxRing(1000))
 }
@@ -88,8 +96,20 @@ func genValueTx(nbytes int) func(int, *BlockGen) {
 	return func(i int, gen *BlockGen) {
 		toaddr := common.Address{}
 		data := make([]byte, nbytes)
-		gas, _ := IntrinsicGas(data, nil, false, false, false)
-		tx, _ := types.SignTx(types.NewTransaction(gen.TxNonce(benchRootAddr), toaddr, big.NewInt(1), gas, big.NewInt(225000000000), data), types.HomesteadSigner{}, benchRootKey)
+		gas, _ := IntrinsicGas(data, nil, false, params.Rules{}) // Disable Istanbul and EIP-2028 for this test
+		signer := gen.Signer()
+		gasPrice := big.NewInt(0)
+		if gen.header.BaseFee != nil {
+			gasPrice = gen.header.BaseFee
+		}
+		tx, _ := types.SignNewTx(benchRootKey, signer, &types.LegacyTx{
+			Nonce:    gen.TxNonce(benchRootAddr),
+			To:       &toaddr,
+			Value:    big.NewInt(1),
+			Gas:      gas,
+			Data:     data,
+			GasPrice: gasPrice,
+		})
 		gen.AddTx(tx)
 	}
 }
@@ -118,21 +138,26 @@ func genTxRing(naccounts int) func(int, *BlockGen) {
 	return func(i int, gen *BlockGen) {
 		block := gen.PrevBlock(i - 1)
 		gas := block.GasLimit()
+		signer := gen.Signer()
 		for {
 			gas -= params.TxGas
 			if gas < params.TxGas {
 				break
 			}
 			to := (from + 1) % naccounts
-			tx := types.NewTransaction(
-				gen.TxNonce(ringAddrs[from]),
-				ringAddrs[to],
-				amount.Sub(amount, fee),
-				params.TxGas,
-				big.NewInt(225000000000),
-				nil,
-			)
-			tx, _ = types.SignTx(tx, types.HomesteadSigner{}, ringKeys[from])
+			burn := new(big.Int).SetUint64(params.TxGas)
+			burn.Mul(burn, gen.header.BaseFee)
+			tx, err := types.SignNewTx(ringKeys[from], signer,
+				&types.LegacyTx{
+					Nonce:    gen.TxNonce(ringAddrs[from]),
+					To:       &ringAddrs[to],
+					Value:    amount.Sub(amount, fee),
+					Gas:      params.TxGas,
+					GasPrice: big.NewInt(225000000000),
+				})
+			if err != nil {
+				panic(err)
+			}
 			gen.AddTx(tx)
 			from = to
 		}
@@ -156,16 +181,15 @@ func benchInsertChain(b *testing.B, disk bool, gen func(int, *BlockGen)) {
 
 	// Generate a chain of b.N blocks using the supplied block
 	// generator function.
-	gspec := Genesis{
-		Config: params.TestChainConfig,
-		Alloc:  GenesisAlloc{benchRootAddr: {Balance: benchRootFunds}},
+	gspec := &Genesis{
+		Config: params.TestFlareChainConfig,
+		Alloc:  types.GenesisAlloc{benchRootAddr: {Balance: benchRootFunds}},
 	}
-	genesis := gspec.MustCommit(db)
-	chain, _, _ := GenerateChain(gspec.Config, genesis, dummy.NewFaker(), db, b.N, 10, gen)
+	_, chain, _, _ := GenerateChainWithGenesis(gspec, dummy.NewCoinbaseFaker(), b.N, 10, gen)
 
 	// Time the insertion of the new chain.
 	// State and blocks are stored in the same DB.
-	chainman, _ := NewBlockChain(db, DefaultCacheConfig, gspec.Config, dummy.NewFaker(), vm.Config{}, common.Hash{})
+	chainman, _ := NewBlockChain(db, DefaultCacheConfig, gspec, dummy.NewCoinbaseFaker(), vm.Config{}, common.Hash{}, false)
 	defer chainman.Stop()
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -177,43 +201,54 @@ func benchInsertChain(b *testing.B, disk bool, gen func(int, *BlockGen)) {
 func BenchmarkChainRead_header_10k(b *testing.B) {
 	benchReadChain(b, false, 10000)
 }
+
 func BenchmarkChainRead_full_10k(b *testing.B) {
 	benchReadChain(b, true, 10000)
 }
+
 func BenchmarkChainRead_header_100k(b *testing.B) {
 	benchReadChain(b, false, 100000)
 }
+
 func BenchmarkChainRead_full_100k(b *testing.B) {
 	benchReadChain(b, true, 100000)
 }
+
 func BenchmarkChainRead_header_500k(b *testing.B) {
 	benchReadChain(b, false, 500000)
 }
+
 func BenchmarkChainRead_full_500k(b *testing.B) {
 	benchReadChain(b, true, 500000)
 }
+
 func BenchmarkChainWrite_header_10k(b *testing.B) {
 	benchWriteChain(b, false, 10000)
 }
+
 func BenchmarkChainWrite_full_10k(b *testing.B) {
 	benchWriteChain(b, true, 10000)
 }
+
 func BenchmarkChainWrite_header_100k(b *testing.B) {
 	benchWriteChain(b, false, 100000)
 }
+
 func BenchmarkChainWrite_full_100k(b *testing.B) {
 	benchWriteChain(b, true, 100000)
 }
+
 func BenchmarkChainWrite_header_500k(b *testing.B) {
 	benchWriteChain(b, false, 500000)
 }
+
 func BenchmarkChainWrite_full_500k(b *testing.B) {
 	benchWriteChain(b, true, 500000)
 }
 
 // makeChainForBench writes a given number of headers or empty blocks/receipts
 // into a database.
-func makeChainForBench(db ethdb.Database, full bool, count uint64) {
+func makeChainForBench(db ethdb.Database, genesis *Genesis, full bool, count uint64) {
 	var hash common.Hash
 	for n := uint64(0); n < count; n++ {
 		header := &types.Header{
@@ -222,13 +257,21 @@ func makeChainForBench(db ethdb.Database, full bool, count uint64) {
 			ParentHash:  hash,
 			Difficulty:  big.NewInt(1),
 			UncleHash:   types.EmptyUncleHash,
-			TxHash:      types.EmptyRootHash,
-			ReceiptHash: types.EmptyRootHash,
+			TxHash:      types.EmptyTxsHash,
+			ReceiptHash: types.EmptyReceiptsHash,
+		}
+		if n == 0 {
+			header = genesis.ToBlock().Header()
 		}
 		hash = header.Hash()
 
 		rawdb.WriteHeader(db, header)
 		rawdb.WriteCanonicalHash(db, hash, n)
+
+		if n == 0 {
+			rawdb.WriteChainConfig(db, hash, genesis.Config)
+		}
+		rawdb.WriteHeadHeaderHash(db, hash)
 
 		if full || n == 0 {
 			block := types.NewBlockWithHeader(header)
@@ -239,13 +282,14 @@ func makeChainForBench(db ethdb.Database, full bool, count uint64) {
 }
 
 func benchWriteChain(b *testing.B, full bool, count uint64) {
+	genesis := &Genesis{Config: params.TestFlareChainConfig}
 	for i := 0; i < b.N; i++ {
 		dir := b.TempDir()
 		db, err := rawdb.NewLevelDBDatabase(dir, 128, 1024, "", false)
 		if err != nil {
 			b.Fatalf("error opening database at %v: %v", dir, err)
 		}
-		makeChainForBench(db, full, count)
+		makeChainForBench(db, genesis, full, count)
 		db.Close()
 	}
 }
@@ -257,7 +301,8 @@ func benchReadChain(b *testing.B, full bool, count uint64) {
 	if err != nil {
 		b.Fatalf("error opening database at %v: %v", dir, err)
 	}
-	makeChainForBench(db, full, count)
+	genesis := &Genesis{Config: params.TestFlareChainConfig}
+	makeChainForBench(db, genesis, full, count)
 	db.Close()
 
 	b.ReportAllocs()
@@ -268,7 +313,7 @@ func benchReadChain(b *testing.B, full bool, count uint64) {
 		if err != nil {
 			b.Fatalf("error opening database at %v: %v", dir, err)
 		}
-		chain, err := NewBlockChain(db, DefaultCacheConfig, params.TestChainConfig, dummy.NewFaker(), vm.Config{}, common.Hash{})
+		chain, err := NewBlockChain(db, DefaultCacheConfig, genesis, dummy.NewFaker(), vm.Config{}, common.Hash{}, false)
 		if err != nil {
 			b.Fatalf("error creating chain: %v", err)
 		}
@@ -278,7 +323,7 @@ func benchReadChain(b *testing.B, full bool, count uint64) {
 			if full {
 				hash := header.Hash()
 				rawdb.ReadBody(db, hash, n)
-				rawdb.ReadReceipts(db, hash, n, chain.Config())
+				rawdb.ReadReceipts(db, hash, n, header.Time, chain.Config())
 			}
 		}
 		chain.Stop()

@@ -5,7 +5,8 @@ package syncutils
 
 import (
 	"github.com/ava-labs/coreth/core/state/snapshot"
-	"github.com/ava-labs/coreth/ethdb"
+	"github.com/ava-labs/coreth/core/types"
+	"github.com/ethereum/go-ethereum/ethdb"
 )
 
 var (
@@ -26,7 +27,7 @@ func (it *AccountIterator) Next() bool {
 		return false
 	}
 	for it.AccountIterator.Next() {
-		it.val, it.err = snapshot.FullAccountRLP(it.Account())
+		it.val, it.err = types.FullAccountRLP(it.Account())
 		return it.err == nil
 	}
 	it.val = nil

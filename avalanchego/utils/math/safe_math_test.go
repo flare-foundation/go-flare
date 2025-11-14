@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package math
@@ -6,113 +6,112 @@ package math
 import (
 	"math"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 const maxUint64 uint64 = math.MaxUint64
 
-func TestMax64(t *testing.T) {
-	actual := Max64(0, maxUint64)
-	if actual != maxUint64 {
-		t.Fatalf("Expected %d, got %d", maxUint64, actual)
-	}
-	actual = Max64(maxUint64, 0)
-	if actual != maxUint64 {
-		t.Fatalf("Expected %d, got %d", maxUint64, actual)
-	}
+func TestMaxUint(t *testing.T) {
+	require := require.New(t)
+
+	require.Equal(uint(math.MaxUint), MaxUint[uint]())
+	require.Equal(uint8(math.MaxUint8), MaxUint[uint8]())
+	require.Equal(uint16(math.MaxUint16), MaxUint[uint16]())
+	require.Equal(uint32(math.MaxUint32), MaxUint[uint32]())
+	require.Equal(uint64(math.MaxUint64), MaxUint[uint64]())
+	require.Equal(uintptr(math.MaxUint), MaxUint[uintptr]())
 }
 
-func TestMin64(t *testing.T) {
-	actual := Min64(0, maxUint64)
-	if actual != 0 {
-		t.Fatalf("Expected %d, got %d", 0, actual)
-	}
-	actual = Min64(maxUint64, 0)
-	if actual != 0 {
-		t.Fatalf("Expected %d, got %d", 0, actual)
-	}
+func TestAdd(t *testing.T) {
+	require := require.New(t)
+
+	sum, err := Add(0, maxUint64)
+	require.NoError(err)
+	require.Equal(maxUint64, sum)
+
+	sum, err = Add(maxUint64, 0)
+	require.NoError(err)
+	require.Equal(maxUint64, sum)
+
+	sum, err = Add(uint64(1<<62), uint64(1<<62))
+	require.NoError(err)
+	require.Equal(uint64(1<<63), sum)
+
+	_, err = Add(1, maxUint64)
+	require.ErrorIs(err, ErrOverflow)
+
+	_, err = Add(maxUint64, 1)
+	require.ErrorIs(err, ErrOverflow)
+
+	_, err = Add(maxUint64, maxUint64)
+	require.ErrorIs(err, ErrOverflow)
 }
 
-func TestAdd64(t *testing.T) {
-	sum, err := Add64(0, maxUint64)
-	if err != nil {
-		t.Fatalf("Add64 failed unexpectedly")
-	}
-	if sum != maxUint64 {
-		t.Fatalf("Expected %d, got %d", maxUint64, sum)
-	}
+func TestSub(t *testing.T) {
+	require := require.New(t)
 
-	sum, err = Add64(maxUint64, 0)
-	if err != nil {
-		t.Fatalf("Add64 failed unexpectedly")
-	}
-	if sum != math.MaxUint64 {
-		t.Fatalf("Expected %d, got %d", maxUint64, sum)
-	}
+	got, err := Sub(uint64(2), uint64(1))
+	require.NoError(err)
+	require.Equal(uint64(1), got)
 
-	sum, err = Add64(1<<62, 1<<62)
-	if err != nil {
-		t.Fatalf("Add64 failed unexpectedly")
-	}
-	if sum != uint64(1<<63) {
-		t.Fatalf("Expected %d, got %d", uint64(1<<63), sum)
-	}
+	got, err = Sub(uint64(2), uint64(2))
+	require.NoError(err)
+	require.Zero(got)
 
-	_, err = Add64(1, maxUint64)
-	if err == nil {
-		t.Fatalf("Add64 succeeded unexpectedly")
-	}
+	got, err = Sub(maxUint64, maxUint64)
+	require.NoError(err)
+	require.Zero(got)
 
-	_, err = Add64(maxUint64, 1)
-	if err == nil {
-		t.Fatalf("Add64 succeeded unexpectedly")
-	}
+	got, err = Sub(uint64(3), uint64(2))
+	require.NoError(err)
+	require.Equal(uint64(1), got)
 
-	_, err = Add64(maxUint64, maxUint64)
-	if err == nil {
-		t.Fatalf("Add64 succeeded unexpectedly")
-	}
+	_, err = Sub(uint64(1), uint64(2))
+	require.ErrorIs(err, ErrUnderflow)
+
+	_, err = Sub(maxUint64-1, maxUint64)
+	require.ErrorIs(err, ErrUnderflow)
 }
 
-func TestSub64(t *testing.T) {
-	actual, err := Sub64(2, 1)
-	if err != nil {
-		t.Fatalf("Sub64 failed unexpectedly")
-	} else if actual != 1 {
-		t.Fatalf("Expected %d, got %d", 1, actual)
-	}
+func TestMul(t *testing.T) {
+	require := require.New(t)
 
-	_, err = Sub64(1, 2)
-	if err == nil {
-		t.Fatalf("Sub64 did not fail in the manner expected")
-	}
+	got, err := Mul(0, maxUint64)
+	require.NoError(err)
+	require.Zero(got)
+
+	got, err = Mul(maxUint64, 0)
+	require.NoError(err)
+	require.Zero(got)
+
+	got, err = Mul(uint64(1), uint64(3))
+	require.NoError(err)
+	require.Equal(uint64(3), got)
+
+	got, err = Mul(uint64(3), uint64(1))
+	require.NoError(err)
+	require.Equal(uint64(3), got)
+
+	got, err = Mul(uint64(2), uint64(3))
+	require.NoError(err)
+	require.Equal(uint64(6), got)
+
+	got, err = Mul(maxUint64, 0)
+	require.NoError(err)
+	require.Zero(got)
+
+	_, err = Mul(maxUint64-1, 2)
+	require.ErrorIs(err, ErrOverflow)
 }
 
-func TestMul64(t *testing.T) {
-	if prod, err := Mul64(maxUint64, 0); err != nil {
-		t.Fatalf("Mul64 failed unexpectedly")
-	} else if prod != 0 {
-		t.Fatalf("Mul64 returned wrong value")
-	}
+func TestAbsDiff(t *testing.T) {
+	require := require.New(t)
 
-	if prod, err := Mul64(maxUint64, 1); err != nil {
-		t.Fatalf("Mul64 failed unexpectedly")
-	} else if prod != maxUint64 {
-		t.Fatalf("Mul64 returned wrong value")
-	}
-
-	if _, err := Mul64(maxUint64-1, 2); err == nil {
-		t.Fatalf("Mul64 overflowed")
-	}
-}
-
-func TestDiff64(t *testing.T) {
-	actual := Diff64(0, maxUint64)
-	if actual != maxUint64 {
-		t.Fatalf("Expected %d, got %d", maxUint64, actual)
-	}
-
-	actual = Diff64(maxUint64, 0)
-	if actual != maxUint64 {
-		t.Fatalf("Expected %d, got %d", maxUint64, actual)
-	}
+	require.Equal(maxUint64, AbsDiff(0, maxUint64))
+	require.Equal(maxUint64, AbsDiff(maxUint64, 0))
+	require.Equal(uint64(2), AbsDiff(uint64(3), uint64(1)))
+	require.Equal(uint64(2), AbsDiff(uint64(1), uint64(3)))
+	require.Zero(AbsDiff(uint64(1), uint64(1)))
+	require.Zero(AbsDiff(uint64(0), uint64(0)))
 }

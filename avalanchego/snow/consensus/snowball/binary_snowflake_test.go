@@ -1,56 +1,94 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package snowball
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestBinarySnowflake(t *testing.T) {
-	Blue := 0
-	Red := 1
+	require := require.New(t)
 
+	blue := 0
+	red := 1
+
+	alphaPreference, alphaConfidence := 1, 2
 	beta := 2
+	terminationConditions := newSingleTerminationCondition(alphaConfidence, beta)
 
-	sf := binarySnowflake{}
-	sf.Initialize(beta, Red)
+	sf := newBinarySnowflake(alphaPreference, terminationConditions, red)
 
-	if pref := sf.Preference(); pref != Red {
-		t.Fatalf("Wrong preference. Expected %d got %d", Red, pref)
-	} else if sf.Finalized() {
-		t.Fatalf("Finalized too early")
+	require.Equal(red, sf.Preference())
+	require.False(sf.Finalized())
+
+	sf.RecordPoll(alphaConfidence, blue)
+
+	require.Equal(blue, sf.Preference())
+	require.False(sf.Finalized())
+
+	sf.RecordPoll(alphaConfidence, red)
+
+	require.Equal(red, sf.Preference())
+	require.False(sf.Finalized())
+
+	sf.RecordPoll(alphaConfidence, blue)
+
+	require.Equal(blue, sf.Preference())
+	require.False(sf.Finalized())
+
+	sf.RecordPoll(alphaPreference, red)
+	require.Equal(red, sf.Preference())
+	require.False(sf.Finalized())
+
+	sf.RecordPoll(alphaConfidence, blue)
+	require.Equal(blue, sf.Preference())
+	require.False(sf.Finalized())
+
+	sf.RecordPoll(alphaConfidence, blue)
+	require.Equal(blue, sf.Preference())
+	require.True(sf.Finalized())
+}
+
+type binarySnowflakeTest struct {
+	require *require.Assertions
+
+	binarySnowflake
+}
+
+func newBinarySnowflakeTest(t *testing.T, alphaPreference int, terminationConditions []terminationCondition) snowflakeTest[int] {
+	require := require.New(t)
+
+	return &binarySnowflakeTest{
+		require:         require,
+		binarySnowflake: newBinarySnowflake(alphaPreference, terminationConditions, 0),
 	}
+}
 
-	sf.RecordSuccessfulPoll(Blue)
+func (sf *binarySnowflakeTest) RecordPoll(count int, choice int) {
+	sf.binarySnowflake.RecordPoll(count, choice)
+}
 
-	if pref := sf.Preference(); pref != Blue {
-		t.Fatalf("Wrong preference. Expected %d got %d", Blue, pref)
-	} else if sf.Finalized() {
-		t.Fatalf("Finalized too early")
+func (sf *binarySnowflakeTest) AssertEqual(expectedConfidences []int, expectedFinalized bool, expectedPreference int) {
+	sf.require.Equal(expectedPreference, sf.Preference())
+	sf.require.Equal(expectedConfidences, sf.binarySnowflake.confidence)
+	sf.require.Equal(expectedFinalized, sf.Finalized())
+}
+
+func TestBinarySnowflakeErrorDrivenSingleChoice(t *testing.T) {
+	for _, test := range getErrorDrivenSnowflakeSingleChoiceSuite[int]() {
+		t.Run(test.name, func(t *testing.T) {
+			test.f(t, newBinarySnowflakeTest, 0)
+		})
 	}
+}
 
-	sf.RecordSuccessfulPoll(Red)
-
-	if pref := sf.Preference(); pref != Red {
-		t.Fatalf("Wrong preference. Expected %d got %d", Red, pref)
-	} else if sf.Finalized() {
-		t.Fatalf("Finalized too early")
-	}
-
-	sf.RecordSuccessfulPoll(Blue)
-
-	if pref := sf.Preference(); pref != Blue {
-		t.Fatalf("Wrong preference. Expected %d got %d", Blue, pref)
-	} else if sf.Finalized() {
-		t.Fatalf("Finalized too early")
-	}
-
-	sf.RecordSuccessfulPoll(Blue)
-
-	if pref := sf.Preference(); pref != Blue {
-		t.Fatalf("Wrong preference. Expected %d got %d", Blue, pref)
-	} else if !sf.Finalized() {
-		t.Fatalf("Didn't finalized correctly")
+func TestBinarySnowflakeErrorDrivenMultiChoice(t *testing.T) {
+	for _, test := range getErrorDrivenSnowflakeMultiChoiceSuite[int]() {
+		t.Run(test.name, func(t *testing.T) {
+			test.f(t, newBinarySnowflakeTest, 0, 1)
+		})
 	}
 }

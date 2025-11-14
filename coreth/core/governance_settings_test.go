@@ -4,7 +4,6 @@
 package core
 
 import (
-	"math/big"
 	"testing"
 	"time"
 
@@ -22,7 +21,7 @@ func TestNewTimelockIsPermittedCostwo(t *testing.T) {
 	// ====================================================================================
 
 	// Permitted timelock update:
-	blockTime := big.NewInt(time.Date(2022, time.September, 8, 0, 0, 0, 0, time.UTC).Unix())
+	blockTime := uint64(time.Date(2022, time.September, 8, 0, 0, 0, 0, time.UTC).Unix())
 	newTimelock := uint64(3600)
 	want := true
 	have := NewTimelockIsPermitted(chainID, blockTime, newTimelock)
@@ -31,7 +30,7 @@ func TestNewTimelockIsPermittedCostwo(t *testing.T) {
 	}
 
 	// Non-permitted timelock update:
-	blockTime = big.NewInt(time.Date(2022, time.September, 8, 0, 0, 0, 0, time.UTC).Unix())
+	blockTime = uint64(time.Date(2022, time.September, 8, 0, 0, 0, 0, time.UTC).Unix())
 	newTimelock = uint64(0)
 	want = false
 	have = NewTimelockIsPermitted(chainID, blockTime, newTimelock)
@@ -40,7 +39,7 @@ func TestNewTimelockIsPermittedCostwo(t *testing.T) {
 	}
 
 	// Non-permitted timelock update:
-	blockTime = big.NewInt(time.Date(2022, time.September, 8, 0, 0, 0, 0, time.UTC).Unix())
+	blockTime = uint64(time.Date(2022, time.September, 8, 0, 0, 0, 0, time.UTC).Unix())
 	newTimelock = uint64(1000000)
 	want = false
 	have = NewTimelockIsPermitted(chainID, blockTime, newTimelock)
@@ -49,7 +48,7 @@ func TestNewTimelockIsPermittedCostwo(t *testing.T) {
 	}
 
 	// Non-permitted timelock update:
-	blockTime = big.NewInt(time.Date(2021, time.September, 8, 0, 0, 0, 0, time.UTC).Unix())
+	blockTime = uint64(time.Date(2021, time.September, 8, 0, 0, 0, 0, time.UTC).Unix())
 	newTimelock = uint64(3600)
 	want = false
 	have = NewTimelockIsPermitted(chainID, blockTime, newTimelock)
@@ -70,7 +69,7 @@ func TestNewTimelockIsPermittedFlare(t *testing.T) {
 	// ====================================================================================
 
 	// Permitted timelock update:
-	blockTime := big.NewInt(time.Date(2022, time.September, 9, 0, 0, 0, 0, time.UTC).Unix())
+	blockTime := uint64(time.Date(2022, time.September, 9, 0, 0, 0, 0, time.UTC).Unix())
 	newTimelock := uint64(3600)
 	want := true
 	have := NewTimelockIsPermitted(chainID, blockTime, newTimelock)
@@ -79,7 +78,7 @@ func TestNewTimelockIsPermittedFlare(t *testing.T) {
 	}
 
 	// Non-permitted timelock update:
-	blockTime = big.NewInt(time.Date(2022, time.September, 9, 0, 0, 0, 0, time.UTC).Unix())
+	blockTime = uint64(time.Date(2022, time.September, 9, 0, 0, 0, 0, time.UTC).Unix())
 	newTimelock = uint64(0)
 	want = false
 	have = NewTimelockIsPermitted(chainID, blockTime, newTimelock)
@@ -88,7 +87,7 @@ func TestNewTimelockIsPermittedFlare(t *testing.T) {
 	}
 
 	// Non-permitted timelock update:
-	blockTime = big.NewInt(time.Date(2022, time.September, 9, 0, 0, 0, 0, time.UTC).Unix())
+	blockTime = uint64(time.Date(2022, time.September, 9, 0, 0, 0, 0, time.UTC).Unix())
 	newTimelock = uint64(1000000)
 	want = false
 	have = NewTimelockIsPermitted(chainID, blockTime, newTimelock)
@@ -97,7 +96,7 @@ func TestNewTimelockIsPermittedFlare(t *testing.T) {
 	}
 
 	// Non-permitted timelock update:
-	blockTime = big.NewInt(time.Date(2021, time.September, 9, 0, 0, 0, 0, time.UTC).Unix())
+	blockTime = uint64(time.Date(2021, time.September, 9, 0, 0, 0, 0, time.UTC).Unix())
 	newTimelock = uint64(3600)
 	want = false
 	have = NewTimelockIsPermitted(chainID, blockTime, newTimelock)

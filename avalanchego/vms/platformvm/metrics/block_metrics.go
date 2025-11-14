@@ -1,73 +1,76 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package metrics
 
 import (
-	"fmt"
-
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/ava-labs/avalanchego/utils/wrappers"
-	"github.com/ava-labs/avalanchego/vms/platformvm/blocks"
+	"github.com/ava-labs/avalanchego/vms/platformvm/block"
 )
 
-var _ blocks.Visitor = &blockMetrics{}
+const blkLabel = "blk"
+
+var (
+	_ block.Visitor = (*blockMetrics)(nil)
+
+	blkLabels = []string{blkLabel}
+)
 
 type blockMetrics struct {
 	txMetrics *txMetrics
-
-	numAbortBlocks,
-	numAtomicBlocks,
-	numCommitBlocks,
-	numProposalBlocks,
-	numStandardBlocks prometheus.Counter
+	numBlocks *prometheus.CounterVec
 }
 
-func newBlockMetrics(
-	namespace string,
-	registerer prometheus.Registerer,
-) (*blockMetrics, error) {
-	txMetrics, err := newTxMetrics(namespace, registerer)
-	errs := wrappers.Errs{Err: err}
-	m := &blockMetrics{
-		txMetrics:         txMetrics,
-		numAbortBlocks:    newBlockMetric(namespace, "abort", registerer, &errs),
-		numAtomicBlocks:   newBlockMetric(namespace, "atomic", registerer, &errs),
-		numCommitBlocks:   newBlockMetric(namespace, "commit", registerer, &errs),
-		numProposalBlocks: newBlockMetric(namespace, "proposal", registerer, &errs),
-		numStandardBlocks: newBlockMetric(namespace, "standard", registerer, &errs),
+func newBlockMetrics(registerer prometheus.Registerer) (*blockMetrics, error) {
+	txMetrics, err := newTxMetrics(registerer)
+	if err != nil {
+		return nil, err
 	}
-	return m, errs.Err
+
+	m := &blockMetrics{
+		txMetrics: txMetrics,
+		numBlocks: prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "blks_accepted",
+				Help: "number of blocks accepted",
+			},
+			blkLabels,
+		),
+	}
+	return m, registerer.Register(m.numBlocks)
 }
 
-func newBlockMetric(
-	namespace string,
-	blockName string,
-	registerer prometheus.Registerer,
-	errs *wrappers.Errs,
-) prometheus.Counter {
-	blockMetric := prometheus.NewCounter(prometheus.CounterOpts{
-		Namespace: namespace,
-		Name:      fmt.Sprintf("%s_blks_accepted", blockName),
-		Help:      fmt.Sprintf("Number of %s blocks accepted", blockName),
-	})
-	errs.Add(registerer.Register(blockMetric))
-	return blockMetric
+func (m *blockMetrics) BanffAbortBlock(*block.BanffAbortBlock) error {
+	m.numBlocks.With(prometheus.Labels{
+		blkLabel: "abort",
+	}).Inc()
+	return nil
 }
 
-func (m *blockMetrics) ProposalBlock(b *blocks.ProposalBlock) error {
-	m.numProposalBlocks.Inc()
+func (m *blockMetrics) BanffCommitBlock(*block.BanffCommitBlock) error {
+	m.numBlocks.With(prometheus.Labels{
+		blkLabel: "commit",
+	}).Inc()
+	return nil
+}
+
+func (m *blockMetrics) BanffProposalBlock(b *block.BanffProposalBlock) error {
+	m.numBlocks.With(prometheus.Labels{
+		blkLabel: "proposal",
+	}).Inc()
+	for _, tx := range b.Transactions {
+		if err := tx.Unsigned.Visit(m.txMetrics); err != nil {
+			return err
+		}
+	}
 	return b.Tx.Unsigned.Visit(m.txMetrics)
 }
 
-func (m *blockMetrics) AtomicBlock(b *blocks.AtomicBlock) error {
-	m.numAtomicBlocks.Inc()
-	return b.Tx.Unsigned.Visit(m.txMetrics)
-}
-
-func (m *blockMetrics) StandardBlock(b *blocks.StandardBlock) error {
-	m.numStandardBlocks.Inc()
+func (m *blockMetrics) BanffStandardBlock(b *block.BanffStandardBlock) error {
+	m.numBlocks.With(prometheus.Labels{
+		blkLabel: "standard",
+	}).Inc()
 	for _, tx := range b.Transactions {
 		if err := tx.Unsigned.Visit(m.txMetrics); err != nil {
 			return err
@@ -76,12 +79,42 @@ func (m *blockMetrics) StandardBlock(b *blocks.StandardBlock) error {
 	return nil
 }
 
-func (m *blockMetrics) CommitBlock(*blocks.CommitBlock) error {
-	m.numCommitBlocks.Inc()
+func (m *blockMetrics) ApricotAbortBlock(*block.ApricotAbortBlock) error {
+	m.numBlocks.With(prometheus.Labels{
+		blkLabel: "abort",
+	}).Inc()
 	return nil
 }
 
-func (m *blockMetrics) AbortBlock(*blocks.AbortBlock) error {
-	m.numAbortBlocks.Inc()
+func (m *blockMetrics) ApricotCommitBlock(*block.ApricotCommitBlock) error {
+	m.numBlocks.With(prometheus.Labels{
+		blkLabel: "commit",
+	}).Inc()
 	return nil
+}
+
+func (m *blockMetrics) ApricotProposalBlock(b *block.ApricotProposalBlock) error {
+	m.numBlocks.With(prometheus.Labels{
+		blkLabel: "proposal",
+	}).Inc()
+	return b.Tx.Unsigned.Visit(m.txMetrics)
+}
+
+func (m *blockMetrics) ApricotStandardBlock(b *block.ApricotStandardBlock) error {
+	m.numBlocks.With(prometheus.Labels{
+		blkLabel: "standard",
+	}).Inc()
+	for _, tx := range b.Transactions {
+		if err := tx.Unsigned.Visit(m.txMetrics); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m *blockMetrics) ApricotAtomicBlock(b *block.ApricotAtomicBlock) error {
+	m.numBlocks.With(prometheus.Labels{
+		blkLabel: "atomic",
+	}).Inc()
+	return b.Tx.Unsigned.Visit(m.txMetrics)
 }

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package avm
@@ -21,13 +21,13 @@ type mockClient struct {
 }
 
 func (mc *mockClient) SendRequest(
-	ctx context.Context,
-	method string,
+	_ context.Context,
+	_ string,
 	inData interface{},
-	reply interface{},
-	options ...rpc.Option,
+	_ interface{},
+	_ ...rpc.Option,
 ) error {
-	mc.require.Equal(inData, mc.expectedInData)
+	mc.require.Equal(mc.expectedInData, inData)
 	return nil
 }
 

@@ -9,8 +9,7 @@ import (
 	"github.com/ava-labs/coreth/metrics"
 )
 
-// RequestHandlerStats provides the interface for metrics on request handling.
-// Since we drop
+// RequestHandlerStats provides the interface for metrics for app requests.
 type RequestHandlerStats interface {
 	UpdateTimeUntilDeadline(duration time.Duration)
 	IncDeadlineDroppedRequest()

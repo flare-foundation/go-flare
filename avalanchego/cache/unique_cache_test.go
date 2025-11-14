@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package cache
@@ -6,62 +6,51 @@ package cache
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/ava-labs/avalanchego/ids"
 )
 
-type evictable struct {
-	id      ids.ID
+type evictable[K comparable] struct {
+	id      K
 	evicted int
 }
 
-func (e *evictable) Key() interface{} { return e.id }
-func (e *evictable) Evict()           { e.evicted++ }
+func (e *evictable[K]) Key() K {
+	return e.id
+}
+
+func (e *evictable[_]) Evict() {
+	e.evicted++
+}
 
 func TestEvictableLRU(t *testing.T) {
-	cache := EvictableLRU{}
+	require := require.New(t)
 
-	expectedValue1 := &evictable{id: ids.ID{1}}
-	if returnedValue := cache.Deduplicate(expectedValue1).(*evictable); returnedValue != expectedValue1 {
-		t.Fatalf("Returned unknown value")
-	} else if expectedValue1.evicted != 0 {
-		t.Fatalf("Value was evicted unexpectedly")
-	} else if returnedValue := cache.Deduplicate(expectedValue1).(*evictable); returnedValue != expectedValue1 {
-		t.Fatalf("Returned unknown value")
-	} else if expectedValue1.evicted != 0 {
-		t.Fatalf("Value was evicted unexpectedly")
-	}
+	cache := EvictableLRU[ids.ID, *evictable[ids.ID]]{}
 
-	expectedValue2 := &evictable{id: ids.ID{2}}
-	returnedValue := cache.Deduplicate(expectedValue2).(*evictable)
-	switch {
-	case returnedValue != expectedValue2:
-		t.Fatalf("Returned unknown value")
-	case expectedValue1.evicted != 1:
-		t.Fatalf("Value should have been evicted")
-	case expectedValue2.evicted != 0:
-		t.Fatalf("Value was evicted unexpectedly")
-	}
+	expectedValue1 := &evictable[ids.ID]{id: ids.ID{1}}
+	require.Equal(expectedValue1, cache.Deduplicate(expectedValue1))
+	require.Zero(expectedValue1.evicted)
+	require.Equal(expectedValue1, cache.Deduplicate(expectedValue1))
+	require.Zero(expectedValue1.evicted)
+
+	expectedValue2 := &evictable[ids.ID]{id: ids.ID{2}}
+	returnedValue := cache.Deduplicate(expectedValue2)
+	require.Equal(expectedValue2, returnedValue)
+	require.Equal(1, expectedValue1.evicted)
+	require.Zero(expectedValue2.evicted)
 
 	cache.Size = 2
 
-	expectedValue3 := &evictable{id: ids.ID{2}}
-	returnedValue = cache.Deduplicate(expectedValue3).(*evictable)
-	switch {
-	case returnedValue != expectedValue2:
-		t.Fatalf("Returned unknown value")
-	case expectedValue1.evicted != 1:
-		t.Fatalf("Value should have been evicted")
-	case expectedValue2.evicted != 0:
-		t.Fatalf("Value was evicted unexpectedly")
-	}
+	expectedValue3 := &evictable[ids.ID]{id: ids.ID{2}}
+	returnedValue = cache.Deduplicate(expectedValue3)
+	require.Equal(expectedValue2, returnedValue)
+	require.Equal(1, expectedValue1.evicted)
+	require.Zero(expectedValue2.evicted)
 
 	cache.Flush()
-	switch {
-	case expectedValue1.evicted != 1:
-		t.Fatalf("Value should have been evicted")
-	case expectedValue2.evicted != 1:
-		t.Fatalf("Value should have been evicted")
-	case expectedValue3.evicted != 0:
-		t.Fatalf("Value was evicted unexpectedly")
-	}
+	require.Equal(1, expectedValue1.evicted)
+	require.Equal(1, expectedValue2.evicted)
+	require.Zero(expectedValue3.evicted)
 }

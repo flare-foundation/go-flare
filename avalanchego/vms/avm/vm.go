@@ -1,75 +1,75 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package avm
 
 import (
-	"container/list"
+	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"reflect"
-	"time"
-
-	stdjson "encoding/json"
+	"sync"
 
 	"github.com/gorilla/rpc/v2"
-
 	"github.com/prometheus/client_golang/prometheus"
-
 	"go.uber.org/zap"
 
+	"github.com/ava-labs/avalanchego/api/metrics"
 	"github.com/ava-labs/avalanchego/cache"
 	"github.com/ava-labs/avalanchego/database"
-	"github.com/ava-labs/avalanchego/database/manager"
 	"github.com/ava-labs/avalanchego/database/versiondb"
 	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/pubsub"
 	"github.com/ava-labs/avalanchego/snow"
-	"github.com/ava-labs/avalanchego/snow/choices"
+	"github.com/ava-labs/avalanchego/snow/consensus/snowman"
 	"github.com/ava-labs/avalanchego/snow/consensus/snowstorm"
 	"github.com/ava-labs/avalanchego/snow/engine/avalanche/vertex"
 	"github.com/ava-labs/avalanchego/snow/engine/common"
-	"github.com/ava-labs/avalanchego/utils/crypto"
 	"github.com/ava-labs/avalanchego/utils/json"
-	"github.com/ava-labs/avalanchego/utils/timer"
+	"github.com/ava-labs/avalanchego/utils/linked"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 	"github.com/ava-labs/avalanchego/version"
-	"github.com/ava-labs/avalanchego/vms/avm/states"
+	"github.com/ava-labs/avalanchego/vms/avm/block"
+	"github.com/ava-labs/avalanchego/vms/avm/config"
+	"github.com/ava-labs/avalanchego/vms/avm/network"
+	"github.com/ava-labs/avalanchego/vms/avm/state"
 	"github.com/ava-labs/avalanchego/vms/avm/txs"
+	"github.com/ava-labs/avalanchego/vms/avm/utxo"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/components/index"
 	"github.com/ava-labs/avalanchego/vms/components/keystore"
-	"github.com/ava-labs/avalanchego/vms/components/verify"
-	"github.com/ava-labs/avalanchego/vms/nftfx"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
+	"github.com/ava-labs/avalanchego/vms/txs/mempool"
 
-	safemath "github.com/ava-labs/avalanchego/utils/math"
+	blockbuilder "github.com/ava-labs/avalanchego/vms/avm/block/builder"
+	blockexecutor "github.com/ava-labs/avalanchego/vms/avm/block/executor"
 	extensions "github.com/ava-labs/avalanchego/vms/avm/fxs"
+	avmmetrics "github.com/ava-labs/avalanchego/vms/avm/metrics"
+	txexecutor "github.com/ava-labs/avalanchego/vms/avm/txs/executor"
+	xmempool "github.com/ava-labs/avalanchego/vms/avm/txs/mempool"
 )
 
-const (
-	batchTimeout       = time.Second
-	batchSize          = 30
-	assetToFxCacheSize = 1024
-	txDeduplicatorSize = 8192
-)
+const assetToFxCacheSize = 1024
 
 var (
 	errIncompatibleFx            = errors.New("incompatible feature extension")
 	errUnknownFx                 = errors.New("unknown feature extension")
 	errGenesisAssetMustHaveState = errors.New("genesis asset must have non-empty state")
-	errBootstrapping             = errors.New("chain is currently bootstrapping")
-	errInsufficientFunds         = errors.New("insufficient funds")
 
-	_ vertex.DAGVM = &VM{}
+	_ vertex.LinearizableVMWithEngine = (*VM)(nil)
 )
 
 type VM struct {
-	Factory
-	metrics
+	network.Atomic
+
+	config.Config
+
+	metrics avmmetrics.Metrics
+
 	avax.AddressManager
-	avax.AtomicUTXOManager
 	ids.Aliaser
+	utxo.Spender
 
 	// Contains information of where this VM is executing
 	ctx *snow.Context
@@ -77,12 +77,16 @@ type VM struct {
 	// Used to check local time
 	clock mockable.Clock
 
-	parser txs.Parser
+	registerer prometheus.Registerer
 
-	pubsub *pubsub.Server
+	connectedPeers map[ids.NodeID]*version.Application
+
+	parser block.Parser
+
+	appSender common.AppSender
 
 	// State management
-	state states.State
+	state state.State
 
 	// Set to true once this VM is marked as `Bootstrapped` by the engine
 	bootstrapped bool
@@ -91,13 +95,7 @@ type VM struct {
 	feeAssetID ids.ID
 
 	// Asset ID --> Bit set with fx IDs the asset supports
-	assetToFxCache *cache.LRU
-
-	// Transaction issuing
-	timer        *timer.Timer
-	batchTimeout time.Duration
-	txs          []snowstorm.Tx
-	toEngine     chan<- common.Message
+	assetToFxCache *cache.LRU[ids.ID, set.Bits64]
 
 	baseDB database.Database
 	db     *versiondb.Database
@@ -109,68 +107,90 @@ type VM struct {
 
 	addressTxsIndexer index.AddressTxsIndexer
 
-	uniqueTxs cache.Deduplicator
+	txBackend *txexecutor.Backend
+
+	// Cancelled on shutdown
+	onShutdownCtx context.Context
+	// Call [onShutdownCtxCancel] to cancel [onShutdownCtx] during Shutdown()
+	onShutdownCtxCancel context.CancelFunc
+	awaitShutdown       sync.WaitGroup
+
+	networkConfig network.Config
+	// These values are only initialized after the chain has been linearized.
+	blockbuilder.Builder
+	chainManager blockexecutor.Manager
+	network      *network.Network
 }
 
-func (vm *VM) Connected(nodeID ids.NodeID, nodeVersion *version.Application) error {
-	return nil
+func (vm *VM) Connected(ctx context.Context, nodeID ids.NodeID, version *version.Application) error {
+	// If the chain isn't linearized yet, we must track the peers externally
+	// until the network is initialized.
+	if vm.network == nil {
+		vm.connectedPeers[nodeID] = version
+		return nil
+	}
+	return vm.network.Connected(ctx, nodeID, version)
 }
 
-func (vm *VM) Disconnected(nodeID ids.NodeID) error {
-	return nil
+func (vm *VM) Disconnected(ctx context.Context, nodeID ids.NodeID) error {
+	// If the chain isn't linearized yet, we must track the peers externally
+	// until the network is initialized.
+	if vm.network == nil {
+		delete(vm.connectedPeers, nodeID)
+		return nil
+	}
+	return vm.network.Disconnected(ctx, nodeID)
 }
 
 /*
  ******************************************************************************
- ******************************** Avalanche API *******************************
+ ********************************* Common VM **********************************
  ******************************************************************************
  */
 
-type Config struct {
-	IndexTransactions    bool `json:"index-transactions"`
-	IndexAllowIncomplete bool `json:"index-allow-incomplete"`
-}
-
 func (vm *VM) Initialize(
+	_ context.Context,
 	ctx *snow.Context,
-	dbManager manager.Manager,
+	db database.Database,
 	genesisBytes []byte,
-	upgradeBytes []byte,
+	_ []byte,
 	configBytes []byte,
-	toEngine chan<- common.Message,
+	_ chan<- common.Message,
 	fxs []*common.Fx,
-	_ common.AppSender,
+	appSender common.AppSender,
 ) error {
-	avmConfig := Config{}
-	if len(configBytes) > 0 {
-		if err := stdjson.Unmarshal(configBytes, &avmConfig); err != nil {
-			return err
-		}
-		ctx.Log.Info("VM config initialized",
-			zap.Reflect("config", avmConfig),
-		)
-	}
+	noopMessageHandler := common.NewNoOpAppHandler(ctx.Log)
+	vm.Atomic = network.NewAtomic(noopMessageHandler)
 
-	registerer := prometheus.NewRegistry()
-	if err := ctx.Metrics.Register(registerer); err != nil {
-		return err
-	}
-
-	err := vm.metrics.Initialize("", registerer)
+	avmConfig, err := ParseConfig(configBytes)
 	if err != nil {
 		return err
 	}
+	ctx.Log.Info("VM config initialized",
+		zap.Reflect("config", avmConfig),
+	)
+
+	vm.registerer, err = metrics.MakeAndRegister(ctx.Metrics, "")
+	if err != nil {
+		return err
+	}
+
+	vm.connectedPeers = make(map[ids.NodeID]*version.Application)
+
+	// Initialize metrics as soon as possible
+	vm.metrics, err = avmmetrics.New(vm.registerer)
+	if err != nil {
+		return fmt.Errorf("failed to initialize metrics: %w", err)
+	}
+
 	vm.AddressManager = avax.NewAddressManager(ctx)
 	vm.Aliaser = ids.NewAliaser()
 
-	db := dbManager.Current().Database
 	vm.ctx = ctx
-	vm.toEngine = toEngine
+	vm.appSender = appSender
 	vm.baseDB = db
 	vm.db = versiondb.New(db)
-	vm.assetToFxCache = &cache.LRU{Size: assetToFxCacheSize}
-
-	vm.pubsub = pubsub.New(ctx.NetworkID, ctx.Log)
+	vm.assetToFxCache = &cache.LRU[ids.ID, set.Bits64]{Size: assetToFxCacheSize}
 
 	typedFxs := make([]extensions.Fx, len(fxs))
 	vm.fxs = make([]*extensions.ParsedFx, len(fxs))
@@ -190,7 +210,7 @@ func (vm *VM) Initialize(
 	}
 
 	vm.typeToFxIndex = map[reflect.Type]int{}
-	vm.parser, err = txs.NewCustomParser(
+	vm.parser, err = block.NewCustomParser(
 		vm.typeToFxIndex,
 		&vm.clock,
 		ctx.Log,
@@ -200,9 +220,15 @@ func (vm *VM) Initialize(
 		return err
 	}
 
-	vm.AtomicUTXOManager = avax.NewAtomicUTXOManager(ctx.SharedMemory, vm.parser.Codec())
+	codec := vm.parser.Codec()
+	vm.Spender = utxo.NewSpender(&vm.clock, codec)
 
-	state, err := states.New(vm.db, vm.parser, registerer)
+	state, err := state.New(
+		vm.db,
+		vm.parser,
+		vm.registerer,
+		avmConfig.ChecksumsEnabled,
+	)
 	if err != nil {
 		return err
 	}
@@ -213,26 +239,13 @@ func (vm *VM) Initialize(
 		return err
 	}
 
-	vm.timer = timer.NewTimer(func() {
-		ctx.Lock.Lock()
-		defer ctx.Lock.Unlock()
-
-		vm.FlushTxs()
-	})
-	go ctx.Log.RecoverAndPanic(vm.timer.Dispatch)
-	vm.batchTimeout = batchTimeout
-
-	vm.uniqueTxs = &cache.EvictableLRU{
-		Size: txDeduplicatorSize,
-	}
 	vm.walletService.vm = vm
-	vm.walletService.pendingTxMap = make(map[ids.ID]*list.Element)
-	vm.walletService.pendingTxOrdering = list.New()
+	vm.walletService.pendingTxs = linked.NewHashmap[ids.ID, *txs.Tx]()
 
 	// use no op impl when disabled in config
 	if avmConfig.IndexTransactions {
-		vm.ctx.Log.Info("address transaction indexing is enabled")
-		vm.addressTxsIndexer, err = index.NewIndexer(vm.db, vm.ctx.Log, "", registerer, avmConfig.IndexAllowIncomplete)
+		vm.ctx.Log.Warn("deprecated address transaction indexing is enabled")
+		vm.addressTxsIndexer, err = index.NewIndexer(vm.db, vm.ctx.Log, "", vm.registerer, avmConfig.IndexAllowIncomplete)
 		if err != nil {
 			return fmt.Errorf("failed to initialize address transaction indexer: %w", err)
 		}
@@ -243,11 +256,25 @@ func (vm *VM) Initialize(
 			return fmt.Errorf("failed to initialize disabled indexer: %w", err)
 		}
 	}
-	return vm.db.Commit()
+
+	vm.txBackend = &txexecutor.Backend{
+		Ctx:           ctx,
+		Config:        &vm.Config,
+		Fxs:           vm.fxs,
+		TypeToFxIndex: vm.typeToFxIndex,
+		Codec:         vm.parser.Codec(),
+		FeeAssetID:    vm.feeAssetID,
+		Bootstrapped:  false,
+	}
+
+	vm.onShutdownCtx, vm.onShutdownCtxCancel = context.WithCancel(context.Background())
+	vm.networkConfig = avmConfig.Network
+	return vm.state.Commit()
 }
 
 // onBootstrapStarted is called by the consensus engine when it starts bootstrapping this chain
 func (vm *VM) onBootstrapStarted() error {
+	vm.txBackend.Bootstrapped = false
 	for _, fx := range vm.fxs {
 		if err := fx.Fx.Bootstrapping(); err != nil {
 			return err
@@ -257,16 +284,18 @@ func (vm *VM) onBootstrapStarted() error {
 }
 
 func (vm *VM) onNormalOperationsStarted() error {
+	vm.txBackend.Bootstrapped = true
 	for _, fx := range vm.fxs {
 		if err := fx.Fx.Bootstrapped(); err != nil {
 			return err
 		}
 	}
+
 	vm.bootstrapped = true
 	return nil
 }
 
-func (vm *VM) SetState(state snow.State) error {
+func (vm *VM) SetState(_ context.Context, state snow.State) error {
 	switch state {
 	case snow.Bootstrapping:
 		return vm.onBootstrapStarted()
@@ -277,32 +306,32 @@ func (vm *VM) SetState(state snow.State) error {
 	}
 }
 
-func (vm *VM) Shutdown() error {
-	if vm.timer == nil {
+func (vm *VM) Shutdown(context.Context) error {
+	if vm.state == nil {
 		return nil
 	}
 
-	// There is a potential deadlock if the timer is about to execute a timeout.
-	// So, the lock must be released before stopping the timer.
-	vm.ctx.Lock.Unlock()
-	vm.timer.Stop()
-	vm.ctx.Lock.Lock()
+	vm.onShutdownCtxCancel()
+	vm.awaitShutdown.Wait()
 
-	return vm.baseDB.Close()
+	return errors.Join(
+		vm.state.Close(),
+		vm.baseDB.Close(),
+	)
 }
 
-func (vm *VM) Version() (string, error) {
+func (*VM) Version(context.Context) (string, error) {
 	return version.Current.String(), nil
 }
 
-func (vm *VM) CreateHandlers() (map[string]*common.HTTPHandler, error) {
+func (vm *VM) CreateHandlers(context.Context) (map[string]http.Handler, error) {
 	codec := json.NewCodec()
 
 	rpcServer := rpc.NewServer()
 	rpcServer.RegisterCodec(codec, "application/json")
 	rpcServer.RegisterCodec(codec, "application/json;charset=UTF-8")
-	rpcServer.RegisterInterceptFunc(vm.metrics.apiRequestMetric.InterceptRequest)
-	rpcServer.RegisterAfterFunc(vm.metrics.apiRequestMetric.AfterRequest)
+	rpcServer.RegisterInterceptFunc(vm.metrics.InterceptRequest)
+	rpcServer.RegisterAfterFunc(vm.metrics.AfterRequest)
 	// name this service "avm"
 	if err := rpcServer.RegisterService(&Service{vm: vm}, "avm"); err != nil {
 		return nil, err
@@ -311,51 +340,150 @@ func (vm *VM) CreateHandlers() (map[string]*common.HTTPHandler, error) {
 	walletServer := rpc.NewServer()
 	walletServer.RegisterCodec(codec, "application/json")
 	walletServer.RegisterCodec(codec, "application/json;charset=UTF-8")
-	walletServer.RegisterInterceptFunc(vm.metrics.apiRequestMetric.InterceptRequest)
-	walletServer.RegisterAfterFunc(vm.metrics.apiRequestMetric.AfterRequest)
+	walletServer.RegisterInterceptFunc(vm.metrics.InterceptRequest)
+	walletServer.RegisterAfterFunc(vm.metrics.AfterRequest)
 	// name this service "wallet"
 	err := walletServer.RegisterService(&vm.walletService, "wallet")
 
-	return map[string]*common.HTTPHandler{
-		"":        {Handler: rpcServer},
-		"/wallet": {Handler: walletServer},
-		"/events": {LockOptions: common.NoLock, Handler: vm.pubsub},
+	return map[string]http.Handler{
+		"":        rpcServer,
+		"/wallet": walletServer,
 	}, err
 }
 
-func (vm *VM) CreateStaticHandlers() (map[string]*common.HTTPHandler, error) {
-	newServer := rpc.NewServer()
-	codec := json.NewCodec()
-	newServer.RegisterCodec(codec, "application/json")
-	newServer.RegisterCodec(codec, "application/json;charset=UTF-8")
+/*
+ ******************************************************************************
+ ********************************** Chain VM **********************************
+ ******************************************************************************
+ */
 
-	// name this service "avm"
-	staticService := CreateStaticService()
-	return map[string]*common.HTTPHandler{
-		"": {LockOptions: common.WriteLock, Handler: newServer},
-	}, newServer.RegisterService(staticService, "avm")
+func (vm *VM) GetBlock(_ context.Context, blkID ids.ID) (snowman.Block, error) {
+	return vm.chainManager.GetBlock(blkID)
 }
 
-func (vm *VM) PendingTxs() []snowstorm.Tx {
-	vm.timer.Cancel()
-
-	txs := vm.txs
-	vm.txs = nil
-	return txs
-}
-
-func (vm *VM) ParseTx(b []byte) (snowstorm.Tx, error) {
-	return vm.parseTx(b)
-}
-
-func (vm *VM) GetTx(txID ids.ID) (snowstorm.Tx, error) {
-	tx := &UniqueTx{
-		vm:   vm,
-		txID: txID,
+func (vm *VM) ParseBlock(_ context.Context, blkBytes []byte) (snowman.Block, error) {
+	blk, err := vm.parser.ParseBlock(blkBytes)
+	if err != nil {
+		return nil, err
 	}
-	// Verify must be called in the case the that tx was flushed from the unique
-	// cache.
-	return tx, tx.verifyWithoutCacheWrites()
+	return vm.chainManager.NewBlock(blk), nil
+}
+
+func (vm *VM) SetPreference(_ context.Context, blkID ids.ID) error {
+	vm.chainManager.SetPreference(blkID)
+	return nil
+}
+
+func (vm *VM) LastAccepted(context.Context) (ids.ID, error) {
+	return vm.chainManager.LastAccepted(), nil
+}
+
+func (vm *VM) GetBlockIDAtHeight(_ context.Context, height uint64) (ids.ID, error) {
+	return vm.state.GetBlockIDAtHeight(height)
+}
+
+/*
+ ******************************************************************************
+ *********************************** DAG VM ***********************************
+ ******************************************************************************
+ */
+
+func (vm *VM) Linearize(ctx context.Context, stopVertexID ids.ID, toEngine chan<- common.Message) error {
+	time := vm.Config.Upgrades.CortinaTime
+	err := vm.state.InitializeChainState(stopVertexID, time)
+	if err != nil {
+		return err
+	}
+
+	mempool, err := xmempool.New("mempool", vm.registerer, toEngine)
+	if err != nil {
+		return fmt.Errorf("failed to create mempool: %w", err)
+	}
+
+	vm.chainManager = blockexecutor.NewManager(
+		mempool,
+		vm.metrics,
+		vm.state,
+		vm.txBackend,
+		&vm.clock,
+		vm.onAccept,
+	)
+
+	vm.Builder = blockbuilder.New(
+		vm.txBackend,
+		vm.chainManager,
+		&vm.clock,
+		mempool,
+	)
+
+	// Invariant: The context lock is not held when calling network.IssueTx.
+	vm.network, err = network.New(
+		vm.ctx.Log,
+		vm.ctx.NodeID,
+		vm.ctx.SubnetID,
+		vm.ctx.ValidatorState,
+		vm.parser,
+		network.NewLockedTxVerifier(
+			&vm.ctx.Lock,
+			vm.chainManager,
+		),
+		mempool,
+		vm.appSender,
+		vm.registerer,
+		vm.networkConfig,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to initialize network: %w", err)
+	}
+
+	// Notify the network of our current peers
+	for nodeID, version := range vm.connectedPeers {
+		if err := vm.network.Connected(ctx, nodeID, version); err != nil {
+			return err
+		}
+	}
+	vm.connectedPeers = nil
+
+	// Note: It's important only to switch the networking stack after the full
+	// chainVM has been initialized. Traffic will immediately start being
+	// handled asynchronously.
+	vm.Atomic.Set(vm.network)
+
+	vm.awaitShutdown.Add(2)
+	go func() {
+		defer vm.awaitShutdown.Done()
+
+		// Invariant: PushGossip must never grab the context lock.
+		vm.network.PushGossip(vm.onShutdownCtx)
+	}()
+	go func() {
+		defer vm.awaitShutdown.Done()
+
+		// Invariant: PullGossip must never grab the context lock.
+		vm.network.PullGossip(vm.onShutdownCtx)
+	}()
+
+	return nil
+}
+
+func (vm *VM) ParseTx(_ context.Context, bytes []byte) (snowstorm.Tx, error) {
+	tx, err := vm.parser.ParseTx(bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	err = tx.Unsigned.Visit(&txexecutor.SyntacticVerifier{
+		Backend: vm.txBackend,
+		Tx:      tx,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &Tx{
+		vm: vm,
+		tx: tx,
+	}, nil
 }
 
 /*
@@ -364,51 +492,21 @@ func (vm *VM) GetTx(txID ids.ID) (snowstorm.Tx, error) {
  ******************************************************************************
  */
 
-// IssueTx attempts to send a transaction to consensus.
-// If onDecide is specified, the function will be called when the transaction is
-// either accepted or rejected with the appropriate status. This function will
-// go out of scope when the transaction is removed from memory.
-func (vm *VM) IssueTx(b []byte) (ids.ID, error) {
-	if !vm.bootstrapped {
-		return ids.ID{}, errBootstrapping
+// issueTxFromRPC attempts to send a transaction to consensus.
+//
+// Invariant: The context lock is not held
+// Invariant: This function is only called after Linearize has been called.
+func (vm *VM) issueTxFromRPC(tx *txs.Tx) (ids.ID, error) {
+	txID := tx.ID()
+	err := vm.network.IssueTxFromRPC(tx)
+	if err != nil && !errors.Is(err, mempool.ErrDuplicateTx) {
+		vm.ctx.Log.Debug("failed to add tx to mempool",
+			zap.Stringer("txID", txID),
+			zap.Error(err),
+		)
+		return txID, err
 	}
-	tx, err := vm.parseTx(b)
-	if err != nil {
-		return ids.ID{}, err
-	}
-	if err := tx.verifyWithoutCacheWrites(); err != nil {
-		return ids.ID{}, err
-	}
-	vm.issueTx(tx)
-	return tx.ID(), nil
-}
-
-func (vm *VM) issueStopVertex() error {
-	select {
-	case vm.toEngine <- common.StopVertex:
-	default:
-		vm.ctx.Log.Debug("dropping common.StopVertex message to engine due to contention")
-	}
-	return nil
-}
-
-/*
- ******************************************************************************
- ********************************** Timer API *********************************
- ******************************************************************************
- */
-
-// FlushTxs into consensus
-func (vm *VM) FlushTxs() {
-	vm.timer.Cancel()
-	if len(vm.txs) != 0 {
-		select {
-		case vm.toEngine <- common.PendingTxs:
-		default:
-			vm.ctx.Log.Debug("dropping message to engine due to contention")
-			vm.timer.SetTimeoutIn(vm.batchTimeout)
-		}
-	}
+	return txID, nil
 }
 
 /*
@@ -437,10 +535,10 @@ func (vm *VM) initGenesis(genesisBytes []byte) error {
 			return errGenesisAssetMustHaveState
 		}
 
-		tx := txs.Tx{
+		tx := &txs.Tx{
 			Unsigned: &genesisTx.CreateAssetTx,
 		}
-		if err := vm.parser.InitializeGenesisTx(&tx); err != nil {
+		if err := tx.Initialize(genesisCodec); err != nil {
 			return err
 		}
 
@@ -450,9 +548,7 @@ func (vm *VM) initGenesis(genesisBytes []byte) error {
 		}
 
 		if !stateInitialized {
-			if err := vm.initState(tx); err != nil {
-				return err
-			}
+			vm.initState(tx)
 		}
 		if index == 0 {
 			vm.ctx.Log.Info("fee asset is established",
@@ -470,187 +566,15 @@ func (vm *VM) initGenesis(genesisBytes []byte) error {
 	return nil
 }
 
-func (vm *VM) initState(tx txs.Tx) error {
+func (vm *VM) initState(tx *txs.Tx) {
 	txID := tx.ID()
 	vm.ctx.Log.Info("initializing genesis asset",
 		zap.Stringer("txID", txID),
 	)
-	if err := vm.state.PutTx(txID, &tx); err != nil {
-		return err
-	}
-	if err := vm.state.PutStatus(txID, choices.Accepted); err != nil {
-		return err
-	}
+	vm.state.AddTx(tx)
 	for _, utxo := range tx.UTXOs() {
-		if err := vm.state.PutUTXO(utxo); err != nil {
-			return err
-		}
+		vm.state.AddUTXO(utxo)
 	}
-	return nil
-}
-
-func (vm *VM) parseTx(bytes []byte) (*UniqueTx, error) {
-	rawTx, err := vm.parser.Parse(bytes)
-	if err != nil {
-		return nil, err
-	}
-
-	tx := &UniqueTx{
-		TxCachedState: &TxCachedState{
-			Tx: rawTx,
-		},
-		vm:   vm,
-		txID: rawTx.ID(),
-	}
-	if err := tx.SyntacticVerify(); err != nil {
-		return nil, err
-	}
-
-	if tx.Status() == choices.Unknown {
-		if err := vm.state.PutTx(tx.ID(), tx.Tx); err != nil {
-			return nil, err
-		}
-		if err := tx.setStatus(choices.Processing); err != nil {
-			return nil, err
-		}
-		return tx, vm.db.Commit()
-	}
-
-	return tx, nil
-}
-
-func (vm *VM) issueTx(tx snowstorm.Tx) {
-	vm.txs = append(vm.txs, tx)
-	switch {
-	case len(vm.txs) == batchSize:
-		vm.FlushTxs()
-	case len(vm.txs) == 1:
-		vm.timer.SetTimeoutIn(vm.batchTimeout)
-	}
-}
-
-func (vm *VM) getUTXO(utxoID *avax.UTXOID) (*avax.UTXO, error) {
-	inputID := utxoID.InputID()
-	utxo, err := vm.state.GetUTXO(inputID)
-	if err == nil {
-		return utxo, nil
-	}
-
-	inputTx, inputIndex := utxoID.InputSource()
-	parent := UniqueTx{
-		vm:   vm,
-		txID: inputTx,
-	}
-
-	if err := parent.verifyWithoutCacheWrites(); err != nil {
-		return nil, errMissingUTXO
-	} else if status := parent.Status(); status.Decided() {
-		return nil, errMissingUTXO
-	}
-
-	parentUTXOs := parent.UTXOs()
-	if uint32(len(parentUTXOs)) <= inputIndex || int(inputIndex) < 0 {
-		return nil, errInvalidUTXO
-	}
-	return parentUTXOs[int(inputIndex)], nil
-}
-
-func (vm *VM) getFx(val interface{}) (int, error) {
-	valType := reflect.TypeOf(val)
-	fx, exists := vm.typeToFxIndex[valType]
-	if !exists {
-		return 0, errUnknownFx
-	}
-	return fx, nil
-}
-
-func (vm *VM) verifyFxUsage(fxID int, assetID ids.ID) bool {
-	// Check cache to see whether this asset supports this fx
-	fxIDsIntf, assetInCache := vm.assetToFxCache.Get(assetID)
-	if assetInCache {
-		return fxIDsIntf.(ids.BitSet).Contains(uint(fxID))
-	}
-	// Caches doesn't say whether this asset support this fx.
-	// Get the tx that created the asset and check.
-	tx := &UniqueTx{
-		vm:   vm,
-		txID: assetID,
-	}
-	if status := tx.Status(); !status.Fetched() {
-		return false
-	}
-	createAssetTx, ok := tx.Unsigned.(*txs.CreateAssetTx)
-	if !ok {
-		// This transaction was not an asset creation tx
-		return false
-	}
-	fxIDs := ids.BitSet(0)
-	for _, state := range createAssetTx.States {
-		if state.FxIndex == uint32(fxID) {
-			// Cache that this asset supports this fx
-			fxIDs.Add(uint(fxID))
-		}
-	}
-	vm.assetToFxCache.Put(assetID, fxIDs)
-	return fxIDs.Contains(uint(fxID))
-}
-
-func (vm *VM) verifyTransferOfUTXO(utx txs.UnsignedTx, in *avax.TransferableInput, cred verify.Verifiable, utxo *avax.UTXO) error {
-	fxIndex, err := vm.getFx(cred)
-	if err != nil {
-		return err
-	}
-	fx := vm.fxs[fxIndex].Fx
-
-	utxoAssetID := utxo.AssetID()
-	inAssetID := in.AssetID()
-	if utxoAssetID != inAssetID {
-		return errAssetIDMismatch
-	}
-
-	if !vm.verifyFxUsage(fxIndex, inAssetID) {
-		return errIncompatibleFx
-	}
-
-	return fx.VerifyTransfer(utx, in.In, cred, utxo.Out)
-}
-
-func (vm *VM) verifyTransfer(tx txs.UnsignedTx, in *avax.TransferableInput, cred verify.Verifiable) error {
-	utxo, err := vm.getUTXO(&in.UTXOID)
-	if err != nil {
-		return err
-	}
-	return vm.verifyTransferOfUTXO(tx, in, cred, utxo)
-}
-
-func (vm *VM) verifyOperation(tx *txs.OperationTx, op *txs.Operation, cred verify.Verifiable) error {
-	opAssetID := op.AssetID()
-
-	numUTXOs := len(op.UTXOIDs)
-	utxos := make([]interface{}, numUTXOs)
-	for i, utxoID := range op.UTXOIDs {
-		utxo, err := vm.getUTXO(utxoID)
-		if err != nil {
-			return err
-		}
-
-		utxoAssetID := utxo.AssetID()
-		if utxoAssetID != opAssetID {
-			return errAssetIDMismatch
-		}
-		utxos[i] = utxo.Out
-	}
-
-	fxIndex, err := vm.getFx(op.Op)
-	if err != nil {
-		return err
-	}
-	fx := vm.fxs[fxIndex].Fx
-
-	if !vm.verifyFxUsage(fxIndex, opAssetID) {
-		return errIncompatibleFx
-	}
-	return fx.VerifyOperation(tx, op.Op, cred, utxos)
 }
 
 // LoadUser returns:
@@ -661,7 +585,7 @@ func (vm *VM) verifyOperation(tx *txs.OperationTx, op *txs.Operation, cred verif
 func (vm *VM) LoadUser(
 	username string,
 	password string,
-	addrsToUse ids.ShortSet,
+	addrsToUse set.Set[ids.ShortID],
 ) (
 	[]*avax.UTXO,
 	*secp256k1fx.Keychain,
@@ -688,339 +612,6 @@ func (vm *VM) LoadUser(
 	return utxos, kc, user.Close()
 }
 
-func (vm *VM) Spend(
-	utxos []*avax.UTXO,
-	kc *secp256k1fx.Keychain,
-	amounts map[ids.ID]uint64,
-) (
-	map[ids.ID]uint64,
-	[]*avax.TransferableInput,
-	[][]*crypto.PrivateKeySECP256K1R,
-	error,
-) {
-	amountsSpent := make(map[ids.ID]uint64, len(amounts))
-	time := vm.clock.Unix()
-
-	ins := []*avax.TransferableInput{}
-	keys := [][]*crypto.PrivateKeySECP256K1R{}
-	for _, utxo := range utxos {
-		assetID := utxo.AssetID()
-		amount := amounts[assetID]
-		amountSpent := amountsSpent[assetID]
-
-		if amountSpent >= amount {
-			// we already have enough inputs allocated to this asset
-			continue
-		}
-
-		inputIntf, signers, err := kc.Spend(utxo.Out, time)
-		if err != nil {
-			// this utxo can't be spent with the current keys right now
-			continue
-		}
-		input, ok := inputIntf.(avax.TransferableIn)
-		if !ok {
-			// this input doesn't have an amount, so I don't care about it here
-			continue
-		}
-		newAmountSpent, err := safemath.Add64(amountSpent, input.Amount())
-		if err != nil {
-			// there was an error calculating the consumed amount, just error
-			return nil, nil, nil, errSpendOverflow
-		}
-		amountsSpent[assetID] = newAmountSpent
-
-		// add the new input to the array
-		ins = append(ins, &avax.TransferableInput{
-			UTXOID: utxo.UTXOID,
-			Asset:  avax.Asset{ID: assetID},
-			In:     input,
-		})
-		// add the required keys to the array
-		keys = append(keys, signers)
-	}
-
-	for asset, amount := range amounts {
-		if amountsSpent[asset] < amount {
-			return nil, nil, nil, fmt.Errorf("want to spend %d of asset %s but only have %d",
-				amount,
-				asset,
-				amountsSpent[asset],
-			)
-		}
-	}
-
-	avax.SortTransferableInputsWithSigners(ins, keys)
-	return amountsSpent, ins, keys, nil
-}
-
-func (vm *VM) SpendNFT(
-	utxos []*avax.UTXO,
-	kc *secp256k1fx.Keychain,
-	assetID ids.ID,
-	groupID uint32,
-	to ids.ShortID,
-) (
-	[]*txs.Operation,
-	[][]*crypto.PrivateKeySECP256K1R,
-	error,
-) {
-	time := vm.clock.Unix()
-
-	ops := []*txs.Operation{}
-	keys := [][]*crypto.PrivateKeySECP256K1R{}
-
-	for _, utxo := range utxos {
-		// makes sure that the variable isn't overwritten with the next iteration
-		utxo := utxo
-
-		if len(ops) > 0 {
-			// we have already been able to create the operation needed
-			break
-		}
-
-		if utxo.AssetID() != assetID {
-			// wrong asset ID
-			continue
-		}
-		out, ok := utxo.Out.(*nftfx.TransferOutput)
-		if !ok {
-			// wrong output type
-			continue
-		}
-		if out.GroupID != groupID {
-			// wrong group id
-			continue
-		}
-		indices, signers, ok := kc.Match(&out.OutputOwners, time)
-		if !ok {
-			// unable to spend the output
-			continue
-		}
-
-		// add the new operation to the array
-		ops = append(ops, &txs.Operation{
-			Asset:   utxo.Asset,
-			UTXOIDs: []*avax.UTXOID{&utxo.UTXOID},
-			Op: &nftfx.TransferOperation{
-				Input: secp256k1fx.Input{
-					SigIndices: indices,
-				},
-				Output: nftfx.TransferOutput{
-					GroupID: out.GroupID,
-					Payload: out.Payload,
-					OutputOwners: secp256k1fx.OutputOwners{
-						Threshold: 1,
-						Addrs:     []ids.ShortID{to},
-					},
-				},
-			},
-		})
-		// add the required keys to the array
-		keys = append(keys, signers)
-	}
-
-	if len(ops) == 0 {
-		return nil, nil, errInsufficientFunds
-	}
-
-	txs.SortOperationsWithSigners(ops, keys, vm.parser.Codec())
-	return ops, keys, nil
-}
-
-func (vm *VM) SpendAll(
-	utxos []*avax.UTXO,
-	kc *secp256k1fx.Keychain,
-) (
-	map[ids.ID]uint64,
-	[]*avax.TransferableInput,
-	[][]*crypto.PrivateKeySECP256K1R,
-	error,
-) {
-	amountsSpent := make(map[ids.ID]uint64)
-	time := vm.clock.Unix()
-
-	ins := []*avax.TransferableInput{}
-	keys := [][]*crypto.PrivateKeySECP256K1R{}
-	for _, utxo := range utxos {
-		assetID := utxo.AssetID()
-		amountSpent := amountsSpent[assetID]
-
-		inputIntf, signers, err := kc.Spend(utxo.Out, time)
-		if err != nil {
-			// this utxo can't be spent with the current keys right now
-			continue
-		}
-		input, ok := inputIntf.(avax.TransferableIn)
-		if !ok {
-			// this input doesn't have an amount, so I don't care about it here
-			continue
-		}
-		newAmountSpent, err := safemath.Add64(amountSpent, input.Amount())
-		if err != nil {
-			// there was an error calculating the consumed amount, just error
-			return nil, nil, nil, errSpendOverflow
-		}
-		amountsSpent[assetID] = newAmountSpent
-
-		// add the new input to the array
-		ins = append(ins, &avax.TransferableInput{
-			UTXOID: utxo.UTXOID,
-			Asset:  avax.Asset{ID: assetID},
-			In:     input,
-		})
-		// add the required keys to the array
-		keys = append(keys, signers)
-	}
-
-	avax.SortTransferableInputsWithSigners(ins, keys)
-	return amountsSpent, ins, keys, nil
-}
-
-func (vm *VM) Mint(
-	utxos []*avax.UTXO,
-	kc *secp256k1fx.Keychain,
-	amounts map[ids.ID]uint64,
-	to ids.ShortID,
-) (
-	[]*txs.Operation,
-	[][]*crypto.PrivateKeySECP256K1R,
-	error,
-) {
-	time := vm.clock.Unix()
-
-	ops := []*txs.Operation{}
-	keys := [][]*crypto.PrivateKeySECP256K1R{}
-
-	for _, utxo := range utxos {
-		// makes sure that the variable isn't overwritten with the next iteration
-		utxo := utxo
-
-		assetID := utxo.AssetID()
-		amount := amounts[assetID]
-		if amount == 0 {
-			continue
-		}
-
-		out, ok := utxo.Out.(*secp256k1fx.MintOutput)
-		if !ok {
-			continue
-		}
-
-		inIntf, signers, err := kc.Spend(out, time)
-		if err != nil {
-			continue
-		}
-
-		in, ok := inIntf.(*secp256k1fx.Input)
-		if !ok {
-			continue
-		}
-
-		// add the operation to the array
-		ops = append(ops, &txs.Operation{
-			Asset:   utxo.Asset,
-			UTXOIDs: []*avax.UTXOID{&utxo.UTXOID},
-			Op: &secp256k1fx.MintOperation{
-				MintInput:  *in,
-				MintOutput: *out,
-				TransferOutput: secp256k1fx.TransferOutput{
-					Amt: amount,
-					OutputOwners: secp256k1fx.OutputOwners{
-						Threshold: 1,
-						Addrs:     []ids.ShortID{to},
-					},
-				},
-			},
-		})
-		// add the required keys to the array
-		keys = append(keys, signers)
-
-		// remove the asset from the required amounts to mint
-		delete(amounts, assetID)
-	}
-
-	for _, amount := range amounts {
-		if amount > 0 {
-			return nil, nil, errAddressesCantMintAsset
-		}
-	}
-
-	txs.SortOperationsWithSigners(ops, keys, vm.parser.Codec())
-	return ops, keys, nil
-}
-
-func (vm *VM) MintNFT(
-	utxos []*avax.UTXO,
-	kc *secp256k1fx.Keychain,
-	assetID ids.ID,
-	payload []byte,
-	to ids.ShortID,
-) (
-	[]*txs.Operation,
-	[][]*crypto.PrivateKeySECP256K1R,
-	error,
-) {
-	time := vm.clock.Unix()
-
-	ops := []*txs.Operation{}
-	keys := [][]*crypto.PrivateKeySECP256K1R{}
-
-	for _, utxo := range utxos {
-		// makes sure that the variable isn't overwritten with the next iteration
-		utxo := utxo
-
-		if len(ops) > 0 {
-			// we have already been able to create the operation needed
-			break
-		}
-
-		if utxo.AssetID() != assetID {
-			// wrong asset id
-			continue
-		}
-		out, ok := utxo.Out.(*nftfx.MintOutput)
-		if !ok {
-			// wrong output type
-			continue
-		}
-
-		indices, signers, ok := kc.Match(&out.OutputOwners, time)
-		if !ok {
-			// unable to spend the output
-			continue
-		}
-
-		// add the operation to the array
-		ops = append(ops, &txs.Operation{
-			Asset: avax.Asset{ID: assetID},
-			UTXOIDs: []*avax.UTXOID{
-				&utxo.UTXOID,
-			},
-			Op: &nftfx.MintOperation{
-				MintInput: secp256k1fx.Input{
-					SigIndices: indices,
-				},
-				GroupID: out.GroupID,
-				Payload: payload,
-				Outputs: []*secp256k1fx.OutputOwners{{
-					Threshold: 1,
-					Addrs:     []ids.ShortID{to},
-				}},
-			},
-		})
-		// add the required keys to the array
-		keys = append(keys, signers)
-	}
-
-	if len(ops) == 0 {
-		return nil, nil, errAddressesCantMintAsset
-	}
-
-	txs.SortOperationsWithSigners(ops, keys, vm.parser.Codec())
-	return ops, keys, nil
-}
-
 // selectChangeAddr returns the change address to be used for [kc] when [changeAddr] is given
 // as the optional change address argument
 func (vm *VM) selectChangeAddr(defaultAddr ids.ShortID, changeAddr string) (ids.ShortID, error) {
@@ -1043,30 +634,47 @@ func (vm *VM) lookupAssetID(asset string) (ids.ID, error) {
 	if assetID, err := ids.FromString(asset); err == nil {
 		return assetID, nil
 	}
-	return ids.ID{}, fmt.Errorf("asset '%s' not found", asset)
+	return ids.Empty, fmt.Errorf("asset '%s' not found", asset)
 }
 
-// This VM doesn't (currently) have any app-specific messages
-func (vm *VM) AppRequest(nodeID ids.NodeID, requestID uint32, deadline time.Time, request []byte) error {
+// Invariant: onAccept is called when [tx] is being marked as accepted, but
+// before its state changes are applied.
+// Invariant: any error returned by onAccept should be considered fatal.
+// TODO: Remove [onAccept] once the deprecated APIs this powers are removed.
+func (vm *VM) onAccept(tx *txs.Tx) error {
+	// Fetch the input UTXOs
+	txID := tx.ID()
+	inputUTXOIDs := tx.Unsigned.InputUTXOs()
+	inputUTXOs := make([]*avax.UTXO, 0, len(inputUTXOIDs))
+	for _, utxoID := range inputUTXOIDs {
+		// Don't bother fetching the input UTXO if its symbolic
+		if utxoID.Symbolic() {
+			continue
+		}
+
+		utxo, err := vm.state.GetUTXO(utxoID.InputID())
+		if err == database.ErrNotFound {
+			vm.ctx.Log.Debug("dropping utxo from index",
+				zap.Stringer("txID", txID),
+				zap.Stringer("utxoTxID", utxoID.TxID),
+				zap.Uint32("utxoOutputIndex", utxoID.OutputIndex),
+			)
+			continue
+		}
+		if err != nil {
+			// should never happen because the UTXO was previously verified to
+			// exist
+			return fmt.Errorf("error finding UTXO %s: %w", utxoID, err)
+		}
+		inputUTXOs = append(inputUTXOs, utxo)
+	}
+
+	outputUTXOs := tx.UTXOs()
+	// index input and output UTXOs
+	if err := vm.addressTxsIndexer.Accept(txID, inputUTXOs, outputUTXOs); err != nil {
+		return fmt.Errorf("error indexing tx: %w", err)
+	}
+
+	vm.walletService.decided(txID)
 	return nil
-}
-
-// This VM doesn't (currently) have any app-specific messages
-func (vm *VM) AppResponse(nodeID ids.NodeID, requestID uint32, response []byte) error {
-	return nil
-}
-
-// This VM doesn't (currently) have any app-specific messages
-func (vm *VM) AppRequestFailed(nodeID ids.NodeID, requestID uint32) error {
-	return nil
-}
-
-// This VM doesn't (currently) have any app-specific messages
-func (vm *VM) AppGossip(nodeID ids.NodeID, msg []byte) error {
-	return nil
-}
-
-// UniqueTx de-duplicates the transaction.
-func (vm *VM) DeduplicateTx(tx *UniqueTx) *UniqueTx {
-	return vm.uniqueTxs.Deduplicate(tx).(*UniqueTx)
 }

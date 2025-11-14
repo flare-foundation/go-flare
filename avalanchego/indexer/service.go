@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package indexer
@@ -15,7 +15,7 @@ import (
 )
 
 type service struct {
-	Index
+	index *index
 }
 
 type FormattedContainer struct {
@@ -46,11 +46,11 @@ type GetLastAcceptedArgs struct {
 }
 
 func (s *service) GetLastAccepted(_ *http.Request, args *GetLastAcceptedArgs, reply *FormattedContainer) error {
-	container, err := s.Index.GetLastAccepted()
+	container, err := s.index.GetLastAccepted()
 	if err != nil {
 		return err
 	}
-	index, err := s.Index.GetIndex(container.ID)
+	index, err := s.index.GetIndex(container.ID)
 	if err != nil {
 		return fmt.Errorf("couldn't get index: %w", err)
 	}
@@ -64,11 +64,11 @@ type GetContainerByIndexArgs struct {
 }
 
 func (s *service) GetContainerByIndex(_ *http.Request, args *GetContainerByIndexArgs, reply *FormattedContainer) error {
-	container, err := s.Index.GetContainerByIndex(uint64(args.Index))
+	container, err := s.index.GetContainerByIndex(uint64(args.Index))
 	if err != nil {
 		return err
 	}
-	index, err := s.Index.GetIndex(container.ID)
+	index, err := s.index.GetIndex(container.ID)
 	if err != nil {
 		return fmt.Errorf("couldn't get index: %w", err)
 	}
@@ -91,15 +91,15 @@ type GetContainerRangeResponse struct {
 // If [startIndex] > the last accepted index, returns an error (unless the above apply.)
 // If [n] > [MaxFetchedByRange], returns an error.
 // If we run out of transactions, returns the ones fetched before running out.
-func (s *service) GetContainerRange(r *http.Request, args *GetContainerRangeArgs, reply *GetContainerRangeResponse) error {
-	containers, err := s.Index.GetContainerRange(uint64(args.StartIndex), uint64(args.NumToFetch))
+func (s *service) GetContainerRange(_ *http.Request, args *GetContainerRangeArgs, reply *GetContainerRangeResponse) error {
+	containers, err := s.index.GetContainerRange(uint64(args.StartIndex), uint64(args.NumToFetch))
 	if err != nil {
 		return err
 	}
 
 	reply.Containers = make([]FormattedContainer, len(containers))
 	for i, container := range containers {
-		index, err := s.Index.GetIndex(container.ID)
+		index, err := s.index.GetIndex(container.ID)
 		if err != nil {
 			return fmt.Errorf("couldn't get index: %w", err)
 		}
@@ -119,8 +119,8 @@ type GetIndexResponse struct {
 	Index json.Uint64 `json:"index"`
 }
 
-func (s *service) GetIndex(r *http.Request, args *GetIndexArgs, reply *GetIndexResponse) error {
-	index, err := s.Index.GetIndex(args.ID)
+func (s *service) GetIndex(_ *http.Request, args *GetIndexArgs, reply *GetIndexResponse) error {
+	index, err := s.index.GetIndex(args.ID)
 	reply.Index = json.Uint64(index)
 	return err
 }
@@ -133,8 +133,8 @@ type IsAcceptedResponse struct {
 	IsAccepted bool `json:"isAccepted"`
 }
 
-func (s *service) IsAccepted(r *http.Request, args *IsAcceptedArgs, reply *IsAcceptedResponse) error {
-	_, err := s.Index.GetIndex(args.ID)
+func (s *service) IsAccepted(_ *http.Request, args *IsAcceptedArgs, reply *IsAcceptedResponse) error {
+	_, err := s.index.GetIndex(args.ID)
 	if err == nil {
 		reply.IsAccepted = true
 		return nil
@@ -151,12 +151,12 @@ type GetContainerByIDArgs struct {
 	Encoding formatting.Encoding `json:"encoding"`
 }
 
-func (s *service) GetContainerByID(r *http.Request, args *GetContainerByIDArgs, reply *FormattedContainer) error {
-	container, err := s.Index.GetContainerByID(args.ID)
+func (s *service) GetContainerByID(_ *http.Request, args *GetContainerByIDArgs, reply *FormattedContainer) error {
+	container, err := s.index.GetContainerByID(args.ID)
 	if err != nil {
 		return err
 	}
-	index, err := s.Index.GetIndex(container.ID)
+	index, err := s.index.GetIndex(container.ID)
 	if err != nil {
 		return fmt.Errorf("couldn't get index: %w", err)
 	}

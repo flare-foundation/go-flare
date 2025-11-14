@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package profiler
@@ -23,6 +23,8 @@ const (
 )
 
 var (
+	_ Profiler = (*profiler)(nil)
+
 	errCPUProfilerRunning    = errors.New("cpu profiler already running")
 	errCPUProfilerNotRunning = errors.New("cpu profiler doesn't exist")
 )
@@ -52,9 +54,11 @@ type profiler struct {
 	cpuProfileFile *os.File
 }
 
-func New(dir string) Profiler { return new(dir) }
+func New(dir string) Profiler {
+	return newProfiler(dir)
+}
 
-func new(dir string) *profiler {
+func newProfiler(dir string) *profiler {
 	return &profiler{
 		dir:             dir,
 		cpuProfileName:  filepath.Join(dir, cpuProfileFile),

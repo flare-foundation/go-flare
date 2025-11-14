@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package registry
@@ -9,21 +9,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
-
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/filesystem"
+	"github.com/ava-labs/avalanchego/utils/filesystem/filesystemmock"
+	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/resource"
 	"github.com/ava-labs/avalanchego/vms"
+	"github.com/ava-labs/avalanchego/vms/vmsmock"
 )
 
 var (
 	pluginDir = "plugin getter"
 
 	// errors
-	errOops = errors.New("oops")
+	errTest = errors.New("non-nil error")
 
 	// vm names
 	registeredVMName   = "mgj786NP7uDwBCcq6YwThhaN8FLyybkCa4zBWTQbNgmK6k9A6"
@@ -63,23 +66,21 @@ var (
 // Get should fail if we hit an io issue when reading files on the disk
 func TestGet_ReadDirFails(t *testing.T) {
 	resources := initVMGetterTest(t)
-	defer resources.ctrl.Finish()
 
 	// disk read fails
-	resources.mockReader.EXPECT().ReadDir(pluginDir).Times(1).Return(nil, errOops)
+	resources.mockReader.EXPECT().ReadDir(pluginDir).Times(1).Return(nil, errTest)
 
 	_, _, err := resources.getter.Get()
-	require.Equal(t, errOops, err)
+	require.ErrorIs(t, err, errTest)
 }
 
 // Get should fail if we see an invalid VM id
 func TestGet_InvalidVMName(t *testing.T) {
 	resources := initVMGetterTest(t)
-	defer resources.ctrl.Finish()
 
 	resources.mockReader.EXPECT().ReadDir(pluginDir).Times(1).Return(invalidVMs, nil)
 	// didn't find an alias, so we'll try using this invalid vm name
-	resources.mockManager.EXPECT().Lookup("invalid-vm").Times(1).Return(ids.Empty, errOops)
+	resources.mockManager.EXPECT().Lookup("invalid-vm").Times(1).Return(ids.Empty, errTest)
 
 	_, _, err := resources.getter.Get()
 	require.ErrorIs(t, err, errInvalidVMID)
@@ -88,17 +89,16 @@ func TestGet_InvalidVMName(t *testing.T) {
 // Get should fail if we can't get the VM factory
 func TestGet_GetFactoryFails(t *testing.T) {
 	resources := initVMGetterTest(t)
-	defer resources.ctrl.Finish()
 
 	vm, _ := ids.FromString("vmId")
 
 	resources.mockReader.EXPECT().ReadDir(pluginDir).Times(1).Return(oneValidVM, nil)
 	resources.mockManager.EXPECT().Lookup(registeredVMName).Times(1).Return(vm, nil)
 	// Getting the factory fails
-	resources.mockManager.EXPECT().GetFactory(vm).Times(1).Return(nil, errOops)
+	resources.mockManager.EXPECT().GetFactory(vm).Times(1).Return(nil, errTest)
 
 	_, _, err := resources.getter.Get()
-	require.Equal(t, errOops, err)
+	require.ErrorIs(t, err, errTest)
 }
 
 // Get should return the correct registered and unregistered VMs.
@@ -106,12 +106,11 @@ func TestGet_Success(t *testing.T) {
 	require := require.New(t)
 
 	resources := initVMGetterTest(t)
-	defer resources.ctrl.Finish()
 
 	registeredVMId := ids.GenerateTestID()
 	unregisteredVMId := ids.GenerateTestID()
 
-	registeredVMFactory := vms.NewMockFactory(resources.ctrl)
+	registeredVMFactory := vmsmock.NewFactory(resources.ctrl)
 
 	resources.mockReader.EXPECT().ReadDir(pluginDir).Times(1).Return(twoValidVMs, nil)
 	resources.mockManager.EXPECT().Lookup(registeredVMName).Times(1).Return(registeredVMId, nil)
@@ -133,23 +132,33 @@ func TestGet_Success(t *testing.T) {
 
 type vmGetterTestResources struct {
 	ctrl        *gomock.Controller
-	mockReader  *filesystem.MockReader
-	mockManager *vms.MockManager
+	mockReader  *filesystemmock.Reader
+	mockManager *vmsmock.Manager
 	getter      VMGetter
 }
 
 func initVMGetterTest(t *testing.T) *vmGetterTestResources {
 	ctrl := gomock.NewController(t)
 
-	mockReader := filesystem.NewMockReader(ctrl)
-	mockManager := vms.NewMockManager(ctrl)
+	mockReader := filesystemmock.NewReader(ctrl)
+	mockManager := vmsmock.NewManager(ctrl)
+	mockRegistry := prometheus.NewRegistry()
+	mockCPUTracker, err := resource.NewManager(
+		logging.NoLog{},
+		"",
+		time.Hour,
+		time.Hour,
+		time.Hour,
+		mockRegistry,
+	)
+	require.NoError(t, err)
 
 	getter := NewVMGetter(
 		VMGetterConfig{
 			FileReader:      mockReader,
 			Manager:         mockManager,
 			PluginDirectory: pluginDir,
-			CPUTracker:      resource.NewManager("", time.Hour, time.Hour, time.Hour),
+			CPUTracker:      mockCPUTracker,
 		},
 	)
 

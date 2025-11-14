@@ -1,12 +1,15 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package api
 
 import (
+	"encoding/json"
+
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/formatting"
-	"github.com/ava-labs/avalanchego/utils/json"
+
+	avajson "github.com/ava-labs/avalanchego/utils/json"
 )
 
 // This file contains structs used in arguments and responses in services
@@ -67,14 +70,24 @@ type GetBlockArgs struct {
 	Encoding formatting.Encoding `json:"encoding"`
 }
 
+// GetBlockByHeightArgs is the parameters supplied to the GetBlockByHeight API
+type GetBlockByHeightArgs struct {
+	Height   avajson.Uint64      `json:"height"`
+	Encoding formatting.Encoding `json:"encoding"`
+}
+
 // GetBlockResponse is the response object for the GetBlock API.
 type GetBlockResponse struct {
-	Block interface{} `json:"block"`
+	Block json.RawMessage `json:"block"`
 	// If GetBlockResponse.Encoding is formatting.Hex, GetBlockResponse.Block is
 	// the string representation of the block under hex encoding.
 	// If GetBlockResponse.Encoding is formatting.JSON, GetBlockResponse.Block
 	// is the actual block returned as a JSON.
 	Encoding formatting.Encoding `json:"encoding"`
+}
+
+type GetHeightResponse struct {
+	Height avajson.Uint64 `json:"height"`
 }
 
 // FormattedBlock defines a JSON formatted struct containing a block in Hex
@@ -95,7 +108,7 @@ type GetTxReply struct {
 	// the tx under hex encoding.
 	// If [GetTxArgs.Encoding] is [JSON], [Tx] is the actual tx, which will be
 	// returned as JSON to the caller.
-	Tx       interface{}         `json:"tx"`
+	Tx       json.RawMessage     `json:"tx"`
 	Encoding formatting.Encoding `json:"encoding"`
 }
 
@@ -127,7 +140,7 @@ type Index struct {
 type GetUTXOsArgs struct {
 	Addresses   []string            `json:"addresses"`
 	SourceChain string              `json:"sourceChain"`
-	Limit       json.Uint32         `json:"limit"`
+	Limit       avajson.Uint32      `json:"limit"`
 	StartIndex  Index               `json:"startIndex"`
 	Encoding    formatting.Encoding `json:"encoding"`
 }
@@ -135,7 +148,7 @@ type GetUTXOsArgs struct {
 // GetUTXOsReply defines the GetUTXOs replies returned from the API
 type GetUTXOsReply struct {
 	// Number of UTXOs returned
-	NumFetched json.Uint64 `json:"numFetched"`
+	NumFetched avajson.Uint64 `json:"numFetched"`
 	// The UTXOs
 	UTXOs []string `json:"utxos"`
 	// The last UTXO that was returned, and the address it corresponds to.

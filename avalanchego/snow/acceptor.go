@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package snow
@@ -14,11 +14,9 @@ import (
 )
 
 var (
-	_ Acceptor = noOpAcceptor{}
-	_ Acceptor = &AcceptorTracker{}
 	_ Acceptor = acceptorWrapper{}
 
-	_ AcceptorGroup = &acceptorGroup{}
+	_ AcceptorGroup = (*acceptorGroup)(nil)
 )
 
 // Acceptor is implemented when a struct is monitoring if a message is accepted
@@ -30,37 +28,6 @@ type Acceptor interface {
 	// shut down and not commit [container] or any other container to its
 	// database as accepted.
 	Accept(ctx *ConsensusContext, containerID ids.ID, container []byte) error
-}
-
-type noOpAcceptor struct{}
-
-func (noOpAcceptor) Accept(*ConsensusContext, ids.ID, []byte) error { return nil }
-
-// AcceptorTracker tracks the dispatched accept events by its ID and counts.
-// Useful for testing.
-type AcceptorTracker struct {
-	lock     sync.RWMutex
-	accepted map[ids.ID]int
-}
-
-func NewAcceptorTracker() *AcceptorTracker {
-	return &AcceptorTracker{
-		accepted: make(map[ids.ID]int),
-	}
-}
-
-func (a *AcceptorTracker) Accept(ctx *ConsensusContext, containerID ids.ID, container []byte) error {
-	a.lock.Lock()
-	a.accepted[containerID]++
-	a.lock.Unlock()
-	return nil
-}
-
-func (a *AcceptorTracker) IsAccepted(containerID ids.ID) (int, bool) {
-	a.lock.RLock()
-	count, ok := a.accepted[containerID]
-	a.lock.RUnlock()
-	return count, ok
 }
 
 type acceptorWrapper struct {
