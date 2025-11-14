@@ -1,11 +1,14 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package common
 
 import (
+	"context"
+	"net/http"
+
 	"github.com/ava-labs/avalanchego/api/health"
-	"github.com/ava-labs/avalanchego/database/manager"
+	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/snow/validators"
 )
@@ -22,14 +25,16 @@ type VM interface {
 	validators.Connector
 
 	// Initialize this VM.
-	// [ctx]: Metadata about this VM.
-	//     [ctx.networkID]: The ID of the network this VM's chain is running on.
-	//     [ctx.chainID]: The unique ID of the chain this VM is running on.
-	//     [ctx.Log]: Used to log messages
-	//     [ctx.NodeID]: The unique staker ID of this node.
-	//     [ctx.Lock]: A Read/Write lock shared by this VM and the consensus
-	//                 engine that manages this VM. The write lock is held
-	//                 whenever code in the consensus engine calls the VM.
+	// [chainCtx]: Metadata about this VM.
+	//     [chainCtx.networkID]: The ID of the network this VM's chain is
+	//                           running on.
+	//     [chainCtx.chainID]: The unique ID of the chain this VM is running on.
+	//     [chainCtx.Log]: Used to log messages
+	//     [chainCtx.NodeID]: The unique staker ID of this node.
+	//     [chainCtx.Lock]: A Read/Write lock shared by this VM and the
+	//                      consensus engine that manages this VM. The write
+	//                      lock is held whenever code in the consensus engine
+	//                      calls the VM.
 	// [dbManager]: The manager of the database this VM will persist data to.
 	// [genesisBytes]: The byte-encoding of the genesis information of this
 	//                 VM. The VM uses it to initialize its state. For
@@ -40,8 +45,9 @@ type VM interface {
 	// [toEngine]: The channel used to send messages to the consensus engine.
 	// [fxs]: Feature extensions that attach to this VM.
 	Initialize(
-		ctx *snow.Context,
-		dbManager manager.Manager,
+		ctx context.Context,
+		chainCtx *snow.Context,
+		db database.Database,
 		genesisBytes []byte,
 		upgradeBytes []byte,
 		configBytes []byte,
@@ -51,27 +57,13 @@ type VM interface {
 	) error
 
 	// SetState communicates to VM its next state it starts
-	SetState(state snow.State) error
+	SetState(ctx context.Context, state snow.State) error
 
 	// Shutdown is called when the node is shutting down.
-	Shutdown() error
+	Shutdown(context.Context) error
 
-	// Version returns the version of the VM this node is running.
-	Version() (string, error)
-
-	// Creates the HTTP handlers for custom VM network calls.
-	//
-	// This exposes handlers that the outside world can use to communicate with
-	// a static reference to the VM. Each handler has the path:
-	// [Address of node]/ext/VM/[VM ID]/[extension]
-	//
-	// Returns a mapping from [extension]s to HTTP handlers.
-	//
-	// Each extension can specify how locking is managed for convenience.
-	//
-	// For example, it might make sense to have an extension for creating
-	// genesis bytes this VM can interpret.
-	CreateStaticHandlers() (map[string]*HTTPHandler, error)
+	// Version returns the version of the VM.
+	Version(context.Context) (string, error)
 
 	// Creates the HTTP handlers for custom chain network calls.
 	//
@@ -81,10 +73,8 @@ type VM interface {
 	//
 	// Returns a mapping from [extension]s to HTTP handlers.
 	//
-	// Each extension can specify how locking is managed for convenience.
-	//
 	// For example, if this VM implements an account-based payments system,
 	// it have an extension called `accounts`, where clients could get
 	// information about their accounts.
-	CreateHandlers() (map[string]*HTTPHandler, error)
+	CreateHandlers(context.Context) (map[string]http.Handler, error)
 }

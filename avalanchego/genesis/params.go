@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package genesis
@@ -7,7 +7,11 @@ import (
 	"time"
 
 	"github.com/ava-labs/avalanchego/utils/constants"
+	"github.com/ava-labs/avalanchego/vms/components/gas"
 	"github.com/ava-labs/avalanchego/vms/platformvm/reward"
+
+	txfee "github.com/ava-labs/avalanchego/vms/platformvm/txs/fee"
+	validatorfee "github.com/ava-labs/avalanchego/vms/platformvm/validators/fee"
 )
 
 type StakingConfig struct {
@@ -34,14 +38,10 @@ type StakingConfig struct {
 }
 
 type TxFeeConfig struct {
-	// Transaction fee
-	TxFee uint64 `json:"txFee"`
-	// Transaction fee for create asset transactions
-	CreateAssetTxFee uint64 `json:"createAssetTxFee"`
-	// Transaction fee for create subnet transactions
-	CreateSubnetTxFee uint64 `json:"createSubnetTxFee"`
-	// Transaction fee for create blockchain transactions
-	CreateBlockchainTxFee uint64 `json:"createBlockchainTxFee"`
+	CreateAssetTxFee   uint64              `json:"createAssetTxFee"`
+	StaticFeeConfig    txfee.StaticConfig  `json:"staticFeeConfig"`
+	DynamicFeeConfig   gas.Config          `json:"dynamicFeeConfig"`
+	ValidatorFeeConfig validatorfee.Config `json:"validatorFeeConfig"`
 }
 
 type Params struct {
@@ -50,22 +50,23 @@ type Params struct {
 }
 
 func GetTxFeeConfig(networkID uint32) TxFeeConfig {
+	// TxFee configs are ommitted for LocalFlare and Local networks since they
+	// are set from program arguments (getTxFeeConfig)
 	switch networkID {
 	case constants.MainnetID:
 		return MainnetParams.TxFeeConfig
-	case constants.FujiID:
-		return FujiParams.TxFeeConfig
-	case constants.LocalID:
-		return LocalParams.TxFeeConfig
 	case constants.FlareID:
 		return FlareParams.TxFeeConfig
 	case constants.CostwoID:
 		return CostwoParams.TxFeeConfig
-	case constants.StagingID:
-		return StagingParams.TxFeeConfig
 	case constants.LocalFlareID:
 		return LocalFlareParams.TxFeeConfig
+	case constants.SongbirdID:
+		return SongbirdParams.TxFeeConfig
+	case constants.CostonID:
+		return CostonParams.TxFeeConfig
 	default:
+		// for LocalID and any other networkID
 		return LocalParams.TxFeeConfig
 	}
 }
@@ -74,18 +75,18 @@ func GetStakingConfig(networkID uint32) StakingConfig {
 	switch networkID {
 	case constants.MainnetID:
 		return MainnetParams.StakingConfig
-	case constants.FujiID:
-		return FujiParams.StakingConfig
 	case constants.LocalID:
 		return LocalParams.StakingConfig
 	case constants.FlareID:
 		return FlareParams.StakingConfig
 	case constants.CostwoID:
 		return CostwoParams.StakingConfig
-	case constants.StagingID:
-		return StagingParams.StakingConfig
 	case constants.LocalFlareID:
 		return LocalFlareParams.StakingConfig
+	case constants.SongbirdID:
+		return SongbirdParams.StakingConfig
+	case constants.CostonID:
+		return CostonParams.StakingConfig
 	default:
 		return LocalParams.StakingConfig
 	}

@@ -105,6 +105,11 @@ func (ec *Client) GetProof(ctx context.Context, account common.Address, keys []s
 		StorageProof []storageResult `json:"storageProof"`
 	}
 
+	// Avoid keys being 'null'.
+	if keys == nil {
+		keys = []string{}
+	}
+
 	var res accountResult
 	err := ec.c.CallContext(ctx, &res, "eth_getProof", account, keys, ethclient.ToBlockNumArg(blockNumber))
 	// Turn hexutils back to normal datatypes
@@ -181,7 +186,7 @@ func toCallArg(msg interfaces.CallMsg) interface{} {
 		"to":   msg.To,
 	}
 	if len(msg.Data) > 0 {
-		arg["data"] = hexutil.Bytes(msg.Data)
+		arg["input"] = hexutil.Bytes(msg.Data)
 	}
 	if msg.Value != nil {
 		arg["value"] = (*hexutil.Big)(msg.Value)
@@ -191,6 +196,21 @@ func toCallArg(msg interfaces.CallMsg) interface{} {
 	}
 	if msg.GasPrice != nil {
 		arg["gasPrice"] = (*hexutil.Big)(msg.GasPrice)
+	}
+	if msg.GasFeeCap != nil {
+		arg["maxFeePerGas"] = (*hexutil.Big)(msg.GasFeeCap)
+	}
+	if msg.GasTipCap != nil {
+		arg["maxPriorityFeePerGas"] = (*hexutil.Big)(msg.GasTipCap)
+	}
+	if msg.AccessList != nil {
+		arg["accessList"] = msg.AccessList
+	}
+	if msg.BlobGasFeeCap != nil {
+		arg["maxFeePerBlobGas"] = (*hexutil.Big)(msg.BlobGasFeeCap)
+	}
+	if msg.BlobHashes != nil {
+		arg["blobVersionedHashes"] = msg.BlobHashes
 	}
 	return arg
 }

@@ -28,7 +28,7 @@ tmp/
 
 *.pb*
 
-db*
+/db*
 
 *cpu[0-9]*
 *mem[0-9]*
@@ -60,3 +60,5 @@ tests/e2e/e2e.test
 tests/upgrade/upgrade.test
 
 vendor
+
+**/testdata

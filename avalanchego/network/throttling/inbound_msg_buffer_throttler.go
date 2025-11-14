@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package throttling
@@ -18,7 +18,6 @@ import (
 // See inbound_msg_throttler.go
 
 func newInboundMsgBufferThrottler(
-	namespace string,
 	registerer prometheus.Registerer,
 	maxProcessingMsgsPerNode uint64,
 ) (*inboundMsgBufferThrottler, error) {
@@ -27,7 +26,7 @@ func newInboundMsgBufferThrottler(
 		awaitingAcquire:          make(map[ids.NodeID]chan struct{}),
 		nodeToNumProcessingMsgs:  make(map[ids.NodeID]uint64),
 	}
-	return t, t.metrics.initialize(namespace, registerer)
+	return t, t.metrics.initialize(registerer)
 }
 
 // Rate-limits inbound messages based on the number of
@@ -57,8 +56,9 @@ type inboundMsgBufferThrottler struct {
 // buffer so that we can read a message from [nodeID].
 // The returned release function must be called (!) when done processing the message
 // (or when we give up trying to read the message.)
+//
 // invariant: There should be a maximum of 1 blocking call to Acquire for a
-//            given nodeID. Callers must enforce this invariant.
+// given nodeID. Callers must enforce this invariant.
 func (t *inboundMsgBufferThrottler) Acquire(ctx context.Context, nodeID ids.NodeID) ReleaseFunc {
 	startTime := time.Now()
 	defer func() {
@@ -69,7 +69,9 @@ func (t *inboundMsgBufferThrottler) Acquire(ctx context.Context, nodeID ids.Node
 	if t.nodeToNumProcessingMsgs[nodeID] < t.maxProcessingMsgsPerNode {
 		t.nodeToNumProcessingMsgs[nodeID]++
 		t.lock.Unlock()
-		return func() { t.release(nodeID) }
+		return func() {
+			t.release(nodeID)
+		}
 	}
 
 	// We're currently processing the maximum number of
@@ -89,7 +91,9 @@ func (t *inboundMsgBufferThrottler) Acquire(ctx context.Context, nodeID ids.Node
 	case <-closeOnAcquireChan:
 		t.lock.Lock()
 		t.nodeToNumProcessingMsgs[nodeID]++
-		releaseFunc = func() { t.release(nodeID) }
+		releaseFunc = func() {
+			t.release(nodeID)
+		}
 	case <-ctx.Done():
 		t.lock.Lock()
 		delete(t.awaitingAcquire, nodeID)
@@ -125,19 +129,17 @@ type inboundMsgBufferThrottlerMetrics struct {
 	awaitingAcquire prometheus.Gauge
 }
 
-func (m *inboundMsgBufferThrottlerMetrics) initialize(namespace string, reg prometheus.Registerer) error {
+func (m *inboundMsgBufferThrottlerMetrics) initialize(reg prometheus.Registerer) error {
 	errs := wrappers.Errs{}
 	m.acquireLatency = metric.NewAveragerWithErrs(
-		namespace,
 		"buffer_throttler_inbound_acquire_latency",
 		"average time (in ns) to get space on the inbound message buffer",
 		reg,
 		&errs,
 	)
 	m.awaitingAcquire = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Name:      "buffer_throttler_inbound_awaiting_acquire",
-		Help:      "Number of inbound messages waiting to take space on the inbound message buffer",
+		Name: "buffer_throttler_inbound_awaiting_acquire",
+		Help: "Number of inbound messages waiting to take space on the inbound message buffer",
 	})
 	errs.Add(
 		reg.Register(m.awaitingAcquire),

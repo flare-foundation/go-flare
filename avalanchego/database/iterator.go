@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 // For ease of implementation, our database's interface matches Ethereum's
@@ -6,6 +6,8 @@
 // EVM chain.
 
 package database
+
+var _ Iterator = (*IteratorError)(nil)
 
 // Iterator iterates over a database's key/value pairs.
 //
@@ -31,9 +33,13 @@ type Iterator interface {
 	Error() error
 
 	// Key returns the key of the current key/value pair, or nil if done.
+	// If the database is closed, must still report the current contents.
+	// Behavior is undefined after Release is called.
 	Key() []byte
 
 	// Value returns the value of the current key/value pair, or nil if done.
+	// If the database is closed, must still report the current contents.
+	// Behavior is undefined after Release is called.
 	Value() []byte
 
 	// Release releases associated resources. Release should always succeed and
@@ -60,3 +66,26 @@ type Iteratee interface {
 	// key.
 	NewIteratorWithStartAndPrefix(start, prefix []byte) Iterator
 }
+
+// IteratorError does nothing and returns the provided error
+type IteratorError struct {
+	Err error
+}
+
+func (*IteratorError) Next() bool {
+	return false
+}
+
+func (i *IteratorError) Error() error {
+	return i.Err
+}
+
+func (*IteratorError) Key() []byte {
+	return nil
+}
+
+func (*IteratorError) Value() []byte {
+	return nil
+}
+
+func (*IteratorError) Release() {}

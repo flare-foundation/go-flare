@@ -1,197 +1,185 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package snowball
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestBinarySnowball(t *testing.T) {
-	Red := 0
-	Blue := 1
+	require := require.New(t)
 
+	red := 0
+	blue := 1
+
+	alphaPreference, alphaConfidence := 2, 3
 	beta := 2
+	terminationConditions := newSingleTerminationCondition(alphaConfidence, beta)
 
-	sb := binarySnowball{}
-	sb.Initialize(beta, Red)
+	sb := newBinarySnowball(alphaPreference, terminationConditions, red)
+	require.Equal(red, sb.Preference())
+	require.False(sb.Finalized())
 
-	if pref := sb.Preference(); pref != Red {
-		t.Fatalf("Wrong preference. Expected %d got %d", Red, pref)
-	} else if sb.Finalized() {
-		t.Fatalf("Finalized too early")
-	}
+	sb.RecordPoll(alphaConfidence, blue)
+	require.Equal(blue, sb.Preference())
+	require.False(sb.Finalized())
 
-	sb.RecordSuccessfulPoll(Blue)
+	sb.RecordPoll(alphaConfidence, red)
+	require.Equal(blue, sb.Preference())
+	require.False(sb.Finalized())
 
-	if pref := sb.Preference(); pref != Blue {
-		t.Fatalf("Wrong preference. Expected %d got %d", Blue, pref)
-	} else if sb.Finalized() {
-		t.Fatalf("Finalized too early")
-	}
+	sb.RecordPoll(alphaConfidence, blue)
+	require.Equal(blue, sb.Preference())
+	require.False(sb.Finalized())
 
-	sb.RecordSuccessfulPoll(Red)
+	sb.RecordPoll(alphaConfidence, blue)
+	require.Equal(blue, sb.Preference())
+	require.True(sb.Finalized())
+}
 
-	if pref := sb.Preference(); pref != Blue {
-		t.Fatalf("Wrong preference. Expected %d got %d", Blue, pref)
-	} else if sb.Finalized() {
-		t.Fatalf("Finalized too early")
-	}
+func TestBinarySnowballRecordPollPreference(t *testing.T) {
+	require := require.New(t)
 
-	sb.RecordSuccessfulPoll(Blue)
+	red := 0
+	blue := 1
 
-	if pref := sb.Preference(); pref != Blue {
-		t.Fatalf("Wrong preference. Expected %d got %d", Blue, pref)
-	} else if sb.Finalized() {
-		t.Fatalf("Finalized too early")
-	}
+	alphaPreference, alphaConfidence := 1, 2
+	beta := 2
+	terminationConditions := newSingleTerminationCondition(alphaConfidence, beta)
 
-	sb.RecordSuccessfulPoll(Blue)
+	sb := newBinarySnowball(alphaPreference, terminationConditions, red)
+	require.Equal(red, sb.Preference())
+	require.False(sb.Finalized())
 
-	if pref := sb.Preference(); pref != Blue {
-		t.Fatalf("Wrong preference. Expected %d got %d", Blue, pref)
-	} else if !sb.Finalized() {
-		t.Fatalf("Didn't finalized correctly")
-	}
+	sb.RecordPoll(alphaConfidence, blue)
+	require.Equal(blue, sb.Preference())
+	require.False(sb.Finalized())
+
+	sb.RecordPoll(alphaConfidence, red)
+	require.Equal(blue, sb.Preference())
+	require.False(sb.Finalized())
+
+	sb.RecordPoll(alphaPreference, red)
+	require.Equal(red, sb.Preference())
+	require.False(sb.Finalized())
+
+	sb.RecordPoll(alphaConfidence, red)
+	require.Equal(red, sb.Preference())
+	require.False(sb.Finalized())
+
+	sb.RecordPoll(alphaConfidence, red)
+	require.Equal(red, sb.Preference())
+	require.True(sb.Finalized())
+
+	expected := "SB(Preference = 0, PreferenceStrength[0] = 4, PreferenceStrength[1] = 1, SF(Confidence = [2], Finalized = true, SL(Preference = 0)))"
+	require.Equal(expected, sb.String())
 }
 
 func TestBinarySnowballRecordUnsuccessfulPoll(t *testing.T) {
-	Red := 0
-	Blue := 1
+	require := require.New(t)
 
+	red := 0
+	blue := 1
+
+	alphaPreference, alphaConfidence := 1, 2
 	beta := 2
+	terminationConditions := newSingleTerminationCondition(alphaConfidence, beta)
 
-	sb := binarySnowball{}
-	sb.Initialize(beta, Red)
+	sb := newBinarySnowball(alphaPreference, terminationConditions, red)
+	require.Equal(red, sb.Preference())
+	require.False(sb.Finalized())
 
-	if pref := sb.Preference(); pref != Red {
-		t.Fatalf("Wrong preference. Expected %d got %d", Red, pref)
-	} else if sb.Finalized() {
-		t.Fatalf("Finalized too early")
-	}
-
-	sb.RecordSuccessfulPoll(Blue)
-
-	if pref := sb.Preference(); pref != Blue {
-		t.Fatalf("Wrong preference. Expected %d got %d", Blue, pref)
-	} else if sb.Finalized() {
-		t.Fatalf("Finalized too early")
-	}
+	sb.RecordPoll(alphaConfidence, blue)
+	require.Equal(blue, sb.Preference())
+	require.False(sb.Finalized())
 
 	sb.RecordUnsuccessfulPoll()
 
-	sb.RecordSuccessfulPoll(Blue)
+	sb.RecordPoll(alphaConfidence, blue)
+	require.Equal(blue, sb.Preference())
+	require.False(sb.Finalized())
 
-	if pref := sb.Preference(); pref != Blue {
-		t.Fatalf("Wrong preference. Expected %d got %d", Blue, pref)
-	} else if sb.Finalized() {
-		t.Fatalf("Finalized too early")
-	}
+	sb.RecordPoll(alphaConfidence, blue)
+	require.Equal(blue, sb.Preference())
+	require.True(sb.Finalized())
 
-	sb.RecordSuccessfulPoll(Blue)
-
-	if pref := sb.Preference(); pref != Blue {
-		t.Fatalf("Wrong preference. Expected %d got %d", Blue, pref)
-	} else if !sb.Finalized() {
-		t.Fatalf("Finalized too late")
-	}
-
-	expected := "SB(Preference = 1, NumSuccessfulPolls[0] = 0, NumSuccessfulPolls[1] = 3, SF(Confidence = 2, Finalized = true, SL(Preference = 1)))"
-	if str := sb.String(); str != expected {
-		t.Fatalf("Wrong state. Expected:\n%s\nGot:\n%s", expected, str)
-	}
+	expected := "SB(Preference = 1, PreferenceStrength[0] = 0, PreferenceStrength[1] = 3, SF(Confidence = [2], Finalized = true, SL(Preference = 1)))"
+	require.Equal(expected, sb.String())
 }
 
 func TestBinarySnowballAcceptWeirdColor(t *testing.T) {
-	Blue := 0
-	Red := 1
+	require := require.New(t)
 
+	blue := 0
+	red := 1
+
+	alphaPreference, alphaConfidence := 1, 2
 	beta := 2
+	terminationConditions := newSingleTerminationCondition(alphaConfidence, beta)
 
-	sb := binarySnowball{}
-	sb.Initialize(beta, Red)
+	sb := newBinarySnowball(alphaPreference, terminationConditions, red)
 
-	if pref := sb.Preference(); pref != Red {
-		t.Fatalf("Wrong preference. Expected %d got %d", Red, pref)
-	} else if sb.Finalized() {
-		t.Fatalf("Finalized too early")
-	}
+	require.Equal(red, sb.Preference())
+	require.False(sb.Finalized())
 
-	sb.RecordSuccessfulPoll(Red)
+	sb.RecordPoll(alphaConfidence, red)
 	sb.RecordUnsuccessfulPoll()
 
-	if pref := sb.Preference(); pref != Red {
-		t.Fatalf("Wrong preference. Expected %d got %d", Red, pref)
-	} else if sb.Finalized() {
-		t.Fatalf("Finalized too early")
-	}
+	require.Equal(red, sb.Preference())
+	require.False(sb.Finalized())
 
-	sb.RecordSuccessfulPoll(Red)
+	sb.RecordPoll(alphaConfidence, red)
+
 	sb.RecordUnsuccessfulPoll()
 
-	if pref := sb.Preference(); pref != Red {
-		t.Fatalf("Wrong preference. Expected %d got %d", Red, pref)
-	} else if sb.Finalized() {
-		t.Fatalf("Finalized too early")
-	}
+	require.Equal(red, sb.Preference())
+	require.False(sb.Finalized())
 
-	sb.RecordSuccessfulPoll(Blue)
+	sb.RecordPoll(alphaConfidence, blue)
 
-	if pref := sb.Preference(); pref != Red {
-		t.Fatalf("Wrong preference. Expected %d got %d", Red, pref)
-	} else if sb.Finalized() {
-		t.Fatalf("Finalized too early")
-	}
+	require.Equal(red, sb.Preference())
+	require.False(sb.Finalized())
 
-	sb.RecordSuccessfulPoll(Blue)
+	sb.RecordPoll(alphaConfidence, blue)
 
-	if pref := sb.Preference(); pref != Blue {
-		t.Fatalf("Wrong preference. Expected %d got %d", Blue, pref)
-	} else if !sb.Finalized() {
-		t.Fatalf("Finalized too late")
-	}
+	require.Equal(blue, sb.Preference())
+	require.True(sb.Finalized())
 
-	expected := "SB(Preference = 1, NumSuccessfulPolls[0] = 2, NumSuccessfulPolls[1] = 2, SF(Confidence = 2, Finalized = true, SL(Preference = 0)))"
-	if str := sb.String(); str != expected {
-		t.Fatalf("Wrong state. Expected:\n%s\nGot:\n%s", expected, str)
-	}
+	expected := "SB(Preference = 1, PreferenceStrength[0] = 2, PreferenceStrength[1] = 2, SF(Confidence = [2], Finalized = true, SL(Preference = 0)))"
+	require.Equal(expected, sb.String())
 }
 
 func TestBinarySnowballLockColor(t *testing.T) {
-	Red := 0
-	Blue := 1
+	require := require.New(t)
 
+	red := 0
+	blue := 1
+
+	alphaPreference, alphaConfidence := 1, 2
 	beta := 1
+	terminationConditions := newSingleTerminationCondition(alphaConfidence, beta)
 
-	sb := binarySnowball{}
-	sb.Initialize(beta, Red)
+	sb := newBinarySnowball(alphaPreference, terminationConditions, red)
 
-	sb.RecordSuccessfulPoll(Red)
+	sb.RecordPoll(alphaConfidence, red)
 
-	if pref := sb.Preference(); pref != Red {
-		t.Fatalf("Wrong preference. Expected %d got %d", Red, pref)
-	} else if !sb.Finalized() {
-		t.Fatalf("Finalized too late")
-	}
+	require.Equal(red, sb.Preference())
+	require.True(sb.Finalized())
 
-	sb.RecordSuccessfulPoll(Blue)
+	sb.RecordPoll(alphaConfidence, blue)
 
-	if pref := sb.Preference(); pref != Red {
-		t.Fatalf("Wrong preference. Expected %d got %d", Red, pref)
-	} else if !sb.Finalized() {
-		t.Fatalf("Finalized too late")
-	}
+	require.Equal(red, sb.Preference())
+	require.True(sb.Finalized())
 
-	sb.RecordSuccessfulPoll(Blue)
+	sb.RecordPoll(alphaPreference, blue)
+	sb.RecordPoll(alphaConfidence, blue)
 
-	if pref := sb.Preference(); pref != Red {
-		t.Fatalf("Wrong preference. Expected %d got %d", Red, pref)
-	} else if !sb.Finalized() {
-		t.Fatalf("Finalized too late")
-	}
+	require.Equal(red, sb.Preference())
+	require.True(sb.Finalized())
 
-	expected := "SB(Preference = 1, NumSuccessfulPolls[0] = 1, NumSuccessfulPolls[1] = 2, SF(Confidence = 1, Finalized = true, SL(Preference = 0)))"
-	if str := sb.String(); str != expected {
-		t.Fatalf("Wrong state. Expected:\n%s\nGot:\n%s", expected, str)
-	}
+	expected := "SB(Preference = 1, PreferenceStrength[0] = 1, PreferenceStrength[1] = 3, SF(Confidence = [1], Finalized = true, SL(Preference = 0)))"
+	require.Equal(expected, sb.String())
 }

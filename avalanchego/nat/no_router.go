@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package nat
@@ -6,19 +6,21 @@ package nat
 import (
 	"errors"
 	"net"
+	"net/netip"
 	"time"
 )
 
 var (
-	errNoRouterCantMapPorts        = errors.New("can't map ports without a known router")
-	errFetchingIP                  = errors.New("getting outbound IP failed")
-	_                       Router = &noRouter{}
+	_ Router = (*noRouter)(nil)
+
+	errNoRouterCantMapPorts = errors.New("can't map ports without a known router")
+	errFetchingIP           = errors.New("getting outbound IP failed")
 )
 
 const googleDNSServer = "8.8.8.8:80"
 
 type noRouter struct {
-	ip    net.IP
+	ip    netip.Addr
 	ipErr error
 }
 
@@ -26,34 +28,38 @@ func (noRouter) SupportsNAT() bool {
 	return false
 }
 
-func (noRouter) MapPort(_ string, intPort, extPort uint16, _ string, _ time.Duration) error {
+func (noRouter) MapPort(uint16, uint16, string, time.Duration) error {
 	return errNoRouterCantMapPorts
 }
 
-func (noRouter) UnmapPort(string, uint16, uint16) error {
+func (noRouter) UnmapPort(uint16, uint16) error {
 	return nil
 }
 
-func (r noRouter) ExternalIP() (net.IP, error) {
+func (r noRouter) ExternalIP() (netip.Addr, error) {
 	return r.ip, r.ipErr
 }
 
-func getOutboundIP() (net.IP, error) {
+func getOutboundIP() (netip.Addr, error) {
 	conn, err := net.Dial("udp", googleDNSServer)
 	if err != nil {
-		return nil, err
+		return netip.Addr{}, err
 	}
 
-	addr := conn.LocalAddr()
+	localAddr := conn.LocalAddr()
 	if err := conn.Close(); err != nil {
-		return nil, err
+		return netip.Addr{}, err
 	}
 
-	udpAddr, ok := addr.(*net.UDPAddr)
+	udpAddr, ok := localAddr.(*net.UDPAddr)
 	if !ok {
-		return nil, errFetchingIP
+		return netip.Addr{}, errFetchingIP
 	}
-	return udpAddr.IP, nil
+	addr := udpAddr.AddrPort().Addr()
+	if addr.Is4In6() {
+		addr = addr.Unmap()
+	}
+	return addr, nil
 }
 
 // NewNoRouter returns a router that assumes the network is public

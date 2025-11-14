@@ -16,21 +16,24 @@ import (
 )
 
 var (
-	ApricotPhase3MinBaseFee = big.NewInt(params.ApricotPhase3MinBaseFee)
-	ApricotPhase3MaxBaseFee = big.NewInt(params.ApricotPhase3MaxBaseFee)
-	ApricotPhase4MinBaseFee = big.NewInt(params.ApricotPhase4MinBaseFee)
-	ApricotPhase4MaxBaseFee = big.NewInt(params.ApricotPhase4MaxBaseFee)
+	ApricotPhase3MinBaseFee     = big.NewInt(params.ApricotPhase3MinBaseFee)
+	ApricotPhase3MaxBaseFee     = big.NewInt(params.ApricotPhase3MaxBaseFee)
+	ApricotPhase4MinBaseFee     = big.NewInt(params.ApricotPhase4MinBaseFee)
+	ApricotPhase4MaxBaseFee     = big.NewInt(params.ApricotPhase4MaxBaseFee)
+	ApricotPhase3InitialBaseFee = big.NewInt(params.ApricotPhase3InitialBaseFee)
+	EtnaMinBaseFee              = big.NewInt(params.EtnaMinBaseFee)
 
 	ApricotPhase4BaseFeeChangeDenominator = new(big.Int).SetUint64(params.ApricotPhase4BaseFeeChangeDenominator)
 	ApricotPhase5BaseFeeChangeDenominator = new(big.Int).SetUint64(params.ApricotPhase5BaseFeeChangeDenominator)
 
-	ApricotPhase3BlockGasFee      uint64 = 1_000_000
-	ApricotPhase4MinBlockGasCost         = new(big.Int).Set(common.Big0)
-	ApricotPhase4MaxBlockGasCost         = big.NewInt(1_000_000)
-	ApricotPhase4BlockGasCostStep        = big.NewInt(50_000)
-	ApricotPhase4TargetBlockRate  uint64 = 2 // in seconds
-	ApricotPhase5BlockGasCostStep        = big.NewInt(200_000)
-	rollupWindow                  uint64 = 10
+	ApricotPhase3BlockGasFee        uint64 = 1_000_000
+	ApricotPhase4MinBlockGasCost           = new(big.Int).Set(common.Big0)
+	ApricotPhase4MaxBlockGasCost           = big.NewInt(1_000_000)
+	ApricotPhase4BlockGasCostStep          = big.NewInt(50_000)
+	ApricotPhase4TargetBlockRate    uint64 = 2 // in seconds
+	SgbApricotPhase4TargetBlockRate uint64 = 1 // in seconds
+	ApricotPhase5BlockGasCostStep          = big.NewInt(200_000)
+	rollupWindow                    uint64 = 10
 )
 
 // CalcBaseFee takes the previous header and the timestamp of its child block
@@ -40,20 +43,22 @@ var (
 func CalcBaseFee(config *params.ChainConfig, parent *types.Header, timestamp uint64) ([]byte, *big.Int, error) {
 	// If the current block is the first EIP-1559 block, or it is the genesis block
 	// return the initial slice and initial base fee.
-	bigTimestamp := new(big.Int).SetUint64(parent.Time)
 	var (
-		isApricotPhase3 = config.IsApricotPhase3(bigTimestamp)
-		isApricotPhase4 = config.IsApricotPhase4(bigTimestamp)
-		isApricotPhase5 = config.IsApricotPhase5(bigTimestamp)
+		isApricotPhase3 = config.IsApricotPhase3(parent.Time)
+		isApricotPhase4 = config.IsApricotPhase4(parent.Time)
+		isApricotPhase5 = config.IsApricotPhase5(parent.Time)
+		isEtna          = config.IsEtna(parent.Time)
 	)
 	if !isApricotPhase3 || parent.Number.Cmp(common.Big0) == 0 {
-		initialSlice := make([]byte, params.ApricotPhase3ExtraDataSize)
+		initialSlice := make([]byte, params.DynamicFeeExtraDataSize)
 		initialBaseFee := big.NewInt(params.ApricotPhase3InitialBaseFee)
 		return initialSlice, initialBaseFee, nil
 	}
-	if uint64(len(parent.Extra)) != params.ApricotPhase3ExtraDataSize {
-		return nil, nil, fmt.Errorf("expected length of parent extra data to be %d, but found %d", params.ApricotPhase3ExtraDataSize, len(parent.Extra))
+
+	if uint64(len(parent.Extra)) < params.DynamicFeeExtraDataSize {
+		return nil, nil, fmt.Errorf("expected length of parent extra data to be %d, but found %d", params.DynamicFeeExtraDataSize, len(parent.Extra))
 	}
+	dynamicFeeWindow := parent.Extra[:params.DynamicFeeExtraDataSize]
 
 	if timestamp < parent.Time {
 		return nil, nil, fmt.Errorf("cannot calculate base fee for timestamp (%d) prior to parent timestamp (%d)", timestamp, parent.Time)
@@ -62,7 +67,7 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header, timestamp uin
 
 	// roll the window over by the difference between the timestamps to generate
 	// the new rollup window.
-	newRollupWindow, err := rollLongWindow(parent.Extra, int(roll))
+	newRollupWindow, err := rollLongWindow(dynamicFeeWindow, int(roll))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -76,7 +81,11 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header, timestamp uin
 	)
 	if isApricotPhase5 {
 		baseFeeChangeDenominator = ApricotPhase5BaseFeeChangeDenominator
-		parentGasTarget = params.ApricotPhase5TargetGas
+		if config.IsSongbirdCode() && !config.IsCortina(timestamp) {
+			parentGasTarget = params.SgbApricotPhase5TargetGas
+		} else {
+			parentGasTarget = params.ApricotPhase5TargetGas
+		}
 	}
 	parentGasTargetBig := new(big.Int).SetUint64(parentGasTarget)
 
@@ -95,10 +104,17 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header, timestamp uin
 				parentExtraStateGasUsed = parent.ExtDataGasUsed.Uint64()
 			}
 		case isApricotPhase4:
+			var apricotPhase4TargetBlockRate uint64
+			if config.IsSongbirdCode() {
+				apricotPhase4TargetBlockRate = SgbApricotPhase4TargetBlockRate
+			} else {
+				apricotPhase4TargetBlockRate = ApricotPhase4TargetBlockRate
+			}
+
 			// The [blockGasCost] is paid by the effective tips in the block using
 			// the block's value of [baseFee].
 			blockGasCost = calcBlockGasCost(
-				ApricotPhase4TargetBlockRate,
+				apricotPhase4TargetBlockRate,
 				ApricotPhase4MinBlockGasCost,
 				ApricotPhase4MaxBlockGasCost,
 				ApricotPhase4BlockGasCostStep,
@@ -141,40 +157,39 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header, timestamp uin
 		return newRollupWindow, baseFee, nil
 	}
 
+	num := new(big.Int)
+
 	if totalGas > parentGasTarget {
 		// If the parent block used more gas than its target, the baseFee should increase.
-		gasUsedDelta := new(big.Int).SetUint64(totalGas - parentGasTarget)
-		x := new(big.Int).Mul(parent.BaseFee, gasUsedDelta)
-		y := x.Div(x, parentGasTargetBig)
-		baseFeeDelta := math.BigMax(
-			x.Div(y, baseFeeChangeDenominator),
-			common.Big1,
-		)
+		num.SetUint64(totalGas - parentGasTarget)
+		num.Mul(num, parent.BaseFee)
+		num.Div(num, parentGasTargetBig)
+		num.Div(num, baseFeeChangeDenominator)
+		baseFeeDelta := math.BigMax(num, common.Big1)
 
 		baseFee.Add(baseFee, baseFeeDelta)
 	} else {
 		// Otherwise if the parent block used less gas than its target, the baseFee should decrease.
-		gasUsedDelta := new(big.Int).SetUint64(parentGasTarget - totalGas)
-		x := new(big.Int).Mul(parent.BaseFee, gasUsedDelta)
-		y := x.Div(x, parentGasTargetBig)
-		baseFeeDelta := math.BigMax(
-			x.Div(y, baseFeeChangeDenominator),
-			common.Big1,
-		)
-
+		num.SetUint64(parentGasTarget - totalGas)
+		num.Mul(num, parent.BaseFee)
+		num.Div(num, parentGasTargetBig)
+		num.Div(num, baseFeeChangeDenominator)
+		baseFeeDelta := math.BigMax(num, common.Big1)
 		// If [roll] is greater than [rollupWindow], apply the state transition to the base fee to account
 		// for the interval during which no blocks were produced.
 		// We use roll/rollupWindow, so that the transition is applied for every [rollupWindow] seconds
 		// that has elapsed between the parent and this block.
 		if roll > rollupWindow {
 			// Note: roll/rollupWindow must be greater than 1 since we've checked that roll > rollupWindow
-			baseFeeDelta = baseFeeDelta.Mul(baseFeeDelta, new(big.Int).SetUint64(roll/rollupWindow))
+			baseFeeDelta = new(big.Int).Mul(baseFeeDelta, new(big.Int).SetUint64(roll/rollupWindow))
 		}
 		baseFee.Sub(baseFee, baseFeeDelta)
 	}
 
 	// Ensure that the base fee does not increase/decrease outside of the bounds
 	switch {
+	case isEtna:
+		baseFee = selectBigWithinBounds(EtnaMinBaseFee, baseFee, nil)
 	case isApricotPhase5:
 		baseFee = selectBigWithinBounds(ApricotPhase4MinBaseFee, baseFee, nil)
 	case isApricotPhase4:
@@ -186,7 +201,7 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header, timestamp uin
 	return newRollupWindow, baseFee, nil
 }
 
-// EstiamteNextBaseFee attempts to estimate the next base fee based on a block with [parent] being built at
+// EstimateNextBaseFee attempts to estimate the next base fee based on a block with [parent] being built at
 // [timestamp].
 // If [timestamp] is less than the timestamp of [parent], then it uses the same timestamp as parent.
 // Warning: This function should only be used in estimation and should not be used when calculating the canonical
@@ -329,7 +344,7 @@ func calcBlockGasCost(
 //
 // This function will return nil for all return values prior to Apricot Phase 4.
 func MinRequiredTip(config *params.ChainConfig, header *types.Header) (*big.Int, error) {
-	if !config.IsApricotPhase4(new(big.Int).SetUint64(header.Time)) {
+	if !config.IsApricotPhase4(header.Time) {
 		return nil, nil
 	}
 	if header.BaseFee == nil {

@@ -1,12 +1,16 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package logging
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestLog(t *testing.T) {
-	log := NewLogger(false, "", NewWrappedCore(Info, Discard, Plain.ConsoleEncoder()))
+	log := NewLogger("", NewWrappedCore(Info, Discard, Plain.ConsoleEncoder()))
 
 	recovered := new(bool)
 	panicFunc := func() {
@@ -17,7 +21,5 @@ func TestLog(t *testing.T) {
 	}
 	log.RecoverAndExit(panicFunc, exitFunc)
 
-	if !*recovered {
-		t.Fatalf("Exit function was never called")
-	}
+	require.True(t, *recovered)
 }

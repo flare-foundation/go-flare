@@ -1,68 +1,42 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package state
 
 import (
-	"time"
-
-	"go.uber.org/zap"
-
 	"github.com/ava-labs/avalanchego/cache"
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/database/prefixdb"
 	"github.com/ava-labs/avalanchego/database/versiondb"
 	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/utils/logging"
-	"github.com/ava-labs/avalanchego/utils/wrappers"
 )
 
-const (
-	cacheSize = 8192 // max cache entries
-
-	deleteBatchSize = 8192
-
-	// Sleep [sleepDurationMultiplier]x (5x) the amount of time we spend processing the block
-	// to ensure the async indexing does not bottleneck the node.
-	sleepDurationMultiplier = 5
-)
+const cacheSize = 8192 // max cache entries
 
 var (
-	_ HeightIndex = &heightIndex{}
+	_ HeightIndex = (*heightIndex)(nil)
 
 	heightPrefix   = []byte("height")
 	metadataPrefix = []byte("metadata")
 
-	forkKey          = []byte("fork")
-	checkpointKey    = []byte("checkpoint")
-	resetOccurredKey = []byte("resetOccurred")
+	forkKey = []byte("fork")
 )
 
 type HeightIndexGetter interface {
+	// GetMinimumHeight return the smallest height of an indexed blockID. If
+	// there are no indexed blockIDs, ErrNotFound will be returned.
+	GetMinimumHeight() (uint64, error)
 	GetBlockIDAtHeight(height uint64) (ids.ID, error)
 
 	// Fork height is stored when the first post-fork block/option is accepted.
 	// Before that, fork height won't be found.
 	GetForkHeight() (uint64, error)
-	IsIndexEmpty() (bool, error)
-	HasIndexReset() (bool, error)
 }
 
 type HeightIndexWriter interface {
-	SetBlockIDAtHeight(height uint64, blkID ids.ID) error
 	SetForkHeight(height uint64) error
-	SetIndexHasReset() error
-}
-
-// A checkpoint is the blockID of the next block to be considered
-// for height indexing. We store checkpoints to be able to duly resume
-// long-running re-indexing ops.
-type HeightIndexBatchSupport interface {
-	versiondb.Commitable
-
-	GetCheckpoint() (ids.ID, error)
-	SetCheckpoint(blkID ids.ID) error
-	DeleteCheckpoint() error
+	SetBlockIDAtHeight(height uint64, blkID ids.ID) error
+	DeleteBlockIDAtHeight(height uint64) error
 }
 
 // HeightIndex contains mapping of blockHeights to accepted proposer block IDs
@@ -70,17 +44,13 @@ type HeightIndexBatchSupport interface {
 type HeightIndex interface {
 	HeightIndexWriter
 	HeightIndexGetter
-	HeightIndexBatchSupport
-
-	// ResetHeightIndex deletes all index DB entries
-	ResetHeightIndex(logging.Logger, versiondb.Commitable) error
 }
 
 type heightIndex struct {
 	versiondb.Commitable
 
 	// Caches block height -> proposerVMBlockID.
-	heightsCache cache.Cacher
+	heightsCache cache.Cacher[uint64, ids.ID]
 
 	heightDB   database.Database
 	metadataDB database.Database
@@ -90,112 +60,30 @@ func NewHeightIndex(db database.Database, commitable versiondb.Commitable) Heigh
 	return &heightIndex{
 		Commitable: commitable,
 
-		heightsCache: &cache.LRU{Size: cacheSize},
+		heightsCache: &cache.LRU[uint64, ids.ID]{Size: cacheSize},
 		heightDB:     prefixdb.New(heightPrefix, db),
 		metadataDB:   prefixdb.New(metadataPrefix, db),
 	}
 }
 
-func (hi *heightIndex) IsIndexEmpty() (bool, error) {
-	heightsIsEmpty, err := database.IsEmpty(hi.heightDB)
+func (hi *heightIndex) GetMinimumHeight() (uint64, error) {
+	it := hi.heightDB.NewIterator()
+	defer it.Release()
+
+	if !it.Next() {
+		return 0, database.ErrNotFound
+	}
+
+	height, err := database.ParseUInt64(it.Key())
 	if err != nil {
-		return false, err
+		return 0, err
 	}
-	if !heightsIsEmpty {
-		return false, nil
-	}
-	return database.IsEmpty(hi.metadataDB)
-}
-
-func (hi *heightIndex) HasIndexReset() (bool, error) {
-	return hi.metadataDB.Has(resetOccurredKey)
-}
-
-func (hi *heightIndex) SetIndexHasReset() error {
-	return hi.metadataDB.Put(resetOccurredKey, nil)
-}
-
-func (hi *heightIndex) ResetHeightIndex(log logging.Logger, baseDB versiondb.Commitable) error {
-	var (
-		itHeight   = hi.heightDB.NewIterator()
-		itMetadata = hi.metadataDB.NewIterator()
-	)
-	defer func() {
-		itHeight.Release()
-		itMetadata.Release()
-	}()
-
-	// clear height cache
-	hi.heightsCache.Flush()
-
-	// clear heightDB
-	deleteCount := 0
-	processingStart := time.Now()
-	for itHeight.Next() {
-		if err := hi.heightDB.Delete(itHeight.Key()); err != nil {
-			return err
-		}
-
-		deleteCount++
-		if deleteCount%deleteBatchSize == 0 {
-			if err := hi.Commit(); err != nil {
-				return err
-			}
-			if err := baseDB.Commit(); err != nil {
-				return err
-			}
-
-			log.Info("deleted height index entries",
-				zap.Int("numDeleted", deleteCount),
-			)
-
-			// every deleteBatchSize ops, sleep to avoid clogging the node on this
-			processingDuration := time.Since(processingStart)
-			// Sleep [sleepDurationMultiplier]x (5x) the amount of time we spend processing the block
-			// to ensure the indexing does not bottleneck the node.
-			time.Sleep(processingDuration * sleepDurationMultiplier)
-			processingStart = time.Now()
-
-			if err := itHeight.Error(); err != nil {
-				return err
-			}
-
-			// release iterator so underlying db does not hold on to the previous state
-			itHeight.Release()
-			itHeight = hi.heightDB.NewIterator()
-		}
-	}
-
-	// clear metadataDB
-	for itMetadata.Next() {
-		if err := hi.metadataDB.Delete(itMetadata.Key()); err != nil {
-			return err
-		}
-	}
-
-	errs := wrappers.Errs{}
-	errs.Add(
-		itHeight.Error(),
-		itMetadata.Error(),
-	)
-	if errs.Errored() {
-		return errs.Err
-	}
-
-	if err := hi.SetIndexHasReset(); err != nil {
-		return err
-	}
-
-	if err := hi.Commit(); err != nil {
-		return err
-	}
-	return baseDB.Commit()
+	return height, it.Error()
 }
 
 func (hi *heightIndex) GetBlockIDAtHeight(height uint64) (ids.ID, error) {
-	if blkIDIntf, found := hi.heightsCache.Get(height); found {
-		res, _ := blkIDIntf.(ids.ID)
-		return res, nil
+	if blkID, found := hi.heightsCache.Get(height); found {
+		return blkID, nil
 	}
 
 	key := database.PackUInt64(height)
@@ -213,22 +101,16 @@ func (hi *heightIndex) SetBlockIDAtHeight(height uint64, blkID ids.ID) error {
 	return database.PutID(hi.heightDB, key, blkID)
 }
 
+func (hi *heightIndex) DeleteBlockIDAtHeight(height uint64) error {
+	hi.heightsCache.Evict(height)
+	key := database.PackUInt64(height)
+	return hi.heightDB.Delete(key)
+}
+
 func (hi *heightIndex) GetForkHeight() (uint64, error) {
 	return database.GetUInt64(hi.metadataDB, forkKey)
 }
 
 func (hi *heightIndex) SetForkHeight(height uint64) error {
 	return database.PutUInt64(hi.metadataDB, forkKey, height)
-}
-
-func (hi *heightIndex) GetCheckpoint() (ids.ID, error) {
-	return database.GetID(hi.metadataDB, checkpointKey)
-}
-
-func (hi *heightIndex) SetCheckpoint(blkID ids.ID) error {
-	return database.PutID(hi.metadataDB, checkpointKey, blkID)
-}
-
-func (hi *heightIndex) DeleteCheckpoint() error {
-	return hi.metadataDB.Delete(checkpointKey)
 }

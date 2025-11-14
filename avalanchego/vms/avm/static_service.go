@@ -1,19 +1,18 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package avm
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 
-	stdjson "encoding/json"
-
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/formatting"
 	"github.com/ava-labs/avalanchego/utils/formatting/address"
-	"github.com/ava-labs/avalanchego/utils/json"
 	"github.com/ava-labs/avalanchego/vms/avm/fxs"
 	"github.com/ava-labs/avalanchego/vms/avm/txs"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
@@ -21,28 +20,30 @@ import (
 	"github.com/ava-labs/avalanchego/vms/nftfx"
 	"github.com/ava-labs/avalanchego/vms/propertyfx"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
+
+	avajson "github.com/ava-labs/avalanchego/utils/json"
 )
 
 var (
 	errUnknownAssetType = errors.New("unknown asset type")
 
-	_ avax.TransferableIn  = &secp256k1fx.TransferInput{}
-	_ verify.State         = &secp256k1fx.MintOutput{}
-	_ avax.TransferableOut = &secp256k1fx.TransferOutput{}
-	_ fxs.FxOperation      = &secp256k1fx.MintOperation{}
-	_ verify.Verifiable    = &secp256k1fx.Credential{}
+	_ avax.TransferableIn  = (*secp256k1fx.TransferInput)(nil)
+	_ verify.State         = (*secp256k1fx.MintOutput)(nil)
+	_ avax.TransferableOut = (*secp256k1fx.TransferOutput)(nil)
+	_ fxs.FxOperation      = (*secp256k1fx.MintOperation)(nil)
+	_ verify.Verifiable    = (*secp256k1fx.Credential)(nil)
 
-	_ verify.State      = &nftfx.MintOutput{}
-	_ verify.State      = &nftfx.TransferOutput{}
-	_ fxs.FxOperation   = &nftfx.MintOperation{}
-	_ fxs.FxOperation   = &nftfx.TransferOperation{}
-	_ verify.Verifiable = &nftfx.Credential{}
+	_ verify.State      = (*nftfx.MintOutput)(nil)
+	_ verify.State      = (*nftfx.TransferOutput)(nil)
+	_ fxs.FxOperation   = (*nftfx.MintOperation)(nil)
+	_ fxs.FxOperation   = (*nftfx.TransferOperation)(nil)
+	_ verify.Verifiable = (*nftfx.Credential)(nil)
 
-	_ verify.State      = &propertyfx.MintOutput{}
-	_ verify.State      = &propertyfx.OwnedOutput{}
-	_ fxs.FxOperation   = &propertyfx.MintOperation{}
-	_ fxs.FxOperation   = &propertyfx.BurnOperation{}
-	_ verify.Verifiable = &propertyfx.Credential{}
+	_ verify.State      = (*propertyfx.MintOutput)(nil)
+	_ verify.State      = (*propertyfx.OwnedOutput)(nil)
+	_ fxs.FxOperation   = (*propertyfx.MintOperation)(nil)
+	_ fxs.FxOperation   = (*propertyfx.BurnOperation)(nil)
+	_ verify.Verifiable = (*propertyfx.Credential)(nil)
 )
 
 // StaticService defines the base service for the asset vm
@@ -54,7 +55,7 @@ func CreateStaticService() *StaticService {
 
 // BuildGenesisArgs are arguments for BuildGenesis
 type BuildGenesisArgs struct {
-	NetworkID   json.Uint32                `json:"networkID"`
+	NetworkID   avajson.Uint32             `json:"networkID"`
 	GenesisData map[string]AssetDefinition `json:"genesisData"`
 	Encoding    formatting.Encoding        `json:"encoding"`
 }
@@ -62,7 +63,7 @@ type BuildGenesisArgs struct {
 type AssetDefinition struct {
 	Name         string                   `json:"name"`
 	Symbol       string                   `json:"symbol"`
-	Denomination json.Uint8               `json:"denomination"`
+	Denomination avajson.Uint8            `json:"denomination"`
 	InitialState map[string][]interface{} `json:"initialState"`
 	Memo         string                   `json:"memo"`
 }
@@ -75,12 +76,14 @@ type BuildGenesisReply struct {
 
 // BuildGenesis returns the UTXOs such that at least one address in [args.Addresses] is
 // referenced in the UTXO.
-func (ss *StaticService) BuildGenesis(_ *http.Request, args *BuildGenesisArgs, reply *BuildGenesisReply) error {
-	parser, err := txs.NewParser([]fxs.Fx{
-		&secp256k1fx.Fx{},
-		&nftfx.Fx{},
-		&propertyfx.Fx{},
-	})
+func (*StaticService) BuildGenesis(_ *http.Request, args *BuildGenesisArgs, reply *BuildGenesisReply) error {
+	parser, err := txs.NewParser(
+		[]fxs.Fx{
+			&secp256k1fx.Fx{},
+			&nftfx.Fx{},
+			&propertyfx.Fx{},
+		},
+	)
 	if err != nil {
 		return err
 	}
@@ -113,12 +116,12 @@ func (ss *StaticService) BuildGenesis(_ *http.Request, args *BuildGenesisArgs, r
 				switch assetType {
 				case "fixedCap":
 					for _, state := range initialStates {
-						b, err := stdjson.Marshal(state)
+						b, err := json.Marshal(state)
 						if err != nil {
 							return fmt.Errorf("problem marshaling state: %w", err)
 						}
 						holder := Holder{}
-						if err := stdjson.Unmarshal(b, &holder); err != nil {
+						if err := json.Unmarshal(b, &holder); err != nil {
 							return fmt.Errorf("problem unmarshaling holder: %w", err)
 						}
 						_, addrbuff, err := address.ParseBech32(holder.Address)
@@ -139,12 +142,12 @@ func (ss *StaticService) BuildGenesis(_ *http.Request, args *BuildGenesisArgs, r
 					}
 				case "variableCap":
 					for _, state := range initialStates {
-						b, err := stdjson.Marshal(state)
+						b, err := json.Marshal(state)
 						if err != nil {
 							return fmt.Errorf("problem marshaling state: %w", err)
 						}
 						owners := Owners{}
-						if err := stdjson.Unmarshal(b, &owners); err != nil {
+						if err := json.Unmarshal(b, &owners); err != nil {
 							return fmt.Errorf("problem unmarshaling Owners: %w", err)
 						}
 
@@ -175,10 +178,10 @@ func (ss *StaticService) BuildGenesis(_ *http.Request, args *BuildGenesisArgs, r
 			initialState.Sort(genesisCodec)
 			asset.States = append(asset.States, initialState)
 		}
-		asset.Sort()
+		utils.Sort(asset.States)
 		g.Txs = append(g.Txs, &asset)
 	}
-	g.Sort()
+	utils.Sort(g.Txs)
 
 	b, err := genesisCodec.Marshal(txs.CodecVersion, &g)
 	if err != nil {

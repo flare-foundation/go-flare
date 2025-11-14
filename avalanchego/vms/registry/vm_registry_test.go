@@ -1,17 +1,19 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package registry
 
 import (
+	"context"
 	"testing"
 
-	"github.com/golang/mock/gomock"
-
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/vms"
+	"github.com/ava-labs/avalanchego/vms/registry/registrymock"
+	"github.com/ava-labs/avalanchego/vms/vmsmock"
 )
 
 var (
@@ -23,13 +25,14 @@ var (
 
 // Tests the happy case where Reload succeeds.
 func TestReload_Success(t *testing.T) {
-	resources := initVMRegistryTest(t)
-	defer resources.ctrl.Finish()
+	require := require.New(t)
 
-	factory1 := vms.NewMockFactory(resources.ctrl)
-	factory2 := vms.NewMockFactory(resources.ctrl)
-	factory3 := vms.NewMockFactory(resources.ctrl)
-	factory4 := vms.NewMockFactory(resources.ctrl)
+	resources := initVMRegistryTest(t)
+
+	factory1 := vmsmock.NewFactory(resources.ctrl)
+	factory2 := vmsmock.NewFactory(resources.ctrl)
+	factory3 := vmsmock.NewFactory(resources.ctrl)
+	factory4 := vmsmock.NewFactory(resources.ctrl)
 
 	registeredVms := map[ids.ID]vms.Factory{
 		id1: factory1,
@@ -45,43 +48,45 @@ func TestReload_Success(t *testing.T) {
 		Get().
 		Times(1).
 		Return(registeredVms, unregisteredVms, nil)
-	resources.mockVMRegisterer.EXPECT().
-		Register(id3, factory3).
+	resources.mockVMManager.EXPECT().
+		RegisterFactory(gomock.Any(), id3, factory3).
 		Times(1).
 		Return(nil)
-	resources.mockVMRegisterer.EXPECT().
-		Register(id4, factory4).
+	resources.mockVMManager.EXPECT().
+		RegisterFactory(gomock.Any(), id4, factory4).
 		Times(1).
 		Return(nil)
 
-	installedVMs, failedVMs, err := resources.vmRegistry.Reload()
-	require.ElementsMatch(t, []ids.ID{id3, id4}, installedVMs)
-	require.Empty(t, failedVMs)
-	require.Nil(t, err)
+	installedVMs, failedVMs, err := resources.vmRegistry.Reload(context.Background())
+	require.NoError(err)
+	require.ElementsMatch([]ids.ID{id3, id4}, installedVMs)
+	require.Empty(failedVMs)
 }
 
 // Tests that we fail if we're not able to get the vms on disk
 func TestReload_GetNewVMsFails(t *testing.T) {
+	require := require.New(t)
+
 	resources := initVMRegistryTest(t)
-	defer resources.ctrl.Finish()
 
-	resources.mockVMGetter.EXPECT().Get().Times(1).Return(nil, nil, errOops)
+	resources.mockVMGetter.EXPECT().Get().Times(1).Return(nil, nil, errTest)
 
-	installedVMs, failedVMs, err := resources.vmRegistry.Reload()
-	require.Nil(t, installedVMs)
-	require.Empty(t, failedVMs)
-	require.Equal(t, err, errOops)
+	installedVMs, failedVMs, err := resources.vmRegistry.Reload(context.Background())
+	require.ErrorIs(err, errTest)
+	require.Empty(installedVMs)
+	require.Empty(failedVMs)
 }
 
 // Tests that if we fail to register a VM, we fail.
 func TestReload_PartialRegisterFailure(t *testing.T) {
-	resources := initVMRegistryTest(t)
-	defer resources.ctrl.Finish()
+	require := require.New(t)
 
-	factory1 := vms.NewMockFactory(resources.ctrl)
-	factory2 := vms.NewMockFactory(resources.ctrl)
-	factory3 := vms.NewMockFactory(resources.ctrl)
-	factory4 := vms.NewMockFactory(resources.ctrl)
+	resources := initVMRegistryTest(t)
+
+	factory1 := vmsmock.NewFactory(resources.ctrl)
+	factory2 := vmsmock.NewFactory(resources.ctrl)
+	factory3 := vmsmock.NewFactory(resources.ctrl)
+	factory4 := vmsmock.NewFactory(resources.ctrl)
 
 	registeredVms := map[ids.ID]vms.Factory{
 		id1: factory1,
@@ -97,142 +102,47 @@ func TestReload_PartialRegisterFailure(t *testing.T) {
 		Get().
 		Times(1).
 		Return(registeredVms, unregisteredVms, nil)
-	resources.mockVMRegisterer.EXPECT().
-		Register(id3, factory3).
+	resources.mockVMManager.EXPECT().
+		RegisterFactory(gomock.Any(), id3, factory3).
 		Times(1).
-		Return(errOops)
-	resources.mockVMRegisterer.EXPECT().
-		Register(id4, factory4).
-		Times(1).
-		Return(nil)
-
-	installedVMs, failedVMs, err := resources.vmRegistry.Reload()
-
-	require.Len(t, failedVMs, 1)
-	require.Equal(t, failedVMs[id3], errOops)
-	require.Len(t, installedVMs, 1)
-	require.Equal(t, installedVMs[0], id4)
-	require.Nil(t, err)
-}
-
-// Tests the happy case where Reload succeeds.
-func TestReloadWithReadLock_Success(t *testing.T) {
-	resources := initVMRegistryTest(t)
-	defer resources.ctrl.Finish()
-
-	factory1 := vms.NewMockFactory(resources.ctrl)
-	factory2 := vms.NewMockFactory(resources.ctrl)
-	factory3 := vms.NewMockFactory(resources.ctrl)
-	factory4 := vms.NewMockFactory(resources.ctrl)
-
-	registeredVms := map[ids.ID]vms.Factory{
-		id1: factory1,
-		id2: factory2,
-	}
-
-	unregisteredVms := map[ids.ID]vms.Factory{
-		id3: factory3,
-		id4: factory4,
-	}
-
-	resources.mockVMGetter.EXPECT().
-		Get().
-		Times(1).
-		Return(registeredVms, unregisteredVms, nil)
-	resources.mockVMRegisterer.EXPECT().
-		RegisterWithReadLock(id3, factory3).
-		Times(1).
-		Return(nil)
-	resources.mockVMRegisterer.EXPECT().
-		RegisterWithReadLock(id4, factory4).
+		Return(errTest)
+	resources.mockVMManager.EXPECT().
+		RegisterFactory(gomock.Any(), id4, factory4).
 		Times(1).
 		Return(nil)
 
-	installedVMs, failedVMs, err := resources.vmRegistry.ReloadWithReadLock()
-	require.ElementsMatch(t, []ids.ID{id3, id4}, installedVMs)
-	require.Empty(t, failedVMs)
-	require.Nil(t, err)
-}
-
-// Tests that we fail if we're not able to get the vms on disk
-func TestReloadWithReadLock_GetNewVMsFails(t *testing.T) {
-	resources := initVMRegistryTest(t)
-	defer resources.ctrl.Finish()
-
-	resources.mockVMGetter.EXPECT().Get().Times(1).Return(nil, nil, errOops)
-
-	installedVMs, failedVMs, err := resources.vmRegistry.ReloadWithReadLock()
-	require.Nil(t, installedVMs)
-	require.Empty(t, failedVMs)
-	require.Equal(t, err, errOops)
-}
-
-// Tests that if we fail to register a VM, we fail.
-func TestReloadWithReadLock_PartialRegisterFailure(t *testing.T) {
-	resources := initVMRegistryTest(t)
-	defer resources.ctrl.Finish()
-
-	factory1 := vms.NewMockFactory(resources.ctrl)
-	factory2 := vms.NewMockFactory(resources.ctrl)
-	factory3 := vms.NewMockFactory(resources.ctrl)
-	factory4 := vms.NewMockFactory(resources.ctrl)
-
-	registeredVms := map[ids.ID]vms.Factory{
-		id1: factory1,
-		id2: factory2,
-	}
-
-	unregisteredVms := map[ids.ID]vms.Factory{
-		id3: factory3,
-		id4: factory4,
-	}
-
-	resources.mockVMGetter.EXPECT().
-		Get().
-		Times(1).
-		Return(registeredVms, unregisteredVms, nil)
-	resources.mockVMRegisterer.EXPECT().
-		RegisterWithReadLock(id3, factory3).
-		Times(1).
-		Return(errOops)
-	resources.mockVMRegisterer.EXPECT().
-		RegisterWithReadLock(id4, factory4).
-		Times(1).
-		Return(nil)
-
-	installedVMs, failedVMs, err := resources.vmRegistry.ReloadWithReadLock()
-
-	require.Len(t, failedVMs, 1)
-	require.Equal(t, failedVMs[id3], errOops)
-	require.Len(t, installedVMs, 1)
-	require.Equal(t, installedVMs[0], id4)
-	require.Nil(t, err)
+	installedVMs, failedVMs, err := resources.vmRegistry.Reload(context.Background())
+	require.NoError(err)
+	require.Len(failedVMs, 1)
+	require.ErrorIs(failedVMs[id3], errTest)
+	require.Len(installedVMs, 1)
+	require.Equal(id4, installedVMs[0])
 }
 
 type registryTestResources struct {
-	ctrl             *gomock.Controller
-	mockVMGetter     *MockVMGetter
-	mockVMRegisterer *MockVMRegisterer
-	vmRegistry       VMRegistry
+	ctrl          *gomock.Controller
+	mockVMGetter  *registrymock.VMGetter
+	mockVMManager *vmsmock.Manager
+	vmRegistry    VMRegistry
 }
 
 func initVMRegistryTest(t *testing.T) *registryTestResources {
 	ctrl := gomock.NewController(t)
 
-	mockVMGetter := NewMockVMGetter(ctrl)
-	mockVMRegisterer := NewMockVMRegisterer(ctrl)
+	mockVMGetter := registrymock.NewVMGetter(ctrl)
+	mockVMManager := vmsmock.NewManager(ctrl)
 
 	vmRegistry := NewVMRegistry(
 		VMRegistryConfig{
-			VMGetter:     mockVMGetter,
-			VMRegisterer: mockVMRegisterer,
+			VMGetter:  mockVMGetter,
+			VMManager: mockVMManager,
 		},
 	)
 
 	return &registryTestResources{
-		ctrl:             ctrl,
-		mockVMGetter:     mockVMGetter,
-		mockVMRegisterer: mockVMRegisterer,
-		vmRegistry:       vmRegistry,
+		ctrl:          ctrl,
+		mockVMGetter:  mockVMGetter,
+		mockVMManager: mockVMManager,
+		vmRegistry:    vmRegistry,
 	}
 }

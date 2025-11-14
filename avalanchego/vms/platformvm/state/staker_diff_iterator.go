@@ -1,16 +1,17 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package state
 
 import (
-	"container/heap"
+	"github.com/ava-labs/avalanchego/utils/heap"
+	"github.com/ava-labs/avalanchego/utils/iterator"
+	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
 )
 
 var (
-	_ StakerDiffIterator = &stakerDiffIterator{}
-	_ StakerIterator     = &mutableStakerIterator{}
-	_ heap.Interface     = &mutableStakerIterator{}
+	_ StakerDiffIterator         = (*stakerDiffIterator)(nil)
+	_ iterator.Iterator[*Staker] = (*mutableStakerIterator)(nil)
 )
 
 // StakerDiffIterator is an iterator that iterates over the events that will be
@@ -40,13 +41,13 @@ type stakerDiffIterator struct {
 	currentIterator          *mutableStakerIterator
 
 	pendingIteratorExhausted bool
-	pendingIterator          StakerIterator
+	pendingIterator          iterator.Iterator[*Staker]
 
 	modifiedStaker *Staker
 	isAdded        bool
 }
 
-func NewStakerDiffIterator(currentIterator, pendingIterator StakerIterator) StakerDiffIterator {
+func NewStakerDiffIterator(currentIterator, pendingIterator iterator.Iterator[*Staker]) StakerDiffIterator {
 	mutableCurrentIterator := newMutableStakerIterator(currentIterator)
 	return &stakerDiffIterator{
 		currentIteratorExhausted: !mutableCurrentIterator.Next(),
@@ -104,46 +105,48 @@ func (it *stakerDiffIterator) advancePending() {
 
 	toRemove := *it.modifiedStaker
 	toRemove.NextTime = toRemove.EndTime
-	toRemove.Priority = PendingToCurrentPriorities[toRemove.Priority]
+	toRemove.Priority = txs.PendingToCurrentPriorities[toRemove.Priority]
 	it.currentIteratorExhausted = false
 	it.currentIterator.Add(&toRemove)
 }
 
 type mutableStakerIterator struct {
 	iteratorExhausted bool
-	iterator          StakerIterator
-	heap              []*Staker
+	iterator          iterator.Iterator[*Staker]
+	heap              heap.Queue[*Staker]
 }
 
-func newMutableStakerIterator(iterator StakerIterator) *mutableStakerIterator {
+func newMutableStakerIterator(iterator iterator.Iterator[*Staker]) *mutableStakerIterator {
 	return &mutableStakerIterator{
 		iteratorExhausted: !iterator.Next(),
 		iterator:          iterator,
+		heap:              heap.NewQueue((*Staker).Less),
 	}
 }
 
 // Add should not be called until after Next has been called at least once.
 func (it *mutableStakerIterator) Add(staker *Staker) {
-	heap.Push(it, staker)
+	it.heap.Push(staker)
 }
 
 func (it *mutableStakerIterator) Next() bool {
 	// The only time the heap should be empty - is when the iterator is
 	// exhausted or uninitialized.
-	if len(it.heap) > 0 {
-		heap.Pop(it)
+	if it.heap.Len() > 0 {
+		it.heap.Pop()
 	}
 
 	// If the iterator is exhausted, the only elements left to iterate over are
 	// in the heap.
 	if it.iteratorExhausted {
-		return len(it.heap) > 0
+		return it.heap.Len() > 0
 	}
 
 	// If the heap doesn't contain the next staker to return, we need to move
 	// the next element from the iterator into the heap.
 	nextIteratorStaker := it.iterator.Value()
-	if len(it.heap) == 0 || nextIteratorStaker.Less(it.heap[0]) {
+	peek, ok := it.heap.Peek()
+	if !ok || nextIteratorStaker.Less(peek) {
 		it.Add(nextIteratorStaker)
 		it.iteratorExhausted = !it.iterator.Next()
 	}
@@ -151,35 +154,12 @@ func (it *mutableStakerIterator) Next() bool {
 }
 
 func (it *mutableStakerIterator) Value() *Staker {
-	return it.heap[0]
+	peek, _ := it.heap.Peek()
+	return peek
 }
 
 func (it *mutableStakerIterator) Release() {
 	it.iteratorExhausted = true
 	it.iterator.Release()
-	it.heap = nil
-}
-
-func (it *mutableStakerIterator) Len() int {
-	return len(it.heap)
-}
-
-func (it *mutableStakerIterator) Less(i, j int) bool {
-	return it.heap[i].Less(it.heap[j])
-}
-
-func (it *mutableStakerIterator) Swap(i, j int) {
-	it.heap[j], it.heap[i] = it.heap[i], it.heap[j]
-}
-
-func (it *mutableStakerIterator) Push(value interface{}) {
-	it.heap = append(it.heap, value.(*Staker))
-}
-
-func (it *mutableStakerIterator) Pop() interface{} {
-	newLength := len(it.heap) - 1
-	value := it.heap[newLength]
-	it.heap[newLength] = nil
-	it.heap = it.heap[:newLength]
-	return value
+	it.heap = heap.NewQueue((*Staker).Less)
 }

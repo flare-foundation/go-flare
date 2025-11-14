@@ -1,27 +1,28 @@
-// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package throttling
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"golang.org/x/net/context"
-
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/networking/tracker"
-	"github.com/ava-labs/avalanchego/snow/validators"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
-	"github.com/ava-labs/avalanchego/utils/wrappers"
+
+	timerpkg "github.com/ava-labs/avalanchego/utils/timer"
 )
 
 const epsilon = time.Millisecond
 
 var (
-	_ SystemThrottler = &systemThrottler{}
+	_ SystemThrottler = (*systemThrottler)(nil)
 	_ SystemThrottler = noSystemThrottler{}
 )
 
@@ -53,6 +54,8 @@ type systemThrottler struct {
 	targeter tracker.Targeter
 	// Tells us the utilization of each node.
 	tracker tracker.Tracker
+	// Invariant: [timerPool] only returns timers that have been stopped and drained.
+	timerPool sync.Pool
 }
 
 type systemThrottlerMetrics struct {
@@ -79,20 +82,18 @@ func newSystemThrottlerMetrics(namespace string, reg prometheus.Registerer) (*sy
 			Help:      "Number of nodes we're waiting to read a message from because their usage is too high",
 		}),
 	}
-	errs := wrappers.Errs{}
-	errs.Add(
+	err := errors.Join(
 		reg.Register(m.totalWaits),
 		reg.Register(m.totalNoWaits),
 		reg.Register(m.awaitingAcquire),
 	)
-	return m, errs.Err
+	return m, err
 }
 
 func NewSystemThrottler(
 	namespace string,
 	reg prometheus.Registerer,
 	config SystemThrottlerConfig,
-	vdrs validators.Set,
 	tracker tracker.Tracker,
 	targeter tracker.Targeter,
 ) (SystemThrottler, error) {
@@ -105,23 +106,22 @@ func NewSystemThrottler(
 		SystemThrottlerConfig: config,
 		targeter:              targeter,
 		tracker:               tracker,
+		timerPool: sync.Pool{
+			New: func() interface{} {
+				// Satisfy invariant that timer is stopped and drained.
+				return timerpkg.StoppedTimer()
+			},
+		},
 	}, nil
 }
 
 func (t *systemThrottler) Acquire(ctx context.Context, nodeID ids.NodeID) {
-	// Fires when we should re-check whether this node's usage has fallen to an
-	// acceptable level.
-	timer := time.NewTimer(0)
-	if !timer.Stop() {
-		<-timer.C
-	}
-	defer timer.Stop()
-
-	// [waited] is true if we waited for this node's usage to fall to an
-	// acceptable level before returning
-	waited := false
+	// [timer] fires when we should re-check whether this node's
+	// usage has fallen to an acceptable level.
+	// Lazily initialize timer only if we actually need to wait.
+	var timer *time.Timer
 	defer func() {
-		if waited {
+		if timer != nil { // We waited at least once for usage to fall.
 			t.metrics.totalWaits.Inc()
 			// Note that [t.metrics.awaitingAcquire.Inc()] was called once if
 			// and only if [waited] is true.
@@ -161,14 +161,22 @@ func (t *systemThrottler) Acquire(ctx context.Context, nodeID ids.NodeID) {
 			// acceptable level.
 			waitDuration = t.MaxRecheckDelay
 		}
-		if !waited {
+
+		if timer == nil {
 			// Note this is called at most once.
 			t.metrics.awaitingAcquire.Inc()
+
+			timer = t.timerPool.Get().(*time.Timer)
+			defer t.timerPool.Put(timer)
 		}
-		waited = true
+
 		timer.Reset(waitDuration)
 		select {
 		case <-ctx.Done():
+			// Satisfy [t.timerPool] invariant.
+			if !timer.Stop() {
+				<-timer.C
+			}
 			return
 		case <-timer.C:
 		}

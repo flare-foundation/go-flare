@@ -1,18 +1,18 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package beacon
 
 import (
 	"errors"
+	"net/netip"
 	"strings"
 
 	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/utils/ips"
 )
 
 var (
-	_ Set = &set{}
+	_ Set = (*set)(nil)
 
 	errDuplicateID = errors.New("duplicated ID")
 	errDuplicateIP = errors.New("duplicated IP")
@@ -25,7 +25,7 @@ type Set interface {
 	Add(Beacon) error
 
 	RemoveByID(ids.NodeID) error
-	RemoveByIP(ips.IPPort) error
+	RemoveByIP(netip.AddrPort) error
 
 	Len() int
 
@@ -35,14 +35,14 @@ type Set interface {
 
 type set struct {
 	ids     map[ids.NodeID]int
-	ips     map[string]int
+	ips     map[netip.AddrPort]int
 	beacons []Beacon
 }
 
 func NewSet() Set {
 	return &set{
 		ids: make(map[ids.NodeID]int),
-		ips: make(map[string]int),
+		ips: make(map[netip.AddrPort]int),
 	}
 }
 
@@ -53,14 +53,14 @@ func (s *set) Add(b Beacon) error {
 		return errDuplicateID
 	}
 
-	ipStr := b.IP().String()
-	_, duplicateIP := s.ips[ipStr]
+	ip := b.IP()
+	_, duplicateIP := s.ips[ip]
 	if duplicateIP {
 		return errDuplicateIP
 	}
 
 	s.ids[id] = len(s.beacons)
-	s.ips[ipStr] = len(s.beacons)
+	s.ips[ip] = len(s.beacons)
 	s.beacons = append(s.beacons, b)
 	return nil
 }
@@ -71,12 +71,12 @@ func (s *set) RemoveByID(idToRemove ids.NodeID) error {
 		return errUnknownID
 	}
 	toRemove := s.beacons[indexToRemove]
-	ipToRemove := toRemove.IP().String()
+	ipToRemove := toRemove.IP()
 
 	indexToMove := len(s.beacons) - 1
 	toMove := s.beacons[indexToMove]
 	idToMove := toMove.ID()
-	ipToMove := toMove.IP().String()
+	ipToMove := toMove.IP()
 
 	s.ids[idToMove] = indexToRemove
 	s.ips[ipToMove] = indexToRemove
@@ -89,8 +89,8 @@ func (s *set) RemoveByID(idToRemove ids.NodeID) error {
 	return nil
 }
 
-func (s *set) RemoveByIP(ip ips.IPPort) error {
-	indexToRemove, exists := s.ips[ip.String()]
+func (s *set) RemoveByIP(ip netip.AddrPort) error {
+	indexToRemove, exists := s.ips[ip]
 	if !exists {
 		return errUnknownIP
 	}
@@ -99,7 +99,9 @@ func (s *set) RemoveByIP(ip ips.IPPort) error {
 	return s.RemoveByID(idToRemove)
 }
 
-func (s *set) Len() int { return len(s.beacons) }
+func (s *set) Len() int {
+	return len(s.beacons)
+}
 
 func (s *set) IDsArg() string {
 	sb := strings.Builder{}

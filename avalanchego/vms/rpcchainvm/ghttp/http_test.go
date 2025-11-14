@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package ghttp
@@ -12,9 +12,7 @@ import (
 	httppb "github.com/ava-labs/avalanchego/proto/pb/http"
 )
 
-func Test_convertWriteResponse(t *testing.T) {
-	require := require.New(t)
-
+func TestConvertWriteResponse(t *testing.T) {
 	scenerios := map[string]struct {
 		resp *httppb.HandleSimpleHTTPResponse
 	}{
@@ -47,8 +45,7 @@ func Test_convertWriteResponse(t *testing.T) {
 	for testName, scenerio := range scenerios {
 		t.Run(testName, func(t *testing.T) {
 			w := httptest.NewRecorder()
-			err := convertWriteResponse(w, scenerio.resp)
-			require.NoError(err)
+			require.NoError(t, convertWriteResponse(w, scenerio.resp))
 		})
 	}
 }

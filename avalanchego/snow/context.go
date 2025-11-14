@@ -1,11 +1,9 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package snow
 
 import (
-	"crypto"
-	"crypto/x509"
 	"sync"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -15,13 +13,12 @@ import (
 	"github.com/ava-labs/avalanchego/chains/atomic"
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/validators"
+	"github.com/ava-labs/avalanchego/upgrade"
 	"github.com/ava-labs/avalanchego/utils"
+	"github.com/ava-labs/avalanchego/utils/crypto/bls"
 	"github.com/ava-labs/avalanchego/utils/logging"
+	"github.com/ava-labs/avalanchego/vms/platformvm/warp"
 )
-
-type SubnetLookup interface {
-	SubnetID(chainID ids.ID) (ids.ID, error)
-}
 
 // ContextInitializable represents an object that can be initialized
 // given a *Context object
@@ -35,12 +32,15 @@ type ContextInitializable interface {
 // [ChainID] is the ID of the chain this context exists within.
 // [NodeID] is the ID of this node
 type Context struct {
-	NetworkID uint32
-	SubnetID  ids.ID
-	ChainID   ids.ID
-	NodeID    ids.NodeID
+	NetworkID       uint32
+	SubnetID        ids.ID
+	ChainID         ids.ID
+	NodeID          ids.NodeID
+	PublicKey       *bls.PublicKey
+	NetworkUpgrades upgrade.Config
 
 	XChainID    ids.ID
+	CChainID    ids.ID
 	AVAXAssetID ids.ID
 
 	Log          logging.Logger
@@ -48,13 +48,14 @@ type Context struct {
 	Keystore     keystore.BlockchainKeystore
 	SharedMemory atomic.SharedMemory
 	BCLookup     ids.AliaserReader
-	SNLookup     SubnetLookup
-	Metrics      metrics.OptionalGatherer
+	Metrics      metrics.MultiGatherer
+
+	WarpSigner warp.Signer
 
 	// snowman++ attributes
-	ValidatorState    validators.State  // interface for P-Chain validators
-	StakingLeafSigner crypto.Signer     // block signer
-	StakingCertLeaf   *x509.Certificate // block certificate
+	ValidatorState validators.State // interface for P-Chain validators
+	// Chain-specific directory where arbitrary data can be written
+	ChainDataDir string
 }
 
 // Expose gatherer interface for unit testing.
@@ -66,75 +67,31 @@ type Registerer interface {
 type ConsensusContext struct {
 	*Context
 
+	// PrimaryAlias is the primary alias of the chain this context exists
+	// within.
+	PrimaryAlias string
+
+	// Registers all consensus metrics.
 	Registerer Registerer
 
-	// DecisionAcceptor is the callback that will be fired whenever a VM is
-	// notified that their object, either a block in snowman or a transaction
-	// in avalanche, was accepted.
-	DecisionAcceptor Acceptor
+	// BlockAcceptor is the callback that will be fired whenever a VM is
+	// notified that their block was accepted.
+	BlockAcceptor Acceptor
 
-	// ConsensusAcceptor is the callback that will be fired whenever a
-	// container, either a block in snowman or a vertex in avalanche, was
+	// TxAcceptor is the callback that will be fired whenever a VM is notified
+	// that their transaction was accepted.
+	TxAcceptor Acceptor
+
+	// VertexAcceptor is the callback that will be fired whenever a vertex was
 	// accepted.
-	ConsensusAcceptor Acceptor
+	VertexAcceptor Acceptor
 
-	// Non-zero iff this chain bootstrapped.
-	state utils.AtomicInterface
+	// State indicates the current state of this consensus instance.
+	State utils.Atomic[EngineState]
 
-	// Non-zero iff this chain is executing transactions.
-	executing utils.AtomicBool
+	// True iff this chain is executing transactions as part of bootstrapping.
+	Executing utils.Atomic[bool]
 
-	// Indicates this chain is available to only validators.
-	validatorOnly utils.AtomicBool
-}
-
-func (ctx *ConsensusContext) SetState(newState State) {
-	ctx.state.SetValue(newState)
-}
-
-func (ctx *ConsensusContext) GetState() State {
-	stateInf := ctx.state.GetValue()
-	return stateInf.(State)
-}
-
-// IsExecuting returns true iff this chain is still executing transactions.
-func (ctx *ConsensusContext) IsExecuting() bool {
-	return ctx.executing.GetValue()
-}
-
-// Executing marks this chain as executing or not.
-// Set to "true" if there's an ongoing transaction.
-func (ctx *ConsensusContext) Executing(b bool) {
-	ctx.executing.SetValue(b)
-}
-
-// IsValidatorOnly returns true iff this chain is available only to validators
-func (ctx *ConsensusContext) IsValidatorOnly() bool {
-	return ctx.validatorOnly.GetValue()
-}
-
-// SetValidatorOnly  marks this chain as available only to validators
-func (ctx *ConsensusContext) SetValidatorOnly() {
-	ctx.validatorOnly.SetValue(true)
-}
-
-func DefaultContextTest() *Context {
-	return &Context{
-		NetworkID: 0,
-		SubnetID:  ids.Empty,
-		ChainID:   ids.Empty,
-		NodeID:    ids.EmptyNodeID,
-		Log:       logging.NoLog{},
-		BCLookup:  ids.NewAliaser(),
-		Metrics:   metrics.NewOptionalGatherer(),
-	}
-}
-
-func DefaultConsensusContextTest() *ConsensusContext {
-	return &ConsensusContext{
-		Context:           DefaultContextTest(),
-		Registerer:        prometheus.NewRegistry(),
-		DecisionAcceptor:  noOpAcceptor{},
-		ConsensusAcceptor: noOpAcceptor{},
-	}
+	// True iff this chain is currently state-syncing
+	StateSyncing utils.Atomic[bool]
 }

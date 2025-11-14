@@ -34,18 +34,9 @@ import (
 	"reflect"
 	"sync/atomic"
 
-	"github.com/ethereum/go-ethereum/crypto"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/rlp"
-)
-
-var (
-	EmptyRootHash    = common.HexToHash("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
-	EmptyCodeHash    = common.BytesToHash(crypto.Keccak256(nil))
-	EmptyUncleHash   = rlpHash([]*Header(nil))
-	EmptyExtDataHash = rlpHash([]byte(nil))
 )
 
 // A BlockNonce is a 64-bit hash which proves (combined with the
@@ -110,6 +101,15 @@ type Header struct {
 	// BlockGasCost was added by Apricot Phase 4 and is ignored in legacy
 	// headers.
 	BlockGasCost *big.Int `json:"blockGasCost" rlp:"optional"`
+
+	// BlobGasUsed was added by EIP-4844 and is ignored in legacy headers.
+	BlobGasUsed *uint64 `json:"blobGasUsed" rlp:"optional"`
+
+	// ExcessBlobGas was added by EIP-4844 and is ignored in legacy headers.
+	ExcessBlobGas *uint64 `json:"excessBlobGas" rlp:"optional"`
+
+	// ParentBeaconRoot was added by EIP-4788 and is ignored in legacy headers.
+	ParentBeaconRoot *common.Hash `json:"parentBeaconBlockRoot" rlp:"optional"`
 }
 
 // field type overrides for gencodec
@@ -124,6 +124,8 @@ type headerMarshaling struct {
 	ExtDataGasUsed *hexutil.Big
 	BlockGasCost   *hexutil.Big
 	Hash           common.Hash `json:"hash"` // adds call to Hash() in MarshalJSON
+	BlobGasUsed    *hexutil.Uint64
+	ExcessBlobGas  *hexutil.Uint64
 }
 
 // Hash returns the block hash of the header, which is simply the keccak256 hash of its
@@ -137,18 +139,22 @@ var headerSize = common.StorageSize(reflect.TypeOf(Header{}).Size())
 // Size returns the approximate memory used by all internal contents. It is used
 // to approximate and limit the memory consumption of various caches.
 func (h *Header) Size() common.StorageSize {
-	return headerSize + common.StorageSize(len(h.Extra)+(h.Difficulty.BitLen()+h.Number.BitLen())/8)
+	var baseFeeBits int
+	if h.BaseFee != nil {
+		baseFeeBits = h.BaseFee.BitLen()
+	}
+	return headerSize + common.StorageSize(len(h.Extra)+(h.Difficulty.BitLen()+h.Number.BitLen()+baseFeeBits)/8)
 }
 
 // EmptyBody returns true if there is no additional 'body' to complete the header
 // that is: no transactions and no uncles.
 func (h *Header) EmptyBody() bool {
-	return h.TxHash == EmptyRootHash && h.UncleHash == EmptyUncleHash
+	return h.TxHash == EmptyTxsHash && h.UncleHash == EmptyUncleHash
 }
 
 // EmptyReceipts returns true if there are no receipts for this header/block.
 func (h *Header) EmptyReceipts() bool {
-	return h.ReceiptHash == EmptyRootHash
+	return h.ReceiptHash == EmptyReceiptsHash
 }
 
 // Body is a simple (mutable, non-safe) data container for storing and moving
@@ -160,7 +166,23 @@ type Body struct {
 	ExtData      *[]byte `rlp:"nil"`
 }
 
-// Block represents an entire block in the Ethereum blockchain.
+// Block represents an Ethereum block.
+//
+// Note the Block type tries to be 'immutable', and contains certain caches that rely
+// on that. The rules around block immutability are as follows:
+//
+//   - We copy all data when the block is constructed. This makes references held inside
+//     the block independent of whatever value was passed in.
+//
+//   - We copy all header data on access. This is because any change to the header would mess
+//     up the cached hash and size values in the block. Calling code is expected to take
+//     advantage of this to avoid over-allocating!
+//
+//   - When new body data is attached to the block, a shallow copy of the block is returned.
+//     This ensures block modifications are race-free.
+//
+//   - We do not copy body data on access because it does not affect the caches, and also
+//     because it would be too expensive.
 type Block struct {
 	header       *Header
 	uncles       []*Header
@@ -184,22 +206,20 @@ type extblock struct {
 	ExtData *[]byte `rlp:"nil"`
 }
 
-// NewBlock creates a new block. The input data is copied,
-// changes to header and to the field values will not affect the
-// block.
+// NewBlock creates a new block. The input data is copied, changes to header and to the
+// field values will not affect the block.
 //
 // The values of TxHash, UncleHash, ReceiptHash and Bloom in header
 // are ignored and set to values derived from the given txs, uncles
 // and receipts.
 func NewBlock(
-	header *Header, txs []*Transaction, uncles []*Header, receipts []*Receipt,
-	hasher TrieHasher, extdata []byte, recalc bool,
+	header *Header, txs []*Transaction, uncles []*Header, receipts []*Receipt, hasher TrieHasher,
 ) *Block {
 	b := &Block{header: CopyHeader(header)}
 
 	// TODO: panic if len(txs) != len(receipts)
 	if len(txs) == 0 {
-		b.header.TxHash = EmptyRootHash
+		b.header.TxHash = EmptyTxsHash
 	} else {
 		b.header.TxHash = DeriveSha(Transactions(txs), hasher)
 		b.transactions = make(Transactions, len(txs))
@@ -207,7 +227,7 @@ func NewBlock(
 	}
 
 	if len(receipts) == 0 {
-		b.header.ReceiptHash = EmptyRootHash
+		b.header.ReceiptHash = EmptyReceiptsHash
 	} else {
 		b.header.ReceiptHash = DeriveSha(Receipts(receipts), hasher)
 		b.header.Bloom = CreateBloom(receipts)
@@ -223,19 +243,10 @@ func NewBlock(
 		}
 	}
 
-	b.setExtData(extdata, recalc)
 	return b
 }
 
-// NewBlockWithHeader creates a block with the given header data. The
-// header data is copied, changes to header and to the field values
-// will not affect the block.
-func NewBlockWithHeader(header *Header) *Block {
-	return &Block{header: CopyHeader(header)}
-}
-
-// CopyHeader creates a deep copy of a block header to prevent side effects from
-// modifying a header variable.
+// CopyHeader creates a deep copy of a block header.
 func CopyHeader(h *Header) *Header {
 	cpy := *h
 	if cpy.Difficulty = new(big.Int); h.Difficulty != nil {
@@ -257,10 +268,22 @@ func CopyHeader(h *Header) *Header {
 		cpy.Extra = make([]byte, len(h.Extra))
 		copy(cpy.Extra, h.Extra)
 	}
+	if h.ExcessBlobGas != nil {
+		cpy.ExcessBlobGas = new(uint64)
+		*cpy.ExcessBlobGas = *h.ExcessBlobGas
+	}
+	if h.BlobGasUsed != nil {
+		cpy.BlobGasUsed = new(uint64)
+		*cpy.BlobGasUsed = *h.BlobGasUsed
+	}
+	if h.ParentBeaconRoot != nil {
+		cpy.ParentBeaconRoot = new(common.Hash)
+		*cpy.ParentBeaconRoot = *h.ParentBeaconRoot
+	}
 	return &cpy
 }
 
-// DecodeRLP decodes the Ethereum
+// DecodeRLP decodes a block from RLP.
 func (b *Block) DecodeRLP(s *rlp.Stream) error {
 	var eb extblock
 	_, size, _ := s.Kind()
@@ -268,45 +291,13 @@ func (b *Block) DecodeRLP(s *rlp.Stream) error {
 		return err
 	}
 	b.header, b.uncles, b.transactions, b.version, b.extdata = eb.Header, eb.Uncles, eb.Txs, eb.Version, eb.ExtData
-	b.size.Store(common.StorageSize(rlp.ListSize(size)))
+	b.size.Store(rlp.ListSize(size))
 	return nil
 }
 
-func (b *Block) setExtDataHelper(data *[]byte, recalc bool) {
-	if data == nil {
-		b.setExtData(nil, recalc)
-		return
-	}
-	b.setExtData(*data, recalc)
-}
-
-func (b *Block) setExtData(data []byte, recalc bool) {
-	_data := make([]byte, len(data))
-	b.extdata = &_data
-	copy(*b.extdata, data)
-	if recalc {
-		b.header.ExtDataHash = CalcExtDataHash(*b.extdata)
-	}
-}
-
-func (b *Block) ExtData() []byte {
-	if b.extdata == nil {
-		return nil
-	}
-	return *b.extdata
-}
-
-func (b *Block) SetVersion(ver uint32) {
-	b.version = ver
-}
-
-func (b *Block) Version() uint32 {
-	return b.version
-}
-
-// EncodeRLP serializes b into the Ethereum RLP block format.
+// EncodeRLP serializes a block as RLP.
 func (b *Block) EncodeRLP(w io.Writer) error {
-	return rlp.Encode(w, extblock{
+	return rlp.Encode(w, &extblock{
 		Header:  b.header,
 		Txs:     b.transactions,
 		Uncles:  b.uncles,
@@ -315,7 +306,14 @@ func (b *Block) EncodeRLP(w io.Writer) error {
 	})
 }
 
-// TODO: copies
+// Body returns the non-header content of the block.
+// Note the returned data is not an independent copy.
+func (b *Block) Body() *Body {
+	return &Body{b.transactions, b.uncles, b.version, b.extdata}
+}
+
+// Accessors for body data. These do not return a copy because the content
+// of the body slices does not affect the cached hash/size in block.
 
 func (b *Block) Uncles() []*Header          { return b.uncles }
 func (b *Block) Transactions() Transactions { return b.transactions }
@@ -329,12 +327,19 @@ func (b *Block) Transaction(hash common.Hash) *Transaction {
 	return nil
 }
 
+// Header returns the block header (as a copy).
+func (b *Block) Header() *Header {
+	return CopyHeader(b.header)
+}
+
+// Header value accessors. These do copy!
+
 func (b *Block) Number() *big.Int     { return new(big.Int).Set(b.header.Number) }
 func (b *Block) GasLimit() uint64     { return b.header.GasLimit }
 func (b *Block) GasUsed() uint64      { return b.header.GasUsed }
 func (b *Block) Difficulty() *big.Int { return new(big.Int).Set(b.header.Difficulty) }
 func (b *Block) Time() uint64         { return b.header.Time }
-func (b *Block) Timestamp() *big.Int  { return new(big.Int).SetUint64(b.header.Time) }
+func (b *Block) Timestamp() uint64    { return b.header.Time }
 
 func (b *Block) NumberU64() uint64        { return b.header.Number.Uint64() }
 func (b *Block) MixDigest() common.Hash   { return b.header.MixDigest }
@@ -355,11 +360,24 @@ func (b *Block) BaseFee() *big.Int {
 	return new(big.Int).Set(b.header.BaseFee)
 }
 
-func (b *Block) ExtDataGasUsed() *big.Int {
-	if b.header.ExtDataGasUsed == nil {
-		return nil
+func (b *Block) BeaconRoot() *common.Hash { return b.header.ParentBeaconRoot }
+
+func (b *Block) ExcessBlobGas() *uint64 {
+	var excessBlobGas *uint64
+	if b.header.ExcessBlobGas != nil {
+		excessBlobGas = new(uint64)
+		*excessBlobGas = *b.header.ExcessBlobGas
 	}
-	return new(big.Int).Set(b.header.ExtDataGasUsed)
+	return excessBlobGas
+}
+
+func (b *Block) BlobGasUsed() *uint64 {
+	var blobGasUsed *uint64
+	if b.header.BlobGasUsed != nil {
+		blobGasUsed = new(uint64)
+		*blobGasUsed = *b.header.BlobGasUsed
+	}
+	return blobGasUsed
 }
 
 func (b *Block) BlockGasCost() *big.Int {
@@ -369,35 +387,23 @@ func (b *Block) BlockGasCost() *big.Int {
 	return new(big.Int).Set(b.header.BlockGasCost)
 }
 
-func (b *Block) Header() *Header { return CopyHeader(b.header) }
-
-// Body returns the non-header content of the block.
-func (b *Block) Body() *Body { return &Body{b.transactions, b.uncles, b.version, b.extdata} }
-
 // Size returns the true RLP encoded storage size of the block, either by encoding
-// and returning it, or returning a previsouly cached value.
-func (b *Block) Size() common.StorageSize {
+// and returning it, or returning a previously cached value.
+func (b *Block) Size() uint64 {
 	if size := b.size.Load(); size != nil {
-		return size.(common.StorageSize)
+		return size.(uint64)
 	}
 	c := writeCounter(0)
 	rlp.Encode(&c, b)
-	b.size.Store(common.StorageSize(c))
-	return common.StorageSize(c)
+	b.size.Store(uint64(c))
+	return uint64(c)
 }
 
-type writeCounter common.StorageSize
+type writeCounter uint64
 
 func (c *writeCounter) Write(b []byte) (int, error) {
 	*c += writeCounter(len(b))
 	return len(b), nil
-}
-
-func CalcExtDataHash(extdata []byte) common.Hash {
-	if len(extdata) == 0 {
-		return EmptyExtDataHash
-	}
-	return rlpHash(extdata)
 }
 
 func CalcUncleHash(uncles []*Header) common.Hash {
@@ -407,31 +413,34 @@ func CalcUncleHash(uncles []*Header) common.Hash {
 	return rlpHash(uncles)
 }
 
+// NewBlockWithHeader creates a block with the given header data. The
+// header data is copied, changes to header and to the field values
+// will not affect the block.
+func NewBlockWithHeader(header *Header) *Block {
+	return &Block{header: CopyHeader(header)}
+}
+
 // WithSeal returns a new block with the data from b but the header replaced with
 // the sealed one.
 func (b *Block) WithSeal(header *Header) *Block {
-	cpy := *header
-
 	return &Block{
-		header:       &cpy,
+		header:       CopyHeader(header),
 		transactions: b.transactions,
 		uncles:       b.uncles,
 	}
 }
 
-// WithBody returns a new block with the given transaction and uncle contents.
-func (b *Block) WithBody(transactions []*Transaction, uncles []*Header, version uint32, extdata *[]byte) *Block {
+// WithBody returns a copy of the block with the given transaction and uncle contents.
+func (b *Block) WithBody(transactions []*Transaction, uncles []*Header) *Block {
 	block := &Block{
-		header:       CopyHeader(b.header),
+		header:       b.header,
 		transactions: make([]*Transaction, len(transactions)),
 		uncles:       make([]*Header, len(uncles)),
-		version:      version,
 	}
 	copy(block.transactions, transactions)
 	for i := range uncles {
 		block.uncles[i] = CopyHeader(uncles[i])
 	}
-	block.setExtDataHelper(extdata, false)
 	return block
 }
 

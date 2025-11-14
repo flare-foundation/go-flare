@@ -1,20 +1,20 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package genesis
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/formatting"
 	"github.com/ava-labs/avalanchego/utils/formatting/address"
 	"github.com/ava-labs/avalanchego/utils/json"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/vms/avm"
 	"github.com/ava-labs/avalanchego/vms/avm/fxs"
 	"github.com/ava-labs/avalanchego/vms/nftfx"
@@ -33,12 +33,19 @@ const (
 )
 
 var (
-	errNoInitiallyStakedFunds = errors.New("initial staked funds cannot be empty")
-	errNoSupply               = errors.New("initial supply must be > 0")
-	errNoStakeDuration        = errors.New("initial stake duration must be > 0")
-	errNoStakers              = errors.New("initial stakers must be > 0")
-	errNoCChainGenesis        = errors.New("C-Chain genesis cannot be empty")
-	errNoTxs                  = errors.New("genesis creates no transactions")
+	errStakeDurationTooHigh            = errors.New("initial stake duration larger than maximum configured")
+	errNoInitiallyStakedFunds          = errors.New("initial staked funds cannot be empty")
+	errNoSupply                        = errors.New("initial supply must be > 0")
+	errNoStakeDuration                 = errors.New("initial stake duration must be > 0")
+	errNoStakers                       = errors.New("initial stakers must be > 0")
+	errNoCChainGenesis                 = errors.New("C-Chain genesis cannot be empty")
+	errNoTxs                           = errors.New("genesis creates no transactions")
+	errNoAllocationToStake             = errors.New("no allocation to stake")
+	errDuplicateInitiallyStakedAddress = errors.New("duplicate initially staked address")
+	errConflictingNetworkIDs           = errors.New("conflicting networkIDs")
+	errFutureStartTime                 = errors.New("startTime cannot be in the future")
+	errInitialStakeDurationTooLow      = errors.New("initial stake duration is too low")
+	errOverridesStandardNetworkConfig  = errors.New("overrides standard network genesis config")
 )
 
 // validateInitialStakedFunds ensures all staked
@@ -52,8 +59,8 @@ func validateInitialStakedFunds(config *Config) error {
 		return errNoInitiallyStakedFunds
 	}
 
-	allocationSet := ids.ShortSet{}
-	initialStakedFundsSet := ids.ShortSet{}
+	allocationSet := set.Set[ids.ShortID]{}
+	initialStakedFundsSet := set.Set[ids.ShortID]{}
 	for _, allocation := range config.Allocations {
 		// It is ok to have duplicates as different
 		// ethAddrs could claim to the same avaxAddr.
@@ -75,7 +82,8 @@ func validateInitialStakedFunds(config *Config) error {
 			}
 
 			return fmt.Errorf(
-				"address %s is duplicated in initial staked funds",
+				"%w: %s",
+				errDuplicateInitiallyStakedAddress,
 				avaxAddr,
 			)
 		}
@@ -95,7 +103,8 @@ func validateInitialStakedFunds(config *Config) error {
 			}
 
 			return fmt.Errorf(
-				"address %s does not have an allocation to stake",
+				"%w in address %s",
+				errNoAllocationToStake,
 				avaxAddr,
 			)
 		}
@@ -106,10 +115,11 @@ func validateInitialStakedFunds(config *Config) error {
 
 // validateConfig returns an error if the provided
 // *Config is not considered valid.
-func validateConfig(networkID uint32, config *Config) error {
+func validateConfig(networkID uint32, config *Config, stakingCfg *StakingConfig) error {
 	if networkID != config.NetworkID {
 		return fmt.Errorf(
-			"networkID %d specified but genesis config contains networkID %d",
+			"%w: expected %d but config contains %d",
+			errConflictingNetworkIDs,
 			networkID,
 			config.NetworkID,
 		)
@@ -126,7 +136,8 @@ func validateConfig(networkID uint32, config *Config) error {
 	startTime := time.Unix(int64(config.StartTime), 0)
 	if time.Since(startTime) < 0 {
 		return fmt.Errorf(
-			"start time cannot be in the future: %s",
+			"%w: %s",
+			errFutureStartTime,
 			startTime,
 		)
 	}
@@ -139,6 +150,12 @@ func validateConfig(networkID uint32, config *Config) error {
 		return errNoStakeDuration
 	}
 
+	// Initial stake duration of genesis validators must be
+	// not larger than maximal stake duration specified for any validator.
+	if config.InitialStakeDuration > uint64(stakingCfg.MaxStakeDuration.Seconds()) {
+		return errStakeDurationTooHigh
+	}
+
 	if len(config.InitialStakers) == 0 {
 		return errNoStakers
 	}
@@ -146,10 +163,9 @@ func validateConfig(networkID uint32, config *Config) error {
 	offsetTimeRequired := config.InitialStakeDurationOffset * uint64(len(config.InitialStakers)-1)
 	if offsetTimeRequired > config.InitialStakeDuration {
 		return fmt.Errorf(
-			"initial stake duration is %d but need at least %d with offset of %d",
-			config.InitialStakeDuration,
+			"%w must be at least %d",
+			errInitialStakeDurationTooLow,
 			offsetTimeRequired,
-			config.InitialStakeDurationOffset,
 		)
 	}
 
@@ -180,26 +196,27 @@ func validateConfig(networkID uint32, config *Config) error {
 // loads the network genesis data from the config at [filepath].
 //
 // FromFile returns:
-// 1) The byte representation of the genesis state of the platform chain
-//    (ie the genesis state of the network)
-// 2) The asset ID of AVAX
-func FromFile(networkID uint32, filepath string) ([]byte, ids.ID, error) {
+//
+//  1. The byte representation of the genesis state of the platform chain
+//     (ie the genesis state of the network)
+//  2. The asset ID of AVAX
+func FromFile(networkID uint32, filepath string, stakingCfg *StakingConfig) ([]byte, ids.ID, error) {
 	switch networkID {
-	case constants.MainnetID, constants.TestnetID, constants.LocalID:
+	case constants.FlareID, constants.SongbirdID, constants.CostwoID, constants.CostonID, constants.LocalFlareID, constants.LocalID:
 		return nil, ids.ID{}, fmt.Errorf(
-			"cannot override genesis config for standard network %s (%d)",
+			"%w: %s",
+			errOverridesStandardNetworkConfig,
 			constants.NetworkName(networkID),
-			networkID,
 		)
 	}
 
 	config, err := GetConfigFile(filepath)
 	if err != nil {
-		return nil, ids.ID{}, fmt.Errorf("unable to load provided genesis config at %s: %w", filepath, err)
+		return nil, ids.Empty, fmt.Errorf("unable to load provided genesis config at %s: %w", filepath, err)
 	}
 
-	if err := validateConfig(networkID, config); err != nil {
-		return nil, ids.ID{}, fmt.Errorf("genesis config validation failed: %w", err)
+	if err := validateConfig(networkID, config, stakingCfg); err != nil {
+		return nil, ids.Empty, fmt.Errorf("genesis config validation failed: %w", err)
 	}
 
 	return FromConfig(config)
@@ -221,35 +238,37 @@ func FromFile(networkID uint32, filepath string) ([]byte, ids.ID, error) {
 // loads the network genesis data from [genesisContent].
 //
 // FromFlag returns:
-// 1) The byte representation of the genesis state of the platform chain
-//    (ie the genesis state of the network)
-// 2) The asset ID of AVAX
-func FromFlag(networkID uint32, genesisContent string) ([]byte, ids.ID, error) {
+//
+//  1. The byte representation of the genesis state of the platform chain
+//     (ie the genesis state of the network)
+//  2. The asset ID of AVAX
+func FromFlag(networkID uint32, genesisContent string, stakingCfg *StakingConfig) ([]byte, ids.ID, error) {
 	switch networkID {
-	case constants.MainnetID, constants.TestnetID, constants.LocalID:
+	case constants.FlareID, constants.SongbirdID, constants.CostwoID, constants.CostonID, constants.LocalFlareID, constants.LocalID:
 		return nil, ids.ID{}, fmt.Errorf(
-			"cannot override genesis config for standard network %s (%d)",
+			"%w: %s",
+			errOverridesStandardNetworkConfig,
 			constants.NetworkName(networkID),
-			networkID,
 		)
 	}
 
 	customConfig, err := GetConfigContent(genesisContent)
 	if err != nil {
-		return nil, ids.ID{}, fmt.Errorf("unable to load genesis content from flag: %w", err)
+		return nil, ids.Empty, fmt.Errorf("unable to load genesis content from flag: %w", err)
 	}
 
-	if err := validateConfig(networkID, customConfig); err != nil {
-		return nil, ids.ID{}, fmt.Errorf("genesis config validation failed: %w", err)
+	if err := validateConfig(networkID, customConfig, stakingCfg); err != nil {
+		return nil, ids.Empty, fmt.Errorf("genesis config validation failed: %w", err)
 	}
 
 	return FromConfig(customConfig)
 }
 
 // FromConfig returns:
-// 1) The byte representation of the genesis state of the platform chain
-//    (ie the genesis state of the network)
-// 2) The asset ID of AVAX
+//
+//  1. The byte representation of the genesis state of the platform chain
+//     (ie the genesis state of the network)
+//  2. The asset ID of AVAX
 func FromConfig(config *Config) ([]byte, ids.ID, error) {
 	hrp := constants.GetHRP(config.NetworkID)
 
@@ -274,12 +293,12 @@ func FromConfig(config *Config) ([]byte, ids.ID, error) {
 				xAllocations = append(xAllocations, allocation)
 			}
 		}
-		sortXAllocation(xAllocations)
+		utils.Sort(xAllocations)
 
 		for _, allocation := range xAllocations {
 			addr, err := address.FormatBech32(hrp, allocation.AVAXAddr.Bytes())
 			if err != nil {
-				return nil, ids.ID{}, err
+				return nil, ids.Empty, err
 			}
 
 			avax.InitialState["fixedCap"] = append(avax.InitialState["fixedCap"], avm.Holder{
@@ -304,26 +323,25 @@ func FromConfig(config *Config) ([]byte, ids.ID, error) {
 	avmSS := avm.CreateStaticService()
 	err := avmSS.BuildGenesis(nil, &avmArgs, &avmReply)
 	if err != nil {
-		return nil, ids.ID{}, err
+		return nil, ids.Empty, err
 	}
 
 	bytes, err := formatting.Decode(defaultEncoding, avmReply.Bytes)
 	if err != nil {
-		return nil, ids.ID{}, fmt.Errorf("couldn't parse avm genesis reply: %w", err)
+		return nil, ids.Empty, fmt.Errorf("couldn't parse avm genesis reply: %w", err)
 	}
 	avaxAssetID, err := AVAXAssetID(bytes)
 	if err != nil {
-		return nil, ids.ID{}, fmt.Errorf("couldn't generate AVAX asset ID: %w", err)
+		return nil, ids.Empty, fmt.Errorf("couldn't generate AVAX asset ID: %w", err)
 	}
 
 	genesisTime := time.Unix(int64(config.StartTime), 0)
 	initialSupply, err := config.InitialSupply()
 	if err != nil {
-		return nil, ids.ID{}, fmt.Errorf("couldn't calculate the initial supply: %w", err)
+		return nil, ids.Empty, fmt.Errorf("couldn't calculate the initial supply: %w", err)
 	}
 
-	initiallyStaked := ids.ShortSet{}
-	initiallyStaked.Add(config.InitialStakedFunds...)
+	initiallyStaked := set.Of(config.InitialStakedFunds...)
 	skippedAllocations := []Allocation(nil)
 
 	// Specify the initial state of the Platform Chain
@@ -342,7 +360,7 @@ func FromConfig(config *Config) ([]byte, ids.ID, error) {
 		}
 		addr, err := address.FormatBech32(hrp, allocation.AVAXAddr.Bytes())
 		if err != nil {
-			return nil, ids.ID{}, err
+			return nil, ids.Empty, err
 		}
 		for _, unlock := range allocation.UnlockSchedule {
 			if unlock.Amount > 0 {
@@ -373,14 +391,14 @@ func FromConfig(config *Config) ([]byte, ids.ID, error) {
 
 		destAddrStr, err := address.FormatBech32(hrp, staker.RewardAddress.Bytes())
 		if err != nil {
-			return nil, ids.ID{}, err
+			return nil, ids.Empty, err
 		}
 
 		utxos := []api.UTXO(nil)
 		for _, allocation := range nodeAllocations {
 			addr, err := address.FormatBech32(hrp, allocation.AVAXAddr.Bytes())
 			if err != nil {
-				return nil, ids.ID{}, err
+				return nil, ids.Empty, err
 			}
 			for _, unlock := range allocation.UnlockSchedule {
 				msgStr, err := formatting.Encode(defaultEncoding, allocation.ETHAddr.Bytes())
@@ -400,8 +418,8 @@ func FromConfig(config *Config) ([]byte, ids.ID, error) {
 		delegationFee := json.Uint32(staker.DelegationFee)
 
 		platformvmArgs.Validators = append(platformvmArgs.Validators,
-			api.PrimaryValidator{
-				Staker: api.Staker{
+			api.GenesisPermissionlessValidator{
+				GenesisValidator: api.GenesisValidator{
 					StartTime: json.Uint64(genesisTime.Unix()),
 					EndTime:   json.Uint64(endStakingTime.Unix()),
 					NodeID:    staker.NodeID,
@@ -412,6 +430,7 @@ func FromConfig(config *Config) ([]byte, ids.ID, error) {
 				},
 				Staked:             utxos,
 				ExactDelegationFee: &delegationFee,
+				Signer:             staker.Signer,
 			},
 		)
 	}
@@ -444,18 +463,22 @@ func FromConfig(config *Config) ([]byte, ids.ID, error) {
 	platformvmReply := api.BuildGenesisReply{}
 	platformvmSS := api.StaticService{}
 	if err := platformvmSS.BuildGenesis(nil, &platformvmArgs, &platformvmReply); err != nil {
-		return nil, ids.ID{}, fmt.Errorf("problem while building platform chain's genesis state: %w", err)
+		return nil, ids.Empty, fmt.Errorf("problem while building platform chain's genesis state: %w", err)
 	}
 
 	genesisBytes, err := formatting.Decode(platformvmReply.Encoding, platformvmReply.Bytes)
 	if err != nil {
-		return nil, ids.ID{}, fmt.Errorf("problem parsing platformvm genesis bytes: %w", err)
+		return nil, ids.Empty, fmt.Errorf("problem parsing platformvm genesis bytes: %w", err)
 	}
 
 	return genesisBytes, avaxAssetID, nil
 }
 
 func splitAllocations(allocations []Allocation, numSplits int) [][]Allocation {
+	if numSplits == 0 {
+		return nil
+	}
+
 	totalAmount := uint64(0)
 	for _, allocation := range allocations {
 		for _, unlock := range allocation.UnlockSchedule {
@@ -533,9 +556,11 @@ func VMGenesis(genesisBytes []byte, vmID ids.ID) (*pchaintxs.Tx, error) {
 }
 
 func AVAXAssetID(avmGenesisBytes []byte) (ids.ID, error) {
-	parser, err := xchaintxs.NewParser([]fxs.Fx{
-		&secp256k1fx.Fx{},
-	})
+	parser, err := xchaintxs.NewParser(
+		[]fxs.Fx{
+			&secp256k1fx.Fx{},
+		},
+	)
 	if err != nil {
 		return ids.Empty, err
 	}
@@ -552,21 +577,8 @@ func AVAXAssetID(avmGenesisBytes []byte) (ids.ID, error) {
 	genesisTx := genesis.Txs[0]
 
 	tx := xchaintxs.Tx{Unsigned: &genesisTx.CreateAssetTx}
-	if err := parser.InitializeGenesisTx(&tx); err != nil {
+	if err := tx.Initialize(genesisCodec); err != nil {
 		return ids.Empty, err
 	}
 	return tx.ID(), nil
 }
-
-type innerSortXAllocation []Allocation
-
-func (xa innerSortXAllocation) Less(i, j int) bool {
-	return xa[i].InitialAmount < xa[j].InitialAmount ||
-		(xa[i].InitialAmount == xa[j].InitialAmount &&
-			bytes.Compare(xa[i].AVAXAddr.Bytes(), xa[j].AVAXAddr.Bytes()) == -1)
-}
-
-func (xa innerSortXAllocation) Len() int      { return len(xa) }
-func (xa innerSortXAllocation) Swap(i, j int) { xa[j], xa[i] = xa[i], xa[j] }
-
-func sortXAllocation(a []Allocation) { sort.Sort(innerSortXAllocation(a)) }

@@ -1,10 +1,12 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package api
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/constants"
@@ -14,24 +16,21 @@ import (
 	"github.com/ava-labs/avalanchego/vms/platformvm/genesis"
 )
 
-const testNetworkID = 10 // To be used in tests
-
 func TestBuildGenesisInvalidUTXOBalance(t *testing.T) {
-	nodeID := ids.NodeID{1, 2, 3}
-	hrp := constants.NetworkIDToHRP[testNetworkID]
-	addr, err := address.FormatBech32(hrp, nodeID.Bytes())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require := require.New(t)
+	nodeID := ids.BuildTestNodeID([]byte{1, 2, 3})
+	addr, err := address.FormatBech32(constants.UnitTestHRP, nodeID.Bytes())
+	require.NoError(err)
+
 	utxo := UTXO{
 		Address: addr,
 		Amount:  0,
 	}
 	weight := json.Uint64(987654321)
-	validator := PrimaryValidator{
-		Staker: Staker{
+	validator := GenesisPermissionlessValidator{
+		GenesisValidator: GenesisValidator{
 			EndTime: 15,
-			Weight:  &weight,
+			Weight:  weight,
 			NodeID:  nodeID,
 		},
 		RewardOwner: &Owner{
@@ -48,7 +47,7 @@ func TestBuildGenesisInvalidUTXOBalance(t *testing.T) {
 		UTXOs: []UTXO{
 			utxo,
 		},
-		Validators: []PrimaryValidator{
+		Validators: []GenesisPermissionlessValidator{
 			validator,
 		},
 		Time:     5,
@@ -57,25 +56,23 @@ func TestBuildGenesisInvalidUTXOBalance(t *testing.T) {
 	reply := BuildGenesisReply{}
 
 	ss := StaticService{}
-	if err := ss.BuildGenesis(nil, &args, &reply); err == nil {
-		t.Fatalf("Should have errored due to an invalid balance")
-	}
+	err = ss.BuildGenesis(nil, &args, &reply)
+	require.ErrorIs(err, errUTXOHasNoValue)
 }
 
-func TestBuildGenesisInvalidAmount(t *testing.T) {
-	nodeID := ids.NodeID{1, 2, 3}
-	hrp := constants.NetworkIDToHRP[testNetworkID]
-	addr, err := address.FormatBech32(hrp, nodeID.Bytes())
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestBuildGenesisInvalidStakeWeight(t *testing.T) {
+	require := require.New(t)
+	nodeID := ids.BuildTestNodeID([]byte{1, 2, 3})
+	addr, err := address.FormatBech32(constants.UnitTestHRP, nodeID.Bytes())
+	require.NoError(err)
+
 	utxo := UTXO{
 		Address: addr,
 		Amount:  123456789,
 	}
 	weight := json.Uint64(0)
-	validator := PrimaryValidator{
-		Staker: Staker{
+	validator := GenesisPermissionlessValidator{
+		GenesisValidator: GenesisValidator{
 			StartTime: 0,
 			EndTime:   15,
 			NodeID:    nodeID,
@@ -94,7 +91,7 @@ func TestBuildGenesisInvalidAmount(t *testing.T) {
 		UTXOs: []UTXO{
 			utxo,
 		},
-		Validators: []PrimaryValidator{
+		Validators: []GenesisPermissionlessValidator{
 			validator,
 		},
 		Time:     5,
@@ -103,26 +100,24 @@ func TestBuildGenesisInvalidAmount(t *testing.T) {
 	reply := BuildGenesisReply{}
 
 	ss := StaticService{}
-	if err := ss.BuildGenesis(nil, &args, &reply); err == nil {
-		t.Fatalf("Should have errored due to an invalid amount")
-	}
+	err = ss.BuildGenesis(nil, &args, &reply)
+	require.ErrorIs(err, errValidatorHasNoWeight)
 }
 
 func TestBuildGenesisInvalidEndtime(t *testing.T) {
-	nodeID := ids.NodeID{1, 2, 3}
-	hrp := constants.NetworkIDToHRP[testNetworkID]
-	addr, err := address.FormatBech32(hrp, nodeID.Bytes())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require := require.New(t)
+	nodeID := ids.BuildTestNodeID([]byte{1, 2, 3})
+	addr, err := address.FormatBech32(constants.UnitTestHRP, nodeID.Bytes())
+	require.NoError(err)
+
 	utxo := UTXO{
 		Address: addr,
 		Amount:  123456789,
 	}
 
 	weight := json.Uint64(987654321)
-	validator := PrimaryValidator{
-		Staker: Staker{
+	validator := GenesisPermissionlessValidator{
+		GenesisValidator: GenesisValidator{
 			StartTime: 0,
 			EndTime:   5,
 			NodeID:    nodeID,
@@ -141,7 +136,7 @@ func TestBuildGenesisInvalidEndtime(t *testing.T) {
 		UTXOs: []UTXO{
 			utxo,
 		},
-		Validators: []PrimaryValidator{
+		Validators: []GenesisPermissionlessValidator{
 			validator,
 		},
 		Time:     5,
@@ -150,26 +145,24 @@ func TestBuildGenesisInvalidEndtime(t *testing.T) {
 	reply := BuildGenesisReply{}
 
 	ss := StaticService{}
-	if err := ss.BuildGenesis(nil, &args, &reply); err == nil {
-		t.Fatalf("Should have errored due to an invalid end time")
-	}
+	err = ss.BuildGenesis(nil, &args, &reply)
+	require.ErrorIs(err, errValidatorAlreadyExited)
 }
 
 func TestBuildGenesisReturnsSortedValidators(t *testing.T) {
-	nodeID := ids.NodeID{1}
-	hrp := constants.NetworkIDToHRP[testNetworkID]
-	addr, err := address.FormatBech32(hrp, nodeID.Bytes())
-	if err != nil {
-		t.Fatal(err)
-	}
+	require := require.New(t)
+	nodeID := ids.BuildTestNodeID([]byte{1})
+	addr, err := address.FormatBech32(constants.UnitTestHRP, nodeID.Bytes())
+	require.NoError(err)
+
 	utxo := UTXO{
 		Address: addr,
 		Amount:  123456789,
 	}
 
 	weight := json.Uint64(987654321)
-	validator1 := PrimaryValidator{
-		Staker: Staker{
+	validator1 := GenesisPermissionlessValidator{
+		GenesisValidator: GenesisValidator{
 			StartTime: 0,
 			EndTime:   20,
 			NodeID:    nodeID,
@@ -184,8 +177,8 @@ func TestBuildGenesisReturnsSortedValidators(t *testing.T) {
 		}},
 	}
 
-	validator2 := PrimaryValidator{
-		Staker: Staker{
+	validator2 := GenesisPermissionlessValidator{
+		GenesisValidator: GenesisValidator{
 			StartTime: 3,
 			EndTime:   15,
 			NodeID:    nodeID,
@@ -200,8 +193,8 @@ func TestBuildGenesisReturnsSortedValidators(t *testing.T) {
 		}},
 	}
 
-	validator3 := PrimaryValidator{
-		Staker: Staker{
+	validator3 := GenesisPermissionlessValidator{
+		GenesisValidator: GenesisValidator{
 			StartTime: 1,
 			EndTime:   10,
 			NodeID:    nodeID,
@@ -221,7 +214,7 @@ func TestBuildGenesisReturnsSortedValidators(t *testing.T) {
 		UTXOs: []UTXO{
 			utxo,
 		},
-		Validators: []PrimaryValidator{
+		Validators: []GenesisPermissionlessValidator{
 			validator1,
 			validator2,
 			validator3,
@@ -232,21 +225,75 @@ func TestBuildGenesisReturnsSortedValidators(t *testing.T) {
 	reply := BuildGenesisReply{}
 
 	ss := StaticService{}
-	if err := ss.BuildGenesis(nil, &args, &reply); err != nil {
-		t.Fatalf("BuildGenesis should not have errored but got error: %s", err)
-	}
+	require.NoError(ss.BuildGenesis(nil, &args, &reply))
 
 	genesisBytes, err := formatting.Decode(reply.Encoding, reply.Bytes)
-	if err != nil {
-		t.Fatalf("Problem decoding BuildGenesis response: %s", err)
-	}
+	require.NoError(err)
 
 	genesis, err := genesis.Parse(genesisBytes)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(err)
+
 	validators := genesis.Validators
-	if len(validators) != 3 {
-		t.Fatal("Validators should contain 3 validators")
+	require.Len(validators, 3)
+}
+
+func TestUTXOCompare(t *testing.T) {
+	var (
+		smallerAddr = ids.ShortID{}
+		largerAddr  = ids.ShortID{1}
+	)
+	smallerAddrStr, err := address.FormatBech32("avax", smallerAddr[:])
+	require.NoError(t, err)
+	largerAddrStr, err := address.FormatBech32("avax", largerAddr[:])
+	require.NoError(t, err)
+
+	type test struct {
+		name     string
+		utxo1    UTXO
+		utxo2    UTXO
+		expected int
+	}
+	tests := []test{
+		{
+			name:     "both empty",
+			utxo1:    UTXO{},
+			utxo2:    UTXO{},
+			expected: 0,
+		},
+		{
+			name:  "locktime smaller",
+			utxo1: UTXO{},
+			utxo2: UTXO{
+				Locktime: 1,
+			},
+			expected: -1,
+		},
+		{
+			name:  "amount smaller",
+			utxo1: UTXO{},
+			utxo2: UTXO{
+				Amount: 1,
+			},
+			expected: -1,
+		},
+		{
+			name: "address smaller",
+			utxo1: UTXO{
+				Address: smallerAddrStr,
+			},
+			utxo2: UTXO{
+				Address: largerAddrStr,
+			},
+			expected: -1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
+
+			require.Equal(tt.expected, tt.utxo1.Compare(tt.utxo2))
+			require.Equal(-tt.expected, tt.utxo2.Compare(tt.utxo1))
+		})
 	}
 }

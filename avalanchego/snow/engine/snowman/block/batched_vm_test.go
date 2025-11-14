@@ -1,9 +1,10 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
-package block
+package block_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -13,31 +14,40 @@ import (
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/consensus/snowman"
+	"github.com/ava-labs/avalanchego/snow/engine/snowman/block/blocktest"
+	"github.com/ava-labs/avalanchego/utils/logging"
+
+	. "github.com/ava-labs/avalanchego/snow/engine/snowman/block"
 )
 
+var errTest = errors.New("non-nil error")
+
 func TestGetAncestorsDatabaseNotFound(t *testing.T) {
-	vm := &TestVM{}
+	require := require.New(t)
+
+	vm := &blocktest.VM{}
 	someID := ids.GenerateTestID()
-	vm.GetBlockF = func(id ids.ID) (snowman.Block, error) {
-		require.Equal(t, someID, id)
+	vm.GetBlockF = func(_ context.Context, id ids.ID) (snowman.Block, error) {
+		require.Equal(someID, id)
 		return nil, database.ErrNotFound
 	}
-	containers, err := GetAncestors(vm, someID, 10, 10, 1*time.Second)
-	require.NoError(t, err)
-	require.Len(t, containers, 0)
+	containers, err := GetAncestors(context.Background(), logging.NoLog{}, vm, someID, 10, 10, 1*time.Second)
+	require.NoError(err)
+	require.Empty(containers)
 }
 
 // TestGetAncestorsPropagatesErrors checks errors other than
 // database.ErrNotFound propagate to caller.
 func TestGetAncestorsPropagatesErrors(t *testing.T) {
-	vm := &TestVM{}
+	require := require.New(t)
+
+	vm := &blocktest.VM{}
 	someID := ids.GenerateTestID()
-	someError := errors.New("some error that is not ErrNotFound")
-	vm.GetBlockF = func(id ids.ID) (snowman.Block, error) {
-		require.Equal(t, someID, id)
-		return nil, someError
+	vm.GetBlockF = func(_ context.Context, id ids.ID) (snowman.Block, error) {
+		require.Equal(someID, id)
+		return nil, errTest
 	}
-	containers, err := GetAncestors(vm, someID, 10, 10, 1*time.Second)
-	require.Nil(t, containers)
-	require.ErrorIs(t, err, someError)
+	containers, err := GetAncestors(context.Background(), logging.NoLog{}, vm, someID, 10, 10, 1*time.Second)
+	require.Nil(containers)
+	require.ErrorIs(err, errTest)
 }

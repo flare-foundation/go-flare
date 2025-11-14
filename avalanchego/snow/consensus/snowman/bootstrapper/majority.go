@@ -1,0 +1,104 @@
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
+// See the file LICENSE for licensing terms.
+
+package bootstrapper
+
+import (
+	"context"
+	"math/big"
+
+	"go.uber.org/zap"
+	"golang.org/x/exp/maps"
+
+	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils/logging"
+	"github.com/ava-labs/avalanchego/utils/set"
+)
+
+var _ Poll = (*Majority)(nil)
+
+// Majority implements the bootstrapping poll to filter the initial set of
+// potentially accaptable blocks into a set of accepted blocks to sync to.
+//
+// Once the last accepted blocks have been fetched from the initial set of
+// peers, the set of blocks are sent to all peers. Each peer is expected to
+// filter the provided blocks and report which of them they consider accepted.
+// If a majority of the peers report that a block is accepted, then the node
+// will consider that block to be accepted by the network. This assumes that a
+// majority of the network is correct. If a majority of the network is
+// malicious, the node may accept an incorrect block.
+type Majority struct {
+	requests
+
+	log         logging.Logger
+	nodeWeights map[ids.NodeID]uint64
+
+	// received maps the blockID to the total sum of weight that has reported
+	// that block as accepted.
+	received map[ids.ID]*big.Int
+	accepted []ids.ID
+}
+
+func NewMajority(
+	log logging.Logger,
+	nodeWeights map[ids.NodeID]uint64,
+	maxOutstanding int,
+) *Majority {
+	return &Majority{
+		requests: requests{
+			maxOutstanding: maxOutstanding,
+			pendingSend:    set.Of(maps.Keys(nodeWeights)...),
+		},
+		log:         log,
+		nodeWeights: nodeWeights,
+		received:    make(map[ids.ID]*big.Int),
+	}
+}
+
+func (m *Majority) RecordOpinion(_ context.Context, nodeID ids.NodeID, blkIDs set.Set[ids.ID]) error {
+	if !m.recordResponse(nodeID) {
+		// The chain router should have already dropped unexpected messages.
+		m.log.Error("received unexpected opinion",
+			zap.String("pollType", "majority"),
+			zap.Stringer("nodeID", nodeID),
+			zap.Reflect("blkIDs", blkIDs),
+		)
+		return nil
+	}
+
+	weight := new(big.Int).SetUint64(m.nodeWeights[nodeID])
+	for blkID := range blkIDs {
+		if received, ok := m.received[blkID]; ok {
+			m.received[blkID] = new(big.Int).Add(received, weight)
+		} else {
+			m.received[blkID] = new(big.Int).Set(weight)
+		}
+	}
+
+	if !m.finished() {
+		return nil
+	}
+
+	totalWeight := big.NewInt(0)
+	for _, weight := range m.nodeWeights {
+		totalWeight.Add(totalWeight, big.NewInt(int64(weight)))
+	}
+
+	// requiredWeight := totalWeight/2 + 1
+	requiredWeight := new(big.Int).Add(new(big.Int).Div(totalWeight, big.NewInt(2)), big.NewInt(1))
+	for blkID, weight := range m.received {
+		if weight.Cmp(requiredWeight) >= 0 {
+			m.accepted = append(m.accepted, blkID)
+		}
+	}
+
+	m.log.Debug("finalized bootstrapping poll",
+		zap.String("pollType", "majority"),
+		zap.Stringers("accepted", m.accepted),
+	)
+	return nil
+}
+
+func (m *Majority) Result(context.Context) ([]ids.ID, bool) {
+	return m.accepted, m.finished()
+}

@@ -1,24 +1,91 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package utils
 
 import (
+	"math"
+	"math/rand"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestCopyBytesNil(t *testing.T) {
-	result := CopyBytes(nil)
-	require.Nil(t, result, "CopyBytes(nil) should have returned nil")
+// Verify that [intSize] is correctly set based on the word size. This test uses
+// [math.MaxInt] to detect the word size.
+func TestIntSize(t *testing.T) {
+	require := require.New(t)
+
+	require.Contains([]int{32, 64}, intSize)
+	if intSize == 32 {
+		require.Equal(math.MaxInt32, math.MaxInt)
+	} else {
+		require.Equal(math.MaxInt64, math.MaxInt)
+	}
 }
 
-func TestCopyBytes(t *testing.T) {
-	input := []byte{1}
-	result := CopyBytes(input)
-	require.Equal(t, input, result, "CopyBytes should have returned equal bytes")
+func TestBytesPool(t *testing.T) {
+	require := require.New(t)
 
-	input[0] = 0
-	require.NotEqual(t, input, result, "CopyBytes should have returned independent bytes")
+	p := NewBytesPool()
+	for i := 0; i < 128; i++ {
+		bytes := p.Get(i)
+		require.NotNil(bytes)
+		require.Len(*bytes, i)
+		p.Put(bytes)
+	}
+}
+
+func BenchmarkBytesPool_Constant(b *testing.B) {
+	sizes := []int{
+		0,
+		8,
+		16,
+		32,
+		64,
+		256,
+		2048,
+	}
+	for _, size := range sizes {
+		b.Run(strconv.Itoa(size), func(b *testing.B) {
+			p := NewBytesPool()
+			for i := 0; i < b.N; i++ {
+				p.Put(p.Get(size))
+			}
+		})
+	}
+}
+
+func BenchmarkBytesPool_Descending(b *testing.B) {
+	p := NewBytesPool()
+	for i := 0; i < b.N; i++ {
+		for size := 100_000; size > 0; size-- {
+			p.Put(p.Get(size))
+		}
+	}
+}
+
+func BenchmarkBytesPool_Ascending(b *testing.B) {
+	p := NewBytesPool()
+	for i := 0; i < b.N; i++ {
+		for size := 0; size < 100_000; size++ {
+			p.Put(p.Get(size))
+		}
+	}
+}
+
+func BenchmarkBytesPool_Random(b *testing.B) {
+	p := NewBytesPool()
+	sizes := make([]int, 1_000)
+	for i := range sizes {
+		sizes[i] = rand.Intn(100_000) //#nosec G404
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for _, size := range sizes {
+			p.Put(p.Get(size))
+		}
+	}
 }

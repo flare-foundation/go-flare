@@ -27,81 +27,136 @@
 package trie
 
 import (
-	"math/rand"
-	"testing"
-	"time"
-
-	"github.com/ava-labs/coreth/ethdb/memorydb"
+	"github.com/ava-labs/coreth/core/rawdb"
+	"github.com/ava-labs/coreth/core/types"
+	"github.com/ava-labs/coreth/trie/trienode"
+	"github.com/ava-labs/coreth/triedb/database"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/stretchr/testify/assert"
+	"github.com/ethereum/go-ethereum/ethdb"
 )
 
-// Tests that the trie database returns a missing trie node error if attempting
-// to retrieve the meta root.
-func TestDatabaseMetarootFetch(t *testing.T) {
-	db := NewDatabase(memorydb.New())
-	if _, err := db.RawNode(common.Hash{}); err == nil {
-		t.Fatalf("metaroot retrieval succeeded")
+// testReader implements database.Reader interface, providing function to
+// access trie nodes.
+type testReader struct {
+	db     ethdb.Database
+	scheme string
+	nodes  []*trienode.MergedNodeSet // sorted from new to old
+}
+
+// Node implements database.Reader interface, retrieving trie node with
+// all available cached layers.
+func (r *testReader) Node(owner common.Hash, path []byte, hash common.Hash) ([]byte, error) {
+	// Check the node presence with the cached layer, from latest to oldest.
+	for _, nodes := range r.nodes {
+		if _, ok := nodes.Sets[owner]; !ok {
+			continue
+		}
+		n, ok := nodes.Sets[owner].Nodes[string(path)]
+		if !ok {
+			continue
+		}
+		if n.IsDeleted() || n.Hash != hash {
+			return nil, &MissingNodeError{Owner: owner, Path: path, NodeHash: hash}
+		}
+		return n.Blob, nil
+	}
+	// Check the node presence in database.
+	return rawdb.ReadTrieNode(r.db, owner, path, hash, r.scheme), nil
+}
+
+// testDb implements database.Database interface, using for testing purpose.
+type testDb struct {
+	disk    ethdb.Database
+	root    common.Hash
+	scheme  string
+	nodes   map[common.Hash]*trienode.MergedNodeSet
+	parents map[common.Hash]common.Hash
+}
+
+func newTestDatabase(diskdb ethdb.Database, scheme string) *testDb {
+	return &testDb{
+		disk:    diskdb,
+		root:    types.EmptyRootHash,
+		scheme:  scheme,
+		nodes:   make(map[common.Hash]*trienode.MergedNodeSet),
+		parents: make(map[common.Hash]common.Hash),
 	}
 }
 
-// Tests that calling dereference does not interfere with a concurrent commit on
-// a trie with the same underlying trieDB.
-func TestDereferenceWhileCommit(t *testing.T) {
-	var (
-		numKeys = 10
-		keyLen  = 10
-		db      = NewDatabase(memorydb.New())
-	)
+func (db *testDb) Reader(stateRoot common.Hash) (database.Reader, error) {
+	nodes, _ := db.dirties(stateRoot, true)
+	return &testReader{db: db.disk, scheme: db.scheme, nodes: nodes}, nil
+}
 
-	// set up a database with a small trie
-	tr1 := NewEmpty(db)
-	rand.Seed(1) // set random seed so we get deterministic key/values
-	FillTrie(t, numKeys, keyLen, tr1)
-	root, _, err := tr1.Commit(nil, false)
-	assert.NoError(t, err)
-	assert.NotZero(t, root)
-	db.Reference(root, common.Hash{}, true)
+func (db *testDb) Preimage(hash common.Hash) []byte {
+	return rawdb.ReadPreimage(db.disk, hash)
+}
 
-	// call Dereference from onleafs to simulate
-	// this occurring concurrently.
-	// the second trie has one more leaf so it
-	// does not share the same root as the first trie.
-	firstLeaf := true
-	tr2 := NewEmpty(db)
-	rand.Seed(1) // set random seed so we get deterministic key/values
-	FillTrie(t, numKeys+1, keyLen, tr2)
-	done := make(chan struct{})
-	onleaf := func([][]byte, []byte, []byte, common.Hash, []byte) error {
-		if firstLeaf {
-			go func() {
-				db.Dereference(root)
-				close(done)
-			}()
-			select {
-			case <-done:
-				t.Fatal("Dereference succeeded within leaf callback")
-			case <-time.After(time.Second):
-			}
-			firstLeaf = false
-		}
+func (db *testDb) InsertPreimage(preimages map[common.Hash][]byte) {
+	rawdb.WritePreimages(db.disk, preimages)
+}
+
+func (db *testDb) Scheme() string { return db.scheme }
+
+func (db *testDb) Update(root common.Hash, parent common.Hash, nodes *trienode.MergedNodeSet) error {
+	if root == parent {
 		return nil
 	}
-	root2, _, err := tr2.Commit(onleaf, false)
-	assert.NoError(t, err)
-	assert.NotEqual(t, root, root2)
-	db.Reference(root2, common.Hash{}, true)
-
-	// wait for the goroutine to exit.
-	<-done
-
-	// expected behavior is for root2 to
-	// be present and the trie should iterate
-	// without missing nodes.
-	tr3, err := New(common.Hash{}, root2, db)
-	assert.NoError(t, err)
-	it := tr3.NodeIterator(nil)
-	for it.Next(true) {
+	if _, ok := db.nodes[root]; ok {
+		return nil
 	}
-	assert.NoError(t, it.Error())
+	db.parents[root] = parent
+	db.nodes[root] = nodes
+	return nil
+}
+
+func (db *testDb) dirties(root common.Hash, topToBottom bool) ([]*trienode.MergedNodeSet, []common.Hash) {
+	var (
+		pending []*trienode.MergedNodeSet
+		roots   []common.Hash
+	)
+	for {
+		if root == db.root {
+			break
+		}
+		nodes, ok := db.nodes[root]
+		if !ok {
+			break
+		}
+		if topToBottom {
+			pending = append(pending, nodes)
+			roots = append(roots, root)
+		} else {
+			pending = append([]*trienode.MergedNodeSet{nodes}, pending...)
+			roots = append([]common.Hash{root}, roots...)
+		}
+		root = db.parents[root]
+	}
+	return pending, roots
+}
+
+func (db *testDb) Commit(root common.Hash) error {
+	if root == db.root {
+		return nil
+	}
+	pending, roots := db.dirties(root, false)
+	for i, nodes := range pending {
+		for owner, set := range nodes.Sets {
+			if owner == (common.Hash{}) {
+				continue
+			}
+			set.ForEachWithOrder(func(path string, n *trienode.Node) {
+				rawdb.WriteTrieNode(db.disk, owner, []byte(path), n.Hash, n.Blob, db.scheme)
+			})
+		}
+		nodes.Sets[common.Hash{}].ForEachWithOrder(func(path string, n *trienode.Node) {
+			rawdb.WriteTrieNode(db.disk, common.Hash{}, []byte(path), n.Hash, n.Blob, db.scheme)
+		})
+		db.root = roots[i]
+	}
+	for _, root := range roots {
+		delete(db.nodes, root)
+		delete(db.parents, root)
+	}
+	return nil
 }

@@ -1,9 +1,10 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package tracker
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -11,15 +12,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/utils/linkedhashmap"
+	"github.com/ava-labs/avalanchego/utils/linked"
 	"github.com/ava-labs/avalanchego/utils/math/meter"
 	"github.com/ava-labs/avalanchego/utils/resource"
-	"github.com/ava-labs/avalanchego/utils/wrappers"
 )
 
 const epsilon = 1e-9
 
-var _ ResourceTracker = &resourceTracker{}
+var _ ResourceTracker = (*resourceTracker)(nil)
 
 type Tracker interface {
 	// Returns the current usage for the given node.
@@ -72,7 +72,7 @@ func (t *cpuResourceTracker) Usage(nodeID ids.NodeID, now time.Time) float64 {
 		return 0
 	}
 
-	portionUsageByNode := m.(meter.Meter).Read(now) / measuredProcessingTime
+	portionUsageByNode := m.Read(now) / measuredProcessingTime
 	return realCPUUsage * portionUsageByNode
 }
 
@@ -107,7 +107,7 @@ func (t *cpuResourceTracker) TimeUntilUsage(nodeID ids.NodeID, now time.Time, va
 	}
 
 	scale := realCPUUsage / measuredProcessingTime
-	return m.(meter.Meter).TimeUntil(now, value/scale)
+	return m.TimeUntil(now, value/scale)
 }
 
 type diskResourceTracker struct {
@@ -136,7 +136,7 @@ func (t *diskResourceTracker) Usage(nodeID ids.NodeID, now time.Time) float64 {
 		return 0
 	}
 
-	portionUsageByNode := m.(meter.Meter).Read(now) / measuredProcessingTime
+	portionUsageByNode := m.Read(now) / measuredProcessingTime
 	return realReadUsage * portionUsageByNode
 }
 
@@ -184,7 +184,7 @@ func (t *diskResourceTracker) TimeUntilUsage(nodeID ids.NodeID, now time.Time, v
 	}
 
 	scale := realReadUsage / measuredProcessingTime
-	return m.(meter.Meter).TimeUntil(now, value/scale)
+	return m.TimeUntil(now, value/scale)
 }
 
 type resourceTracker struct {
@@ -200,7 +200,7 @@ type resourceTracker struct {
 	// utilized. This doesn't necessarily result in the meters being sorted
 	// based on their usage. However, in practice the nodes that are not being
 	// utilized will move towards the oldest elements where they can be deleted.
-	meters  linkedhashmap.LinkedHashmap
+	meters  *linked.Hashmap[ids.NodeID, meter.Meter]
 	metrics *trackerMetrics
 }
 
@@ -215,10 +215,10 @@ func NewResourceTracker(
 		resources:       resources,
 		processingMeter: factory.New(halflife),
 		halflife:        halflife,
-		meters:          linkedhashmap.New(),
+		meters:          linked.NewHashmap[ids.NodeID, meter.Meter](),
 	}
 	var err error
-	t.metrics, err = newCPUTrackerMetrics("resource_tracker", reg)
+	t.metrics, err = newCPUTrackerMetrics(reg)
 	if err != nil {
 		return nil, fmt.Errorf("initializing resourceTracker metrics errored with: %w", err)
 	}
@@ -257,7 +257,7 @@ func (rt *resourceTracker) StopProcessing(nodeID ids.NodeID, now time.Time) {
 func (rt *resourceTracker) getMeter(nodeID ids.NodeID) meter.Meter {
 	m, exists := rt.meters.Get(nodeID)
 	if exists {
-		return m.(meter.Meter)
+		return m
 	}
 
 	newMeter := rt.factory.New(rt.halflife)
@@ -272,12 +272,11 @@ func (rt *resourceTracker) getMeter(nodeID ids.NodeID) meter.Meter {
 // doesn't guarantee that all meters showing less than [epsilon] are removed.
 func (rt *resourceTracker) prune(now time.Time) {
 	for {
-		oldest, meterIntf, exists := rt.meters.Oldest()
+		oldest, meter, exists := rt.meters.Oldest()
 		if !exists {
 			return
 		}
 
-		meter := meterIntf.(meter.Meter)
 		if meter.Read(now) > epsilon {
 			return
 		}
@@ -294,41 +293,35 @@ type trackerMetrics struct {
 	diskSpaceAvailable   prometheus.Gauge
 }
 
-func newCPUTrackerMetrics(namespace string, reg prometheus.Registerer) (*trackerMetrics, error) {
+func newCPUTrackerMetrics(reg prometheus.Registerer) (*trackerMetrics, error) {
 	m := &trackerMetrics{
 		processingTimeMetric: prometheus.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "processing_time",
-			Help:      "Tracked processing time over all nodes. Value expected to be in [0, number of CPU cores], but can go higher due to IO bound processes and thread multiplexing",
+			Name: "processing_time",
+			Help: "Tracked processing time over all nodes. Value expected to be in [0, number of CPU cores], but can go higher due to IO bound processes and thread multiplexing",
 		}),
 		cpuMetric: prometheus.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "cpu_usage",
-			Help:      "CPU usage tracked by the resource manager. Value should be in [0, number of CPU cores]",
+			Name: "cpu_usage",
+			Help: "CPU usage tracked by the resource manager. Value should be in [0, number of CPU cores]",
 		}),
 		diskReadsMetric: prometheus.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "disk_reads",
-			Help:      "Disk reads (bytes/sec) tracked by the resource manager",
+			Name: "disk_reads",
+			Help: "Disk reads (bytes/sec) tracked by the resource manager",
 		}),
 		diskWritesMetric: prometheus.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "disk_writes",
-			Help:      "Disk writes (bytes/sec) tracked by the resource manager",
+			Name: "disk_writes",
+			Help: "Disk writes (bytes/sec) tracked by the resource manager",
 		}),
 		diskSpaceAvailable: prometheus.NewGauge(prometheus.GaugeOpts{
-			Namespace: namespace,
-			Name:      "disk_available_space",
-			Help:      "Available space remaining (bytes) on the database volume",
+			Name: "disk_available_space",
+			Help: "Available space remaining (bytes) on the database volume",
 		}),
 	}
-	errs := wrappers.Errs{}
-	errs.Add(
+	err := errors.Join(
 		reg.Register(m.processingTimeMetric),
 		reg.Register(m.cpuMetric),
 		reg.Register(m.diskReadsMetric),
 		reg.Register(m.diskWritesMetric),
 		reg.Register(m.diskSpaceAvailable),
 	)
-	return m, errs.Err
+	return m, err
 }

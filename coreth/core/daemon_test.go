@@ -4,6 +4,7 @@
 package core
 
 import (
+	"context"
 	"errors"
 	"math/big"
 	"testing"
@@ -11,9 +12,12 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/holiman/uint256"
 
 	"github.com/ava-labs/coreth/core/vm"
 	"github.com/ava-labs/coreth/params"
+
+	"golang.org/x/exp/slog"
 )
 
 // Define a mock structure to spy and mock values for daemon calls
@@ -22,11 +26,11 @@ type MockEVMCallerData struct {
 	addBalanceCalls       int
 	revertToSnapshotCalls int
 	lastSnapshotValue     int
-	blockTime             big.Int
+	blockTime             uint64
 	gasLimit              uint64
-	mintRequestReturn     big.Int
+	mintRequestReturn     uint256.Int
 	lastAddBalanceAddr    common.Address
-	lastAddBalanceAmount  *big.Int
+	lastAddBalanceAmount  *uint256.Int
 }
 
 // Define a mock structure to spy and mock values for logger calls
@@ -38,8 +42,8 @@ type MockLoggerData struct {
 func defaultDaemonCall(e *MockEVMCallerData, caller vm.ContractRef, addr common.Address, input []byte, gas uint64) (snapshot int, ret []byte, leftOverGas uint64, err error) {
 	e.callCalls++
 
-	buffer := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-	return 0, e.mintRequestReturn.FillBytes(buffer), 0, nil
+	bytes := e.mintRequestReturn.Bytes32()
+	return 0, bytes[:], 0, nil
 }
 
 func defaultRevertToSnapshot(e *MockEVMCallerData, snapshot int) {
@@ -47,15 +51,15 @@ func defaultRevertToSnapshot(e *MockEVMCallerData, snapshot int) {
 	e.lastSnapshotValue = snapshot
 }
 
-func defaultGetBlockTime(e *MockEVMCallerData) *big.Int {
-	return &e.blockTime
+func defaultGetBlockTime(e *MockEVMCallerData) uint64 {
+	return e.blockTime
 }
 
 func defaultGetGasLimit(e *MockEVMCallerData) uint64 {
 	return e.gasLimit
 }
 
-func defaultAddBalance(e *MockEVMCallerData, addr common.Address, amount *big.Int) {
+func defaultAddBalance(e *MockEVMCallerData, addr common.Address, amount *uint256.Int) {
 	e.addBalanceCalls++
 	e.lastAddBalanceAddr = addr
 	e.lastAddBalanceAmount = amount
@@ -74,7 +78,7 @@ func (e *DefaultEVMMock) DaemonRevertToSnapshot(snapshot int) {
 	defaultRevertToSnapshot(&e.mockEVMCallerData, snapshot)
 }
 
-func (e *DefaultEVMMock) GetBlockTime() *big.Int {
+func (e *DefaultEVMMock) GetBlockTime() uint64 {
 	return defaultGetBlockTime(&e.mockEVMCallerData)
 }
 
@@ -82,14 +86,19 @@ func (e *DefaultEVMMock) GetGasLimit() uint64 {
 	return defaultGetGasLimit(&e.mockEVMCallerData)
 }
 
-func (e *DefaultEVMMock) AddBalance(addr common.Address, amount *big.Int) {
+func (e *DefaultEVMMock) GetChainID() *big.Int {
+	return params.FlareChainID
+}
+
+func (e *DefaultEVMMock) AddBalance(addr common.Address, amount *uint256.Int) {
 	defaultAddBalance(&e.mockEVMCallerData, addr, amount)
 }
 
 func TestDaemonShouldReturnMintRequest(t *testing.T) {
-	mintRequestReturn, _ := new(big.Int).SetString("60000000000000000000000000", 10)
+	mintRequestReturn := new(uint256.Int)
+	mintRequestReturn.SetFromDecimal("60000000000000000000000000")
 	mockEVMCallerData := &MockEVMCallerData{
-		blockTime:         *big.NewInt(0),
+		blockTime:         0,
 		gasLimit:          0,
 		mintRequestReturn: *mintRequestReturn,
 	}
@@ -100,18 +109,18 @@ func TestDaemonShouldReturnMintRequest(t *testing.T) {
 	_, mintRequest, _ := daemon(defaultEVMMock)
 
 	if mintRequest.Cmp(mintRequestReturn) != 0 {
-		t.Errorf("got %s want %q", mintRequest.Text(10), "60000000000000000000000000")
+		t.Errorf("got %s want %q", mintRequest.String(), "60000000000000000000000000")
 	}
 }
 
 func TestDaemonShouldNotLetMintRequestOverflow(t *testing.T) {
-	var mintRequestReturn big.Int
+	var mintRequestReturn uint256.Int
 	// TODO: Compact with exponent?
-	buffer := []byte{255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255}
+	buffer := []byte{0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255}
 	mintRequestReturn.SetBytes(buffer)
 
 	mockEVMCallerData := &MockEVMCallerData{
-		blockTime:         *big.NewInt(0),
+		blockTime:         0,
 		gasLimit:          0,
 		mintRequestReturn: mintRequestReturn,
 	}
@@ -141,16 +150,15 @@ type BadMintReturnSizeEVMMock struct {
 
 func (e *BadMintReturnSizeEVMMock) DaemonCall(caller vm.ContractRef, addr common.Address, input []byte, gas uint64) (snapshot int, ret []byte, leftOverGas uint64, err error) {
 	e.mockEVMCallerData.callCalls++
-	// Should be size 32 bytes
-	buffer := []byte{0}
-	return 0, e.mockEVMCallerData.mintRequestReturn.FillBytes(buffer), 0, nil
+	bytes := e.mockEVMCallerData.mintRequestReturn.Bytes()
+	return 0, bytes[:], 0, nil
 }
 
 func (e *BadMintReturnSizeEVMMock) DaemonRevertToSnapshot(snapshot int) {
 	defaultRevertToSnapshot(&e.mockEVMCallerData, snapshot)
 }
 
-func (e *BadMintReturnSizeEVMMock) GetBlockTime() *big.Int {
+func (e *BadMintReturnSizeEVMMock) GetBlockTime() uint64 {
 	return defaultGetBlockTime(&e.mockEVMCallerData)
 }
 
@@ -158,18 +166,22 @@ func (e *BadMintReturnSizeEVMMock) GetGasLimit() uint64 {
 	return defaultGetGasLimit(&e.mockEVMCallerData)
 }
 
-func (e *BadMintReturnSizeEVMMock) AddBalance(addr common.Address, amount *big.Int) {
+func (e *BadMintReturnSizeEVMMock) GetChainID() *big.Int {
+	return params.FlareChainID
+}
+
+func (e *BadMintReturnSizeEVMMock) AddBalance(addr common.Address, amount *uint256.Int) {
 	defaultAddBalance(&e.mockEVMCallerData, addr, amount)
 }
 
 func TestDaemonValidatesMintRequestReturnValueSize(t *testing.T) {
-	var mintRequestReturn big.Int
+	var mintRequestReturn uint256.Int
 	// TODO: Compact with exponent?
 	buffer := []byte{255}
 	mintRequestReturn.SetBytes(buffer)
 
 	mockEVMCallerData := &MockEVMCallerData{
-		blockTime:         *big.NewInt(0),
+		blockTime:         0,
 		gasLimit:          0,
 		mintRequestReturn: mintRequestReturn,
 	}
@@ -197,15 +209,15 @@ type BadDaemonCallEVMMock struct {
 func (e *BadDaemonCallEVMMock) DaemonCall(caller vm.ContractRef, addr common.Address, input []byte, gas uint64) (snapshot int, ret []byte, leftOverGas uint64, err error) {
 	e.mockEVMCallerData.callCalls++
 
-	buffer := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
-	return 0, e.mockEVMCallerData.mintRequestReturn.FillBytes(buffer), 0, errors.New("Call error happened")
+	bytes := e.mockEVMCallerData.mintRequestReturn.Bytes32()
+	return 0, bytes[:], 0, errors.New("Call error happened")
 }
 
 func (e *BadDaemonCallEVMMock) DaemonRevertToSnapshot(snapshot int) {
 	defaultRevertToSnapshot(&e.mockEVMCallerData, snapshot)
 }
 
-func (e *BadDaemonCallEVMMock) GetBlockTime() *big.Int {
+func (e *BadDaemonCallEVMMock) GetBlockTime() uint64 {
 	return defaultGetBlockTime(&e.mockEVMCallerData)
 }
 
@@ -213,7 +225,11 @@ func (e *BadDaemonCallEVMMock) GetGasLimit() uint64 {
 	return defaultGetGasLimit(&e.mockEVMCallerData)
 }
 
-func (e *BadDaemonCallEVMMock) AddBalance(addr common.Address, amount *big.Int) {
+func (e *BadDaemonCallEVMMock) GetChainID() *big.Int {
+	return params.FlareChainID
+}
+
+func (e *BadDaemonCallEVMMock) AddBalance(addr common.Address, amount *uint256.Int) {
 	defaultAddBalance(&e.mockEVMCallerData, addr, amount)
 }
 
@@ -241,22 +257,29 @@ type LoggerMock struct {
 func (l *LoggerMock) New(ctx ...interface{}) log.Logger {
 	return nil
 }
-
-func (l *LoggerMock) GetHandler() log.Handler {
+func (l *LoggerMock) With(ctx ...interface{}) log.Logger {
 	return nil
 }
 
-func (l *LoggerMock) SetHandler(h log.Handler) {
-}
+func (l *LoggerMock) Trace(msg string, ctx ...interface{})             {}
+func (l *LoggerMock) Debug(msg string, ctx ...interface{})             {}
+func (l *LoggerMock) Info(msg string, ctx ...interface{})              {}
+func (l *LoggerMock) Error(msg string, ctx ...interface{})             {}
+func (l *LoggerMock) Crit(msg string, ctx ...interface{})              {}
+func (l *LoggerMock) Write(level slog.Level, msg string, attrs ...any) {}
 
-func (l *LoggerMock) Trace(msg string, ctx ...interface{}) {}
-func (l *LoggerMock) Debug(msg string, ctx ...interface{}) {}
-func (l *LoggerMock) Info(msg string, ctx ...interface{})  {}
-func (l *LoggerMock) Error(msg string, ctx ...interface{}) {}
-func (l *LoggerMock) Crit(msg string, ctx ...interface{})  {}
+func (l *LoggerMock) Log(level slog.Level, msg string, ctx ...interface{}) {
+	if level == slog.LevelWarn {
+		l.mockLoggerData.warnCalls++
+	}
+}
 
 func (l *LoggerMock) Warn(msg string, ctx ...interface{}) {
 	l.mockLoggerData.warnCalls++
+}
+
+func (l *LoggerMock) Enabled(ctx context.Context, level slog.Level) bool {
+	return true
 }
 
 func TestAtomicDaemonAndMintLogsError(t *testing.T) {
@@ -296,7 +319,7 @@ func (e *ReturnNilMintRequestEVMMock) DaemonRevertToSnapshot(snapshot int) {
 	defaultRevertToSnapshot(&e.mockEVMCallerData, snapshot)
 }
 
-func (e *ReturnNilMintRequestEVMMock) GetBlockTime() *big.Int {
+func (e *ReturnNilMintRequestEVMMock) GetBlockTime() uint64 {
 	return defaultGetBlockTime(&e.mockEVMCallerData)
 }
 
@@ -304,7 +327,11 @@ func (e *ReturnNilMintRequestEVMMock) GetGasLimit() uint64 {
 	return defaultGetGasLimit(&e.mockEVMCallerData)
 }
 
-func (e *ReturnNilMintRequestEVMMock) AddBalance(addr common.Address, amount *big.Int) {
+func (e *ReturnNilMintRequestEVMMock) GetChainID() *big.Int {
+	return params.FlareChainID
+}
+
+func (e *ReturnNilMintRequestEVMMock) AddBalance(addr common.Address, amount *uint256.Int) {
 	defaultAddBalance(&e.mockEVMCallerData, addr, amount)
 }
 
@@ -327,11 +354,12 @@ func TestDaemonHandlesNilMintRequest(t *testing.T) {
 }
 
 func TestDaemonShouldNotMintMoreThanMax(t *testing.T) {
-	mintRequest, _ := new(big.Int).SetString("60000000000000000000000001", 10)
+	mintRequest := new(uint256.Int)
+	mintRequest.SetFromDecimal("60000000000000000000000001")
 	mockEVMCallerData := &MockEVMCallerData{
-		blockTime:         *big.NewInt(0),
+		blockTime:         0,
 		gasLimit:          0,
-		mintRequestReturn: *big.NewInt(0),
+		mintRequestReturn: *uint256.NewInt(0),
 	}
 	defaultEVMMock := &DefaultEVMMock{
 		mockEVMCallerData: *mockEVMCallerData,
@@ -343,31 +371,8 @@ func TestDaemonShouldNotMintMoreThanMax(t *testing.T) {
 		if err, ok := err.(*ErrMaxMintExceeded); !ok {
 			want := &ErrMaxMintExceeded{
 				mintRequest: mintRequest,
-				mintMax:     GetMaximumMintRequest(big.NewInt(0)),
+				mintMax:     GetMaximumMintRequest(params.FlareChainID, 0),
 			}
-			t.Errorf("got '%s' want '%s'", err.Error(), want.Error())
-		}
-	} else {
-		t.Errorf("no error returned as expected")
-	}
-}
-
-func TestDaemonShouldNotMintNegative(t *testing.T) {
-	mintRequest := big.NewInt(-1)
-	mockEVMCallerData := &MockEVMCallerData{
-		blockTime:         *big.NewInt(0),
-		gasLimit:          0,
-		mintRequestReturn: *big.NewInt(0),
-	}
-	defaultEVMMock := &DefaultEVMMock{
-		mockEVMCallerData: *mockEVMCallerData,
-	}
-
-	err := mint(defaultEVMMock, mintRequest)
-
-	if err != nil {
-		if err, ok := err.(*ErrMintNegative); !ok {
-			want := &ErrMintNegative{}
 			t.Errorf("got '%s' want '%s'", err.Error(), want.Error())
 		}
 	} else {
@@ -377,11 +382,12 @@ func TestDaemonShouldNotMintNegative(t *testing.T) {
 
 func TestDaemonShouldMint(t *testing.T) {
 	// Assemble
-	mintRequest, _ := new(big.Int).SetString("60000000000000000000000000", 10)
+	mintRequest := new(uint256.Int)
+	mintRequest.SetFromDecimal("60000000000000000000000000")
 	mockEVMCallerData := &MockEVMCallerData{
-		blockTime:         *big.NewInt(0),
+		blockTime:         0,
 		gasLimit:          0,
-		mintRequestReturn: *big.NewInt(0),
+		mintRequestReturn: *uint256.NewInt(0),
 	}
 	defaultEVMMock := &DefaultEVMMock{
 		mockEVMCallerData: *mockEVMCallerData,
@@ -395,11 +401,11 @@ func TestDaemonShouldMint(t *testing.T) {
 		if defaultEVMMock.mockEVMCallerData.addBalanceCalls != 1 {
 			t.Errorf("AddBalance not called as expected")
 		}
-		if defaultEVMMock.mockEVMCallerData.lastAddBalanceAddr.String() != GetDaemonContractAddr(big.NewInt(0)) {
-			t.Errorf("wanted addr %s; got addr %s", GetDaemonContractAddr(big.NewInt(0)), defaultEVMMock.mockEVMCallerData.lastAddBalanceAddr)
+		if defaultEVMMock.mockEVMCallerData.lastAddBalanceAddr.String() != GetDaemonContractAddr(0) {
+			t.Errorf("wanted addr %s; got addr %s", GetDaemonContractAddr(0), defaultEVMMock.mockEVMCallerData.lastAddBalanceAddr)
 		}
 		if defaultEVMMock.mockEVMCallerData.lastAddBalanceAmount.Cmp(mintRequest) != 0 {
-			t.Errorf("wanted amount %s; got amount %s", mintRequest.Text(10), defaultEVMMock.mockEVMCallerData.lastAddBalanceAmount.Text(10))
+			t.Errorf("wanted amount %s; got amount %s", mintRequest.String(), defaultEVMMock.mockEVMCallerData.lastAddBalanceAmount.String())
 		}
 	} else {
 		t.Errorf("unexpected error returned; was = %s", err.Error())
@@ -408,11 +414,11 @@ func TestDaemonShouldMint(t *testing.T) {
 
 func TestDaemonShouldNotErrorMintingZero(t *testing.T) {
 	// Assemble
-	mintRequest := big.NewInt(0)
+	mintRequest := uint256.NewInt(0)
 	mockEVMCallerData := &MockEVMCallerData{
-		blockTime:         *big.NewInt(0),
+		blockTime:         0,
 		gasLimit:          0,
-		mintRequestReturn: *big.NewInt(0),
+		mintRequestReturn: *uint256.NewInt(0),
 	}
 	defaultEVMMock := &DefaultEVMMock{
 		mockEVMCallerData: *mockEVMCallerData,
@@ -432,9 +438,10 @@ func TestDaemonShouldNotErrorMintingZero(t *testing.T) {
 }
 
 func TestDaemonFiredAndMinted(t *testing.T) {
-	mintRequestReturn, _ := new(big.Int).SetString("60000000000000000000000000", 10)
+	mintRequestReturn := new(uint256.Int)
+	mintRequestReturn.SetFromDecimal("60000000000000000000000000")
 	mockEVMCallerData := &MockEVMCallerData{
-		blockTime:         *big.NewInt(0),
+		blockTime:         0,
 		gasLimit:          0,
 		mintRequestReturn: *mintRequestReturn,
 	}
@@ -456,9 +463,10 @@ func TestDaemonFiredAndMinted(t *testing.T) {
 }
 
 func TestDaemonShouldNotMintMoreThanLimit(t *testing.T) {
-	mintRequestReturn, _ := new(big.Int).SetString("60000000000000000000000001", 10)
+	mintRequestReturn := new(uint256.Int)
+	mintRequestReturn.SetFromDecimal("60000000000000000000000001")
 	mockEVMCallerData := &MockEVMCallerData{
-		blockTime:         *big.NewInt(0),
+		blockTime:         0,
 		gasLimit:          0,
 		mintRequestReturn: *mintRequestReturn,
 	}
@@ -481,28 +489,46 @@ func TestDaemonShouldNotMintMoreThanLimit(t *testing.T) {
 
 func TestPrioritisedContract(t *testing.T) {
 	address := common.HexToAddress("0x123456789aBCdEF123456789aBCdef123456789A")
-	preForkTime := big.NewInt(time.Date(2024, time.March, 20, 12, 0, 0, 0, time.UTC).Unix())
-	postForkTime := big.NewInt(time.Date(2024, time.March, 27, 12, 0, 0, 0, time.UTC).Unix())
+	preForkTime := uint64(time.Date(2024, time.March, 20, 12, 0, 0, 0, time.UTC).Unix())
+	postForkTime := uint64(time.Date(2024, time.March, 27, 12, 0, 0, 0, time.UTC).Unix())
+	postPrefixForkTime := uint64(time.Date(2024, time.October, 11, 0, 0, 0, 0, time.UTC).Unix())
+	initialGas := uint64(0)
 	ret0 := [32]byte{}
 	ret1 := [32]byte{}
 	ret1[31] = 1
+	data := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
 
-	if IsPrioritisedContractCall(params.FlareChainID, &address, nil, preForkTime) {
+	if IsPrioritisedContractCall(params.FlareChainID, preForkTime, &address, data, nil, initialGas) {
 		t.Errorf("Expected false for wrong address")
 	}
-	if !IsPrioritisedContractCall(params.FlareChainID, &prioritisedFTSOContractAddress, nil, preForkTime) {
+	if !IsPrioritisedContractCall(params.FlareChainID, preForkTime, &prioritisedFTSOContractAddress, nil, nil, initialGas) {
 		t.Errorf("Expected true for FTSO contract")
 	}
-	if IsPrioritisedContractCall(params.FlareChainID, &prioritisedSubmitterContractAddress, ret1[:], preForkTime) {
+	if IsPrioritisedContractCall(params.FlareChainID, preForkTime, &prioritisedSubmitterContractAddress, data, ret1[:], initialGas) {
 		t.Errorf("Expected false for submitter contract before activation")
 	}
-	if !IsPrioritisedContractCall(params.FlareChainID, &prioritisedSubmitterContractAddress, ret1[:], postForkTime) {
+	if !IsPrioritisedContractCall(params.FlareChainID, postForkTime, &prioritisedSubmitterContractAddress, data, ret1[:], initialGas) {
 		t.Errorf("Expected true for submitter contract after activation")
 	}
-	if IsPrioritisedContractCall(params.FlareChainID, &prioritisedSubmitterContractAddress, ret0[:], postForkTime) {
+	if IsPrioritisedContractCall(params.FlareChainID, postForkTime, &prioritisedSubmitterContractAddress, data, ret0[:], initialGas) {
 		t.Errorf("Expected false for submitter contract with wrong return value")
 	}
-	if IsPrioritisedContractCall(params.FlareChainID, &prioritisedSubmitterContractAddress, nil, postForkTime) {
+	if IsPrioritisedContractCall(params.FlareChainID, postForkTime, &prioritisedSubmitterContractAddress, data, nil, initialGas) {
 		t.Errorf("Expected false for submitter contract with no return value")
+	}
+	if IsPrioritisedContractCall(params.FlareChainID, postPrefixForkTime, &prioritisedSubmitterContractAddress, data, ret1[:], initialGas) {
+		t.Errorf("Expected false for submitter contract after prefix activation with wrong data")
+	}
+	if !IsPrioritisedContractCall(params.FlareChainID, postPrefixForkTime, &prioritisedSubmitterContractAddress, []byte{0xe1, 0xb1, 0x57, 0xe7, 0x00, 0x00}, ret1[:], initialGas) {
+		t.Errorf("Expected true for submitter contract after prefix activation with correct data")
+	}
+	if IsPrioritisedContractCall(params.FlareChainID, postPrefixForkTime, &prioritisedSubmitterContractAddress, make([]byte, prioritisedCallDataCap+1), ret1[:], initialGas) {
+		t.Errorf("Expected false for submitter contract after prefix activation with too long data")
+	}
+	if IsPrioritisedContractCall(params.FlareChainID, postPrefixForkTime, &prioritisedFTSOContractAddress, data, nil, initialGas) {
+		t.Errorf("Expected false for FTSO contract after prefix activation with wrong data")
+	}
+	if !IsPrioritisedContractCall(params.FlareChainID, postPrefixForkTime, &prioritisedFTSOContractAddress, []byte{0x8f, 0xc6, 0xf6, 0x67, 0x05}, nil, initialGas) {
+		t.Errorf("Expected true for FTSO contract after prefix activation with correct data")
 	}
 }

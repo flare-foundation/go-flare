@@ -1,9 +1,11 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package block
 
 import (
+	"context"
+
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/consensus/snowman"
 	"github.com/ava-labs/avalanchego/snow/engine/common"
@@ -33,19 +35,28 @@ type ChainVM interface {
 	//
 	// If the VM doesn't want to issue a new block, an error should be
 	// returned.
-	BuildBlock() (snowman.Block, error)
+	BuildBlock(context.Context) (snowman.Block, error)
 
 	// Notify the VM of the currently preferred block.
 	//
 	// This should always be a block that has no children known to consensus.
-	SetPreference(ids.ID) error
+	SetPreference(ctx context.Context, blkID ids.ID) error
 
 	// LastAccepted returns the ID of the last accepted block.
 	//
 	// If no blocks have been accepted by consensus yet, it is assumed there is
 	// a definitionally accepted block, the Genesis block, that will be
 	// returned.
-	LastAccepted() (ids.ID, error)
+	LastAccepted(context.Context) (ids.ID, error)
+
+	// GetBlockIDAtHeight returns:
+	// - The ID of the block that was accepted with [height].
+	// - database.ErrNotFound if the [height] index is unknown.
+	//
+	// Note: A returned value of [database.ErrNotFound] typically means that the
+	//       underlying VM was state synced and does not have access to the
+	//       blockID at [height].
+	GetBlockIDAtHeight(ctx context.Context, height uint64) (ids.ID, error)
 }
 
 // Getter defines the functionality for fetching a block by its ID.
@@ -59,7 +70,7 @@ type Getter interface {
 	// accepted by the consensus engine should be able to be fetched. It is not
 	// required for blocks that have been rejected by the consensus engine to be
 	// able to be fetched.
-	GetBlock(ids.ID) (snowman.Block, error)
+	GetBlock(ctx context.Context, blkID ids.ID) (snowman.Block, error)
 }
 
 // Parser defines the functionality for fetching a block by its bytes.
@@ -70,5 +81,13 @@ type Parser interface {
 	// bytes.
 	//
 	// It is expected for all historical blocks to be parseable.
-	ParseBlock([]byte) (snowman.Block, error)
+	ParseBlock(ctx context.Context, blockBytes []byte) (snowman.Block, error)
+}
+
+// ParseFunc defines a function that parses raw bytes into a block.
+type ParseFunc func(context.Context, []byte) (snowman.Block, error)
+
+// ParseBlock wraps a ParseFunc into a ParseBlock function, to be used by a Parser interface
+func (f ParseFunc) ParseBlock(ctx context.Context, blockBytes []byte) (snowman.Block, error) {
+	return f(ctx, blockBytes)
 }

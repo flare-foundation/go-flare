@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package avm
@@ -6,6 +6,16 @@ package avm
 import (
 	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+var (
+	errCalledInitialize      = errors.New("unexpectedly called Initialize")
+	errCalledBootstrapping   = errors.New("unexpectedly called Bootstrapping")
+	errCalledBootstrapped    = errors.New("unexpectedly called Bootstrapped")
+	errCalledVerifyTransfer  = errors.New("unexpectedly called VerifyTransfer")
+	errCalledVerifyOperation = errors.New("unexpectedly called VerifyOperation")
 )
 
 type FxTest struct {
@@ -40,9 +50,9 @@ func (fx *FxTest) Initialize(vm interface{}) error {
 		return nil
 	}
 	if fx.T != nil {
-		fx.T.Fatalf("Unexpectedly called Initialize")
+		require.FailNow(fx.T, errCalledInitialize.Error())
 	}
-	return errors.New("Unexpectedly called Initialize")
+	return errCalledInitialize
 }
 
 func (fx *FxTest) Bootstrapping() error {
@@ -53,9 +63,9 @@ func (fx *FxTest) Bootstrapping() error {
 		return nil
 	}
 	if fx.T != nil {
-		fx.T.Fatalf("Unexpectedly called Bootstrapping")
+		require.FailNow(fx.T, errCalledBootstrapping.Error())
 	}
-	return errors.New("Unexpectedly called Bootstrapping")
+	return errCalledBootstrapping
 }
 
 func (fx *FxTest) Bootstrapped() error {
@@ -66,9 +76,9 @@ func (fx *FxTest) Bootstrapped() error {
 		return nil
 	}
 	if fx.T != nil {
-		fx.T.Fatalf("Unexpectedly called Bootstrapped")
+		require.FailNow(fx.T, errCalledBootstrapped.Error())
 	}
-	return errors.New("Unexpectedly called Bootstrapped")
+	return errCalledBootstrapped
 }
 
 func (fx *FxTest) VerifyTransfer(tx, in, cred, utxo interface{}) error {
@@ -79,9 +89,9 @@ func (fx *FxTest) VerifyTransfer(tx, in, cred, utxo interface{}) error {
 		return nil
 	}
 	if fx.T != nil {
-		fx.T.Fatalf("Unexpectedly called VerifyTransfer")
+		require.FailNow(fx.T, errCalledVerifyTransfer.Error())
 	}
-	return errors.New("Unexpectedly called VerifyTransfer")
+	return errCalledVerifyTransfer
 }
 
 func (fx *FxTest) VerifyOperation(tx, op, cred interface{}, utxos []interface{}) error {
@@ -92,7 +102,7 @@ func (fx *FxTest) VerifyOperation(tx, op, cred interface{}, utxos []interface{})
 		return nil
 	}
 	if fx.T != nil {
-		fx.T.Fatalf("Unexpectedly called VerifyOperation")
+		require.FailNow(fx.T, errCalledVerifyOperation.Error())
 	}
-	return errors.New("Unexpectedly called VerifyOperation")
+	return errCalledVerifyOperation
 }

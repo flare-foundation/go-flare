@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package logging
@@ -8,6 +8,10 @@ import (
 
 	"go.uber.org/zap"
 )
+
+// Func defines the method signature used for all logging methods on the Logger
+// interface.
+type Func func(msg string, fields ...zap.Field)
 
 // Logger defines the interface that is used to keep a record of all events that
 // happen to the program
@@ -36,16 +40,10 @@ type Logger interface {
 	// aspect of the program
 	Verbo(msg string, fields ...zap.Field)
 
-	// If assertions are enabled, will result in a panic if err is non-nil
-	AssertNoError(err error)
-	// If assertions are enabled, will result in a panic if b is false
-	AssertTrue(b bool, msg string, fields ...zap.Field)
-	// If assertions are enabled, the function will be called and will result in
-	// a panic the returned value is non-nil
-	AssertDeferredNoError(f func() error)
-	// If assertions are enabled, the function will be called and will result in
-	//  a panic the returned value is false
-	AssertDeferredTrue(f func() bool, msg string, fields ...zap.Field)
+	// SetLevel that this logger should log to
+	SetLevel(level Level)
+	// Enabled returns true if the given level is at or above this level.
+	Enabled(lvl Level) bool
 
 	// Recovers a panic, logs the error, and rethrows the panic.
 	StopOnPanic()

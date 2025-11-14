@@ -1,12 +1,16 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package snow
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/ava-labs/avalanchego/proto/pb/p2p"
+)
 
 const (
-	Initializing = iota
+	Initializing State = iota
 	StateSyncing
 	Bootstrapping
 	NormalOp
@@ -29,4 +33,9 @@ func (st State) String() string {
 	default:
 		return "Unknown state"
 	}
+}
+
+type EngineState struct {
+	Type  p2p.EngineType
+	State State
 }

@@ -1,9 +1,10 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package corruptabledb
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -11,8 +12,8 @@ import (
 )
 
 var (
-	_ database.Database = &Database{}
-	_ database.Batch    = &batch{}
+	_ database.Database = (*Database)(nil)
+	_ database.Batch    = (*batch)(nil)
 )
 
 // CorruptableDB is a wrapper around Database
@@ -70,19 +71,49 @@ func (db *Database) Compact(start []byte, limit []byte) error {
 	return db.handleError(db.Database.Compact(start, limit))
 }
 
-func (db *Database) Close() error { return db.handleError(db.Database.Close()) }
+func (db *Database) Close() error {
+	return db.handleError(db.Database.Close())
+}
 
-func (db *Database) HealthCheck() (interface{}, error) {
+func (db *Database) HealthCheck(ctx context.Context) (interface{}, error) {
 	if err := db.corrupted(); err != nil {
 		return nil, err
 	}
-	return db.Database.HealthCheck()
+	return db.Database.HealthCheck(ctx)
 }
 
 func (db *Database) NewBatch() database.Batch {
 	return &batch{
 		Batch: db.Database.NewBatch(),
 		db:    db,
+	}
+}
+
+func (db *Database) NewIterator() database.Iterator {
+	return &iterator{
+		Iterator: db.Database.NewIterator(),
+		db:       db,
+	}
+}
+
+func (db *Database) NewIteratorWithStart(start []byte) database.Iterator {
+	return &iterator{
+		Iterator: db.Database.NewIteratorWithStart(start),
+		db:       db,
+	}
+}
+
+func (db *Database) NewIteratorWithPrefix(prefix []byte) database.Iterator {
+	return &iterator{
+		Iterator: db.Database.NewIteratorWithPrefix(prefix),
+		db:       db,
+	}
+}
+
+func (db *Database) NewIteratorWithStartAndPrefix(start, prefix []byte) database.Iterator {
+	return &iterator{
+		Iterator: db.Database.NewIteratorWithStartAndPrefix(start, prefix),
+		db:       db,
 	}
 }
 
@@ -123,4 +154,25 @@ func (b *batch) Write() error {
 		return err
 	}
 	return b.db.handleError(b.Batch.Write())
+}
+
+type iterator struct {
+	database.Iterator
+	db *Database
+}
+
+func (it *iterator) Next() bool {
+	if err := it.db.corrupted(); err != nil {
+		return false
+	}
+	val := it.Iterator.Next()
+	_ = it.db.handleError(it.Iterator.Error())
+	return val
+}
+
+func (it *iterator) Error() error {
+	if err := it.db.corrupted(); err != nil {
+		return err
+	}
+	return it.db.handleError(it.Iterator.Error())
 }

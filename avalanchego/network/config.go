@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package network
@@ -6,6 +6,7 @@ package network
 import (
 	"crypto"
 	"crypto/tls"
+	"net/netip"
 	"time"
 
 	"github.com/ava-labs/avalanchego/ids"
@@ -14,13 +15,19 @@ import (
 	"github.com/ava-labs/avalanchego/snow/networking/tracker"
 	"github.com/ava-labs/avalanchego/snow/uptime"
 	"github.com/ava-labs/avalanchego/snow/validators"
-	"github.com/ava-labs/avalanchego/utils/ips"
+	"github.com/ava-labs/avalanchego/utils"
+	"github.com/ava-labs/avalanchego/utils/compression"
+	"github.com/ava-labs/avalanchego/utils/crypto/bls"
+	"github.com/ava-labs/avalanchego/utils/set"
 )
 
 // HealthConfig describes parameters for network layer health checks.
 type HealthConfig struct {
+	// Marks if the health check should be enabled
+	Enabled bool `json:"-"`
+
 	// MinConnectedPeers is the minimum number of peers that the network should
-	// be connected to to be considered healthy.
+	// be connected to be considered healthy.
 	MinConnectedPeers uint `json:"minConnectedPeers"`
 
 	// MaxTimeSinceMsgReceived is the maximum amount of time since the network
@@ -52,21 +59,13 @@ type PeerListGossipConfig struct {
 	// gossip event.
 	PeerListNumValidatorIPs uint32 `json:"peerListNumValidatorIPs"`
 
-	// PeerListValidatorGossipSize is the number of validators to gossip the IPs
-	// to in every IP gossip event.
-	PeerListValidatorGossipSize uint32 `json:"peerListValidatorGossipSize"`
+	// PeerListPullGossipFreq is the frequency that this node will attempt to
+	// request signed IPs from its peers.
+	PeerListPullGossipFreq time.Duration `json:"peerListPullGossipFreq"`
 
-	// PeerListNonValidatorGossipSize is the number of non-validators to gossip
-	// the IPs to in every IP gossip event.
-	PeerListNonValidatorGossipSize uint32 `json:"peerListNonValidatorGossipSize"`
-
-	// PeerListPeersGossipSize is the number of peers to gossip
-	// the IPs to in every IP gossip event.
-	PeerListPeersGossipSize uint32 `json:"peerListPeersGossipSize"`
-
-	// PeerListGossipFreq is the frequency that this node will attempt to gossip
-	// signed IPs to its peers.
-	PeerListGossipFreq time.Duration `json:"peerListGossipFreq"`
+	// PeerListBloomResetFreq is how frequently this node will recalculate the
+	// IP tracker's bloom filter.
+	PeerListBloomResetFreq time.Duration `json:"peerListBloomResetFreq"`
 }
 
 type TimeoutConfig struct {
@@ -104,30 +103,40 @@ type Config struct {
 	DelayConfig          `json:"delayConfig"`
 	ThrottlerConfig      ThrottlerConfig `json:"throttlerConfig"`
 
+	ProxyEnabled           bool          `json:"proxyEnabled"`
+	ProxyReadHeaderTimeout time.Duration `json:"proxyReadHeaderTimeout"`
+
 	DialerConfig dialer.Config `json:"dialerConfig"`
 	TLSConfig    *tls.Config   `json:"-"`
 
-	Namespace          string            `json:"namespace"`
-	MyNodeID           ids.NodeID        `json:"myNodeID"`
-	MyIPPort           ips.DynamicIPPort `json:"myIP"`
-	NetworkID          uint32            `json:"networkID"`
-	MaxClockDifference time.Duration     `json:"maxClockDifference"`
-	PingFrequency      time.Duration     `json:"pingFrequency"`
-	AllowPrivateIPs    bool              `json:"allowPrivateIPs"`
+	TLSKeyLogFile string `json:"tlsKeyLogFile"`
 
-	// CompressionEnabled will compress available outbound messages when set to
-	// true.
-	CompressionEnabled bool `json:"compressionEnabled"`
+	MyNodeID           ids.NodeID                    `json:"myNodeID"`
+	MyIPPort           *utils.Atomic[netip.AddrPort] `json:"myIP"`
+	NetworkID          uint32                        `json:"networkID"`
+	MaxClockDifference time.Duration                 `json:"maxClockDifference"`
+	PingFrequency      time.Duration                 `json:"pingFrequency"`
+	AllowPrivateIPs    bool                          `json:"allowPrivateIPs"`
+
+	SupportedACPs set.Set[uint32] `json:"supportedACPs"`
+	ObjectedACPs  set.Set[uint32] `json:"objectedACPs"`
+
+	// The compression type to use when compressing outbound messages.
+	// Assumes all peers support this compression type.
+	CompressionType compression.Type `json:"compressionType"`
 
 	// TLSKey is this node's TLS key that is used to sign IPs.
 	TLSKey crypto.Signer `json:"-"`
+	// BLSKey is this node's BLS key that is used to sign IPs.
+	BLSKey *bls.SecretKey `json:"-"`
 
-	// WhitelistedSubnets of the node.
-	WhitelistedSubnets ids.Set        `json:"whitelistedSubnets"`
-	Beacons            validators.Set `json:"beacons"`
+	// TrackedSubnets of the node.
+	// It must not include the primary network ID.
+	TrackedSubnets set.Set[ids.ID]    `json:"-"`
+	Beacons        validators.Manager `json:"-"`
 
 	// Validators are the current validators in the Avalanche network
-	Validators validators.Manager `json:"validators"`
+	Validators validators.Manager `json:"-"`
 
 	UptimeCalculator uptime.Calculator `json:"-"`
 
@@ -137,7 +146,7 @@ type Config struct {
 
 	// UptimeRequirement is the fraction of time a validator must be online and
 	// responsive for us to vote that they should receive a staking reward.
-	UptimeRequirement float64 `json:"uptimeRequirement"`
+	UptimeRequirement float64 `json:"-"`
 
 	// RequireValidatorToConnect require that all connections must have at least
 	// one validator between the 2 peers. This can be useful to enable if the

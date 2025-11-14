@@ -1,20 +1,36 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package sampler
 
 import (
-	"sort"
+	"cmp"
 
-	safemath "github.com/ava-labs/avalanchego/utils/math"
+	"github.com/ava-labs/avalanchego/utils"
+	"github.com/ava-labs/avalanchego/utils/math"
 )
 
-var _ Weighted = &weightedHeap{}
+var (
+	_ Weighted                            = (*weightedHeap)(nil)
+	_ utils.Sortable[weightedHeapElement] = weightedHeapElement{}
+)
 
 type weightedHeapElement struct {
 	weight           uint64
 	cumulativeWeight uint64
 	index            int
+}
+
+// Compare the elements. Weight is in decreasing order. Index is in increasing
+// order.
+func (e weightedHeapElement) Compare(other weightedHeapElement) int {
+	// By accounting for the initial index of the weights, this results in a
+	// stable sort. We do this rather than using `sort.Stable` because of the
+	// reported change in performance of the sort used.
+	if weightCmp := cmp.Compare(other.weight, e.weight); weightCmp != 0 {
+		return weightCmp
+	}
+	return cmp.Compare(e.index, other.index)
 }
 
 // Sampling is performed by executing a search over a tree of elements in the
@@ -44,14 +60,14 @@ func (s *weightedHeap) Initialize(weights []uint64) error {
 	}
 
 	// Optimize so that the most probable values are at the top of the heap
-	sortWeightedHeap(s.heap)
+	utils.Sort(s.heap)
 
 	// Initialize the heap
 	for i := len(s.heap) - 1; i > 0; i-- {
 		// Explicitly performing a shift here allows the compiler to avoid
 		// checking for negative numbers, which saves a couple cycles
 		parentIndex := (i - 1) >> 1
-		newWeight, err := safemath.Add64(
+		newWeight, err := math.Add(
 			s.heap[parentIndex].cumulativeWeight,
 			s.heap[i].cumulativeWeight,
 		)
@@ -64,9 +80,9 @@ func (s *weightedHeap) Initialize(weights []uint64) error {
 	return nil
 }
 
-func (s *weightedHeap) Sample(value uint64) (int, error) {
+func (s *weightedHeap) Sample(value uint64) (int, bool) {
 	if len(s.heap) == 0 || s.heap[0].cumulativeWeight <= value {
-		return 0, errOutOfRange
+		return 0, false
 	}
 
 	index := 0
@@ -74,7 +90,7 @@ func (s *weightedHeap) Sample(value uint64) (int, error) {
 		currentElement := s.heap[index]
 		currentWeight := currentElement.weight
 		if value < currentWeight {
-			return currentElement.index, nil
+			return currentElement.index, true
 		}
 		value -= currentWeight
 
@@ -88,31 +104,4 @@ func (s *weightedHeap) Sample(value uint64) (int, error) {
 			index++
 		}
 	}
-}
-
-type innerSortWeightedHeap []weightedHeapElement
-
-func (lst innerSortWeightedHeap) Less(i, j int) bool {
-	// By accounting for the initial index of the weights, this results in a
-	// stable sort. We do this rather than using `sort.Stable` because of the
-	// reported change in performance of the sort used.
-	if lst[i].weight > lst[j].weight {
-		return true
-	}
-	if lst[i].weight < lst[j].weight {
-		return false
-	}
-	return lst[i].index < lst[j].index
-}
-
-func (lst innerSortWeightedHeap) Len() int {
-	return len(lst)
-}
-
-func (lst innerSortWeightedHeap) Swap(i, j int) {
-	lst[j], lst[i] = lst[i], lst[j]
-}
-
-func sortWeightedHeap(heap []weightedHeapElement) {
-	sort.Sort(innerSortWeightedHeap(heap))
 }

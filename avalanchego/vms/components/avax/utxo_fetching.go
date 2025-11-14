@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package avax
@@ -9,12 +9,14 @@ import (
 	"math"
 
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils"
+	"github.com/ava-labs/avalanchego/utils/set"
 
 	safemath "github.com/ava-labs/avalanchego/utils/math"
 )
 
 // GetBalance returns the current balance of [addrs]
-func GetBalance(db UTXOReader, addrs ids.ShortSet) (uint64, error) {
+func GetBalance(db UTXOReader, addrs set.Set[ids.ShortID]) (uint64, error) {
 	utxos, err := GetAllUTXOs(db, addrs)
 	if err != nil {
 		return 0, fmt.Errorf("couldn't get UTXOs: %w", err)
@@ -22,7 +24,8 @@ func GetBalance(db UTXOReader, addrs ids.ShortSet) (uint64, error) {
 	balance := uint64(0)
 	for _, utxo := range utxos {
 		if out, ok := utxo.Out.(Amounter); ok {
-			if balance, err = safemath.Add64(out.Amount(), balance); err != nil {
+			balance, err = safemath.Add(out.Amount(), balance)
+			if err != nil {
 				return 0, err
 			}
 		}
@@ -30,7 +33,7 @@ func GetBalance(db UTXOReader, addrs ids.ShortSet) (uint64, error) {
 	return balance, nil
 }
 
-func GetAllUTXOs(db UTXOReader, addrs ids.ShortSet) ([]*UTXO, error) {
+func GetAllUTXOs(db UTXOReader, addrs set.Set[ids.ShortID]) ([]*UTXO, error) {
 	utxos, _, _, err := GetPaginatedUTXOs(
 		db,
 		addrs,
@@ -57,17 +60,18 @@ func GetAllUTXOs(db UTXOReader, addrs ids.ShortSet) ([]*UTXO, error) {
 // * The ID of the last UTXO fetched
 func GetPaginatedUTXOs(
 	db UTXOReader,
-	addrs ids.ShortSet,
+	addrs set.Set[ids.ShortID],
 	lastAddr ids.ShortID,
 	lastUTXOID ids.ID,
 	limit int,
 ) ([]*UTXO, ids.ShortID, ids.ID, error) {
 	var (
 		utxos      []*UTXO
-		seen       ids.Set              // IDs of UTXOs already in the list
-		searchSize = limit              // the limit diminishes which can impact the expected return
-		addrsList  = addrs.SortedList() // enforces the same ordering for pagination
+		seen       set.Set[ids.ID] // IDs of UTXOs already in the list
+		searchSize = limit         // the limit diminishes which can impact the expected return
+		addrsList  = addrs.List()
 	)
+	utils.Sort(addrsList) // enforces the same ordering for pagination
 	for _, addr := range addrsList {
 		start := ids.Empty
 		if comp := bytes.Compare(addr.Bytes(), lastAddr.Bytes()); comp == -1 { // Skip addresses before [startAddr]
@@ -80,7 +84,7 @@ func GetPaginatedUTXOs(
 
 		utxoIDs, err := db.UTXOIDs(addr.Bytes(), start, searchSize) // Get UTXOs associated with [addr]
 		if err != nil {
-			return nil, ids.ShortID{}, ids.ID{}, fmt.Errorf("couldn't get UTXOs for address %s: %w", addr, err)
+			return nil, ids.ShortID{}, ids.Empty, fmt.Errorf("couldn't get UTXOs for address %s: %w", addr, err)
 		}
 		for _, utxoID := range utxoIDs {
 			lastUTXOID = utxoID // The last searched UTXO - not the last found
@@ -91,7 +95,7 @@ func GetPaginatedUTXOs(
 
 			utxo, err := db.GetUTXO(utxoID)
 			if err != nil {
-				return nil, ids.ShortID{}, ids.ID{}, fmt.Errorf("couldn't get UTXO %s: %w", utxoID, err)
+				return nil, ids.ShortID{}, ids.Empty, fmt.Errorf("couldn't get UTXO %s: %w", utxoID, err)
 			}
 
 			utxos = append(utxos, utxo)

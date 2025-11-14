@@ -1,17 +1,23 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package version
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 )
 
+var (
+	errMissingVersionPrefix = errors.New("missing required version prefix")
+	errMissingVersions      = errors.New("missing version numbers")
+)
+
 func Parse(s string) (*Semantic, error) {
 	if !strings.HasPrefix(s, "v") {
-		return nil, fmt.Errorf("version string %q missing required prefix", s)
+		return nil, fmt.Errorf("%w: %q", errMissingVersionPrefix, s)
 	}
 
 	s = s[1:]
@@ -27,28 +33,10 @@ func Parse(s string) (*Semantic, error) {
 	}, nil
 }
 
-func ParseApplication(s string) (*Application, error) {
-	if !strings.HasPrefix(s, "avalanche/") {
-		return nil, fmt.Errorf("application string %q missing required prefix", s)
-	}
-
-	s = s[10:]
-	major, minor, patch, err := parseVersions(s)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Application{
-		Major: major,
-		Minor: minor,
-		Patch: patch,
-	}, nil
-}
-
 func parseVersions(s string) (int, int, int, error) {
 	splitVersion := strings.SplitN(s, ".", 3)
-	if len(splitVersion) != 3 {
-		return 0, 0, 0, fmt.Errorf("failed to parse %s as a version", s)
+	if numSeperators := len(splitVersion); numSeperators != 3 {
+		return 0, 0, 0, fmt.Errorf("%w: expected 3 only got %d", errMissingVersions, numSeperators)
 	}
 
 	major, err := strconv.Atoi(splitVersion[0])

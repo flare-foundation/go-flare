@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package state
@@ -11,6 +11,9 @@ import (
 
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils/iterator"
+	"github.com/ava-labs/avalanchego/vms/platformvm/genesis/genesistest"
+	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
 )
 
 func TestBaseStakersPruning(t *testing.T) {
@@ -83,7 +86,10 @@ func TestBaseStakersValidator(t *testing.T) {
 	require.ErrorIs(err, database.ErrNotFound)
 
 	stakerIterator := v.GetStakerIterator()
-	assertIteratorsEqual(t, NewSliceIterator(delegator), stakerIterator)
+	require.Equal(
+		[]*Staker{delegator},
+		iterator.ToSlice(stakerIterator),
+	)
 
 	v.PutValidator(staker)
 
@@ -94,7 +100,10 @@ func TestBaseStakersValidator(t *testing.T) {
 	v.DeleteDelegator(delegator)
 
 	stakerIterator = v.GetStakerIterator()
-	assertIteratorsEqual(t, NewSliceIterator(staker), stakerIterator)
+	require.Equal(
+		[]*Staker{staker},
+		iterator.ToSlice(stakerIterator),
+	)
 
 	v.DeleteValidator(staker)
 
@@ -102,30 +111,42 @@ func TestBaseStakersValidator(t *testing.T) {
 	require.ErrorIs(err, database.ErrNotFound)
 
 	stakerIterator = v.GetStakerIterator()
-	assertIteratorsEqual(t, EmptyIterator, stakerIterator)
+	require.Empty(
+		iterator.ToSlice(stakerIterator),
+	)
 }
 
 func TestBaseStakersDelegator(t *testing.T) {
+	require := require.New(t)
 	staker := newTestStaker()
 	delegator := newTestStaker()
 
 	v := newBaseStakers()
 
 	delegatorIterator := v.GetDelegatorIterator(delegator.SubnetID, delegator.NodeID)
-	assertIteratorsEqual(t, EmptyIterator, delegatorIterator)
+	require.Empty(
+		iterator.ToSlice(delegatorIterator),
+	)
 
 	v.PutDelegator(delegator)
 
 	delegatorIterator = v.GetDelegatorIterator(delegator.SubnetID, ids.GenerateTestNodeID())
-	assertIteratorsEqual(t, EmptyIterator, delegatorIterator)
+	require.Empty(
+		iterator.ToSlice(delegatorIterator),
+	)
 
 	delegatorIterator = v.GetDelegatorIterator(delegator.SubnetID, delegator.NodeID)
-	assertIteratorsEqual(t, NewSliceIterator(delegator), delegatorIterator)
+	require.Equal(
+		[]*Staker{delegator},
+		iterator.ToSlice(delegatorIterator),
+	)
 
 	v.DeleteDelegator(delegator)
 
 	delegatorIterator = v.GetDelegatorIterator(delegator.SubnetID, delegator.NodeID)
-	assertIteratorsEqual(t, EmptyIterator, delegatorIterator)
+	require.Empty(
+		iterator.ToSlice(delegatorIterator),
+	)
 
 	v.PutValidator(staker)
 
@@ -133,7 +154,9 @@ func TestBaseStakersDelegator(t *testing.T) {
 	v.DeleteDelegator(delegator)
 
 	delegatorIterator = v.GetDelegatorIterator(staker.SubnetID, staker.NodeID)
-	assertIteratorsEqual(t, EmptyIterator, delegatorIterator)
+	require.Empty(
+		iterator.ToSlice(delegatorIterator),
+	)
 }
 
 func TestDiffStakersValidator(t *testing.T) {
@@ -145,59 +168,94 @@ func TestDiffStakersValidator(t *testing.T) {
 
 	v.PutDelegator(delegator)
 
-	_, ok := v.GetValidator(ids.GenerateTestID(), delegator.NodeID)
-	require.False(ok)
+	// validators not available in the diff are marked as unmodified
+	_, status := v.GetValidator(ids.GenerateTestID(), delegator.NodeID)
+	require.Equal(unmodified, status)
 
-	_, ok = v.GetValidator(delegator.SubnetID, ids.GenerateTestNodeID())
-	require.False(ok)
+	_, status = v.GetValidator(delegator.SubnetID, ids.GenerateTestNodeID())
+	require.Equal(unmodified, status)
 
-	_, ok = v.GetValidator(delegator.SubnetID, delegator.NodeID)
-	require.False(ok)
+	// delegator addition shouldn't change validatorStatus
+	_, status = v.GetValidator(delegator.SubnetID, delegator.NodeID)
+	require.Equal(unmodified, status)
 
-	stakerIterator := v.GetStakerIterator(EmptyIterator)
-	assertIteratorsEqual(t, NewSliceIterator(delegator), stakerIterator)
+	stakerIterator := v.GetStakerIterator(iterator.Empty[*Staker]{})
+	require.Equal(
+		[]*Staker{delegator},
+		iterator.ToSlice(stakerIterator),
+	)
 
-	v.PutValidator(staker)
+	require.NoError(v.PutValidator(staker))
 
-	returnedStaker, ok := v.GetValidator(staker.SubnetID, staker.NodeID)
-	require.True(ok)
+	returnedStaker, status := v.GetValidator(staker.SubnetID, staker.NodeID)
+	require.Equal(added, status)
 	require.Equal(staker, returnedStaker)
 
 	v.DeleteValidator(staker)
 
-	returnedStaker, ok = v.GetValidator(staker.SubnetID, staker.NodeID)
-	require.True(ok)
-	require.Nil(returnedStaker)
+	// Validators created and deleted in the same diff are marked as unmodified.
+	// This means they won't be pushed to baseState if diff.Apply(baseState) is
+	// called.
+	_, status = v.GetValidator(staker.SubnetID, staker.NodeID)
+	require.Equal(unmodified, status)
 
-	stakerIterator = v.GetStakerIterator(EmptyIterator)
-	assertIteratorsEqual(t, NewSliceIterator(delegator), stakerIterator)
+	stakerIterator = v.GetStakerIterator(iterator.Empty[*Staker]{})
+	require.Equal(
+		[]*Staker{delegator},
+		iterator.ToSlice(stakerIterator),
+	)
 }
 
-func TestDiffStakersDelegator(t *testing.T) {
+func TestDiffStakersDeleteValidator(t *testing.T) {
+	require := require.New(t)
 	staker := newTestStaker()
 	delegator := newTestStaker()
 
 	v := diffStakers{}
 
-	v.PutValidator(staker)
+	_, status := v.GetValidator(ids.GenerateTestID(), delegator.NodeID)
+	require.Equal(unmodified, status)
 
-	delegatorIterator := v.GetDelegatorIterator(EmptyIterator, ids.GenerateTestID(), delegator.NodeID)
-	assertIteratorsEqual(t, EmptyIterator, delegatorIterator)
+	v.DeleteValidator(staker)
+
+	returnedStaker, status := v.GetValidator(staker.SubnetID, staker.NodeID)
+	require.Equal(deleted, status)
+	require.Nil(returnedStaker)
+}
+
+func TestDiffStakersDelegator(t *testing.T) {
+	require := require.New(t)
+	staker := newTestStaker()
+	delegator := newTestStaker()
+
+	v := diffStakers{}
+
+	require.NoError(v.PutValidator(staker))
+
+	delegatorIterator := v.GetDelegatorIterator(iterator.Empty[*Staker]{}, ids.GenerateTestID(), delegator.NodeID)
+	require.Empty(
+		iterator.ToSlice(delegatorIterator),
+	)
 
 	v.PutDelegator(delegator)
 
-	delegatorIterator = v.GetDelegatorIterator(EmptyIterator, delegator.SubnetID, delegator.NodeID)
-	assertIteratorsEqual(t, NewSliceIterator(delegator), delegatorIterator)
+	delegatorIterator = v.GetDelegatorIterator(iterator.Empty[*Staker]{}, delegator.SubnetID, delegator.NodeID)
+	require.Equal(
+		[]*Staker{delegator},
+		iterator.ToSlice(delegatorIterator),
+	)
 
 	v.DeleteDelegator(delegator)
 
-	delegatorIterator = v.GetDelegatorIterator(EmptyIterator, ids.GenerateTestID(), delegator.NodeID)
-	assertIteratorsEqual(t, EmptyIterator, delegatorIterator)
+	delegatorIterator = v.GetDelegatorIterator(iterator.Empty[*Staker]{}, ids.GenerateTestID(), delegator.NodeID)
+	require.Empty(
+		iterator.ToSlice(delegatorIterator),
+	)
 }
 
 func newTestStaker() *Staker {
 	startTime := time.Now().Round(time.Second)
-	endTime := startTime.Add(28 * 24 * time.Hour)
+	endTime := startTime.Add(genesistest.DefaultValidatorDuration)
 	return &Staker{
 		TxID:            ids.GenerateTestID(),
 		NodeID:          ids.GenerateTestNodeID(),
@@ -208,23 +266,6 @@ func newTestStaker() *Staker {
 		PotentialReward: 1,
 
 		NextTime: endTime,
-		Priority: PrimaryNetworkDelegatorCurrentPriority,
+		Priority: txs.PrimaryNetworkDelegatorCurrentPriority,
 	}
-}
-
-func assertIteratorsEqual(t *testing.T, expected, actual StakerIterator) {
-	t.Helper()
-
-	for expected.Next() {
-		require.True(t, actual.Next())
-
-		expectedStaker := expected.Value()
-		actualStaker := actual.Value()
-
-		require.Equal(t, expectedStaker, actualStaker)
-	}
-	require.False(t, actual.Next())
-
-	expected.Release()
-	actual.Release()
 }

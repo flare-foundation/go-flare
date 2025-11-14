@@ -27,16 +27,20 @@
 package vm
 
 import (
+	"bytes"
 	"math"
 	"math/big"
+	"sort"
 	"testing"
 
 	"github.com/ava-labs/coreth/core/rawdb"
 	"github.com/ava-labs/coreth/core/state"
+	"github.com/ava-labs/coreth/core/types"
 	"github.com/ava-labs/coreth/params"
 	"github.com/ava-labs/coreth/vmerrs"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/holiman/uint256"
 )
 
 func TestMemoryGasCost(t *testing.T) {
@@ -92,19 +96,19 @@ func TestEIP2200(t *testing.T) {
 	for i, tt := range eip2200Tests {
 		address := common.BytesToAddress([]byte("contract"))
 
-		statedb, _ := state.New(common.Hash{}, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+		statedb, _ := state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
 		statedb.CreateAccount(address)
 		statedb.SetCode(address, hexutil.MustDecode(tt.input))
 		statedb.SetState(address, common.Hash{}, common.BytesToHash([]byte{tt.original}))
 		statedb.Finalise(true) // Push the state into the "original" slot
 
 		vmctx := BlockContext{
-			CanTransfer: func(StateDB, common.Address, *big.Int) bool { return true },
-			Transfer:    func(StateDB, common.Address, common.Address, *big.Int) {},
+			CanTransfer: func(StateDB, common.Address, *uint256.Int) bool { return true },
+			Transfer:    func(StateDB, common.Address, common.Address, *uint256.Int) {},
 		}
-		vmenv := NewEVM(vmctx, TxContext{}, statedb, params.TestChainConfig, Config{ExtraEips: []int{2200}})
+		vmenv := NewEVM(vmctx, TxContext{}, statedb, params.TestFlareChainConfig, Config{ExtraEips: []int{2200}})
 
-		_, gas, err := vmenv.Call(AccountRef(common.Address{}), address, nil, tt.gaspool, new(big.Int))
+		_, gas, err := vmenv.Call(AccountRef(common.Address{}), address, nil, tt.gaspool, new(uint256.Int))
 		if err != tt.failure {
 			t.Errorf("test %d: failure mismatch: have %v, want %v", i, err, tt.failure)
 		}
@@ -113,6 +117,78 @@ func TestEIP2200(t *testing.T) {
 		}
 		if refund := vmenv.StateDB.GetRefund(); refund != tt.refund {
 			t.Errorf("test %d: gas refund mismatch: have %v, want %v", i, refund, tt.refund)
+		}
+	}
+}
+
+var createGasTests = []struct {
+	code       string
+	eip3860    bool
+	gasUsed    uint64
+	minimumGas uint64
+}{
+	// legacy create(0, 0, 0xc000) without 3860 used
+	{"0x61C00060006000f0" + "600052" + "60206000F3", false, 41237, 41237},
+	// legacy create(0, 0, 0xc000) _with_ 3860
+	{"0x61C00060006000f0" + "600052" + "60206000F3", true, 44309, 44309},
+	// create2(0, 0, 0xc001, 0) without 3860
+	{"0x600061C00160006000f5" + "600052" + "60206000F3", false, 50471, 50471},
+	// create2(0, 0, 0xc001, 0) (too large), with 3860
+	{"0x600061C00160006000f5" + "600052" + "60206000F3", true, 32012, 100_000},
+	// create2(0, 0, 0xc000, 0)
+	// This case is trying to deploy code at (within) the limit
+	{"0x600061C00060006000f5" + "600052" + "60206000F3", true, 53528, 53528},
+	// create2(0, 0, 0xc001, 0)
+	// This case is trying to deploy code exceeding the limit
+	{"0x600061C00160006000f5" + "600052" + "60206000F3", true, 32024, 100000},
+}
+
+func TestCreateGas(t *testing.T) {
+	for i, tt := range createGasTests {
+		gasUsed := uint64(0)
+		doCheck := func(testGas int) bool {
+			address := common.BytesToAddress([]byte("contract"))
+			statedb, _ := state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+			statedb.CreateAccount(address)
+			statedb.SetCode(address, hexutil.MustDecode(tt.code))
+			statedb.Finalise(true)
+			vmctx := BlockContext{
+				CanTransfer: func(StateDB, common.Address, *uint256.Int) bool { return true },
+				Transfer:    func(StateDB, common.Address, common.Address, *uint256.Int) {},
+				BlockNumber: big.NewInt(0),
+			}
+			config := Config{}
+			if tt.eip3860 {
+				config.ExtraEips = []int{3860}
+			}
+
+			// Note: we use Cortina instead of AllEthashProtocolChanges (upstream)
+			// because it is the last fork before the activation of EIP-3860
+			vmenv := NewEVM(vmctx, TxContext{}, statedb, params.TestFlareCortinaChainConfig, config)
+			startGas := uint64(testGas)
+			ret, gas, err := vmenv.Call(AccountRef(common.Address{}), address, nil, startGas, new(uint256.Int))
+			if err != nil {
+				return false
+			}
+			gasUsed = startGas - gas
+			if len(ret) != 32 {
+				t.Fatalf("test %d: expected 32 bytes returned, have %d", i, len(ret))
+			}
+			if bytes.Equal(ret, make([]byte, 32)) {
+				// Failure
+				return false
+			}
+			return true
+		}
+		minGas := sort.Search(100_000, doCheck)
+		if uint64(minGas) != tt.minimumGas {
+			t.Fatalf("test %d: min gas error, want %d, have %d", i, tt.minimumGas, minGas)
+		}
+		// If the deployment succeeded, we also check the gas used
+		if minGas < 100_000 {
+			if gasUsed != tt.gasUsed {
+				t.Errorf("test %d: gas used mismatch: have %v, want %v", i, gasUsed, tt.gasUsed)
+			}
 		}
 	}
 }

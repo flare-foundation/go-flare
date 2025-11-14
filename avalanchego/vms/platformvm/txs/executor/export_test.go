@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package executor
@@ -7,94 +7,72 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
-
 	"github.com/stretchr/testify/require"
 
 	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/utils/crypto"
+	"github.com/ava-labs/avalanchego/upgrade/upgradetest"
+	"github.com/ava-labs/avalanchego/vms/components/avax"
+	"github.com/ava-labs/avalanchego/vms/platformvm/genesis/genesistest"
 	"github.com/ava-labs/avalanchego/vms/platformvm/state"
+	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 )
 
 func TestNewExportTx(t *testing.T) {
-	env := newEnvironment()
+	env := newEnvironment(t, upgradetest.Banff)
 	env.ctx.Lock.Lock()
-	defer func() {
-		if err := shutdownEnvironment(env); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	defer env.ctx.Lock.Unlock()
 
-	type test struct {
+	tests := []struct {
 		description        string
 		destinationChainID ids.ID
-		sourceKeys         []*crypto.PrivateKeySECP256K1R
 		timestamp          time.Time
-		shouldErr          bool
-		shouldVerify       bool
-	}
-
-	sourceKey := preFundedKeys[0]
-
-	tests := []test{
+	}{
 		{
 			description:        "P->X export",
-			destinationChainID: xChainID,
-			sourceKeys:         []*crypto.PrivateKeySECP256K1R{sourceKey},
-			timestamp:          defaultValidateStartTime,
-			shouldErr:          false,
-			shouldVerify:       true,
+			destinationChainID: env.ctx.XChainID,
+			timestamp:          genesistest.DefaultValidatorStartTime,
 		},
 		{
 			description:        "P->C export",
-			destinationChainID: cChainID,
-			sourceKeys:         []*crypto.PrivateKeySECP256K1R{sourceKey},
-			timestamp:          env.config.ApricotPhase5Time,
-			shouldErr:          false,
-			shouldVerify:       true,
+			destinationChainID: env.ctx.CChainID,
+			timestamp:          env.config.UpgradeConfig.ApricotPhase5Time,
 		},
 	}
 
-	to := ids.GenerateTestShortID()
 	for _, tt := range tests {
 		t.Run(tt.description, func(t *testing.T) {
 			require := require.New(t)
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
 
-			tx, err := env.txBuilder.NewExportTx(
-				defaultBalance-defaultTxFee, // Amount of tokens to export
+			wallet := newWallet(t, env, walletConfig{})
+
+			tx, err := wallet.IssueExportTx(
 				tt.destinationChainID,
-				to,
-				tt.sourceKeys,
-				ids.ShortEmpty, // Change address
+				[]*avax.TransferableOutput{{
+					Asset: avax.Asset{ID: env.ctx.AVAXAssetID},
+					Out: &secp256k1fx.TransferOutput{
+						Amt: genesistest.DefaultInitialBalance - defaultTxFee,
+						OutputOwners: secp256k1fx.OutputOwners{
+							Threshold: 1,
+							Addrs:     []ids.ShortID{ids.GenerateTestShortID()},
+						},
+					},
+				}},
 			)
-			if tt.shouldErr {
-				require.Error(err)
-				return
-			}
 			require.NoError(err)
 
-			fakedState, err := state.NewDiff(lastAcceptedID, env)
+			stateDiff, err := state.NewDiff(lastAcceptedID, env)
 			require.NoError(err)
 
-			fakedState.SetTimestamp(tt.timestamp)
+			stateDiff.SetTimestamp(tt.timestamp)
 
-			fakedParent := ids.GenerateTestID()
-			env.SetState(fakedParent, fakedState)
-
-			verifier := MempoolTxVerifier{
-				Backend:       &env.backend,
-				ParentID:      fakedParent,
-				StateVersions: env,
-				Tx:            tx,
-			}
-			err = tx.Unsigned.Visit(&verifier)
-			if tt.shouldVerify {
-				require.NoError(err)
-			} else {
-				require.Error(err)
-			}
+			feeCalculator := state.PickFeeCalculator(env.config, stateDiff)
+			_, _, _, err = StandardTx(
+				&env.backend,
+				feeCalculator,
+				tx,
+				stateDiff,
+			)
+			require.NoError(err)
 		})
 	}
 }

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package executor
@@ -9,255 +9,234 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/upgrade/upgradetest"
 	"github.com/ava-labs/avalanchego/utils/constants"
-	"github.com/ava-labs/avalanchego/utils/crypto"
+	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
 	"github.com/ava-labs/avalanchego/utils/hashing"
+	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/utils/units"
-	"github.com/ava-labs/avalanchego/vms/components/avax"
+	"github.com/ava-labs/avalanchego/vms/platformvm/genesis/genesistest"
 	"github.com/ava-labs/avalanchego/vms/platformvm/state"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
+	"github.com/ava-labs/avalanchego/vms/platformvm/utxo"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 )
 
 // Ensure Execute fails when there are not enough control sigs
 func TestCreateChainTxInsufficientControlSigs(t *testing.T) {
-	env := newEnvironment()
+	require := require.New(t)
+	env := newEnvironment(t, upgradetest.Banff)
 	env.ctx.Lock.Lock()
-	defer func() {
-		if err := shutdownEnvironment(env); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	defer env.ctx.Lock.Unlock()
 
-	tx, err := env.txBuilder.NewCreateChainTx(
-		testSubnet1.ID(),
+	subnetID := testSubnet1.ID()
+	wallet := newWallet(t, env, walletConfig{
+		subnetIDs: []ids.ID{subnetID},
+	})
+
+	tx, err := wallet.IssueCreateChainTx(
+		subnetID,
 		nil,
 		constants.AVMID,
 		nil,
 		"chain name",
-		[]*crypto.PrivateKeySECP256K1R{preFundedKeys[0], preFundedKeys[1]},
-		ids.ShortEmpty,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(err)
 
 	// Remove a signature
 	tx.Creds[0].(*secp256k1fx.Credential).Sigs = tx.Creds[0].(*secp256k1fx.Credential).Sigs[1:]
 
 	stateDiff, err := state.NewDiff(lastAcceptedID, env)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(err)
 
-	executor := StandardTxExecutor{
-		Backend: &env.backend,
-		State:   stateDiff,
-		Tx:      tx,
-	}
-	err = tx.Unsigned.Visit(&executor)
-	if err == nil {
-		t.Fatal("should have erred because a sig is missing")
-	}
+	feeCalculator := state.PickFeeCalculator(env.config, stateDiff)
+	_, _, _, err = StandardTx(
+		&env.backend,
+		feeCalculator,
+		tx,
+		stateDiff,
+	)
+	require.ErrorIs(err, errUnauthorizedModification)
 }
 
 // Ensure Execute fails when an incorrect control signature is given
 func TestCreateChainTxWrongControlSig(t *testing.T) {
-	env := newEnvironment()
+	require := require.New(t)
+	env := newEnvironment(t, upgradetest.Banff)
 	env.ctx.Lock.Lock()
-	defer func() {
-		if err := shutdownEnvironment(env); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	defer env.ctx.Lock.Unlock()
 
-	tx, err := env.txBuilder.NewCreateChainTx(
-		testSubnet1.ID(),
+	subnetID := testSubnet1.ID()
+	wallet := newWallet(t, env, walletConfig{
+		subnetIDs: []ids.ID{subnetID},
+	})
+
+	tx, err := wallet.IssueCreateChainTx(
+		subnetID,
 		nil,
 		constants.AVMID,
 		nil,
 		"chain name",
-		[]*crypto.PrivateKeySECP256K1R{testSubnet1ControlKeys[0], testSubnet1ControlKeys[1]},
-		ids.ShortEmpty,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(err)
 
 	// Generate new, random key to sign tx with
-	factory := crypto.FactorySECP256K1R{}
-	key, err := factory.NewPrivateKey()
-	if err != nil {
-		t.Fatal(err)
-	}
+	key, err := secp256k1.NewPrivateKey()
+	require.NoError(err)
 
 	// Replace a valid signature with one from another key
 	sig, err := key.SignHash(hashing.ComputeHash256(tx.Unsigned.Bytes()))
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(err)
 	copy(tx.Creds[0].(*secp256k1fx.Credential).Sigs[0][:], sig)
 
 	stateDiff, err := state.NewDiff(lastAcceptedID, env)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(err)
 
-	executor := StandardTxExecutor{
-		Backend: &env.backend,
-		State:   stateDiff,
-		Tx:      tx,
-	}
-	err = tx.Unsigned.Visit(&executor)
-	if err == nil {
-		t.Fatal("should have failed verification because a sig is invalid")
-	}
+	feeCalculator := state.PickFeeCalculator(env.config, stateDiff)
+	_, _, _, err = StandardTx(
+		&env.backend,
+		feeCalculator,
+		tx,
+		stateDiff,
+	)
+	require.ErrorIs(err, errUnauthorizedModification)
 }
 
 // Ensure Execute fails when the Subnet the blockchain specifies as
 // its validator set doesn't exist
 func TestCreateChainTxNoSuchSubnet(t *testing.T) {
-	env := newEnvironment()
+	require := require.New(t)
+	env := newEnvironment(t, upgradetest.Banff)
 	env.ctx.Lock.Lock()
-	defer func() {
-		if err := shutdownEnvironment(env); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	defer env.ctx.Lock.Unlock()
 
-	tx, err := env.txBuilder.NewCreateChainTx(
-		testSubnet1.ID(),
+	subnetID := testSubnet1.ID()
+	wallet := newWallet(t, env, walletConfig{
+		subnetIDs: []ids.ID{subnetID},
+	})
+
+	tx, err := wallet.IssueCreateChainTx(
+		subnetID,
 		nil,
 		constants.AVMID,
 		nil,
 		"chain name",
-		[]*crypto.PrivateKeySECP256K1R{testSubnet1ControlKeys[0], testSubnet1ControlKeys[1]},
-		ids.ShortEmpty,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(err)
 
 	tx.Unsigned.(*txs.CreateChainTx).SubnetID = ids.GenerateTestID()
 
 	stateDiff, err := state.NewDiff(lastAcceptedID, env)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(err)
 
-	executor := StandardTxExecutor{
-		Backend: &env.backend,
-		State:   stateDiff,
-		Tx:      tx,
-	}
-	err = tx.Unsigned.Visit(&executor)
-	if err == nil {
-		t.Fatal("should have failed because subnet doesn't exist")
-	}
+	builderDiff, err := state.NewDiffOn(stateDiff)
+	require.NoError(err)
+
+	feeCalculator := state.PickFeeCalculator(env.config, builderDiff)
+	_, _, _, err = StandardTx(
+		&env.backend,
+		feeCalculator,
+		tx,
+		stateDiff,
+	)
+	require.ErrorIs(err, database.ErrNotFound)
 }
 
 // Ensure valid tx passes semanticVerify
 func TestCreateChainTxValid(t *testing.T) {
-	env := newEnvironment()
+	require := require.New(t)
+	env := newEnvironment(t, upgradetest.Banff)
 	env.ctx.Lock.Lock()
-	defer func() {
-		if err := shutdownEnvironment(env); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	defer env.ctx.Lock.Unlock()
 
-	tx, err := env.txBuilder.NewCreateChainTx(
-		testSubnet1.ID(),
+	subnetID := testSubnet1.ID()
+	wallet := newWallet(t, env, walletConfig{
+		subnetIDs: []ids.ID{subnetID},
+	})
+
+	tx, err := wallet.IssueCreateChainTx(
+		subnetID,
 		nil,
 		constants.AVMID,
 		nil,
 		"chain name",
-		[]*crypto.PrivateKeySECP256K1R{testSubnet1ControlKeys[0], testSubnet1ControlKeys[1]},
-		ids.ShortEmpty,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(err)
 
 	stateDiff, err := state.NewDiff(lastAcceptedID, env)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(err)
 
-	executor := StandardTxExecutor{
-		Backend: &env.backend,
-		State:   stateDiff,
-		Tx:      tx,
-	}
-	err = tx.Unsigned.Visit(&executor)
-	if err != nil {
-		t.Fatalf("expected tx to pass verification but got error: %v", err)
-	}
+	builderDiff, err := state.NewDiffOn(stateDiff)
+	require.NoError(err)
+
+	feeCalculator := state.PickFeeCalculator(env.config, builderDiff)
+	_, _, _, err = StandardTx(
+		&env.backend,
+		feeCalculator,
+		tx,
+		stateDiff,
+	)
+	require.NoError(err)
 }
 
 func TestCreateChainTxAP3FeeChange(t *testing.T) {
-	ap3Time := defaultGenesisTime.Add(time.Hour)
+	ap3Time := genesistest.DefaultValidatorStartTime.Add(time.Hour)
 	tests := []struct {
-		name         string
-		time         time.Time
-		fee          uint64
-		expectsError bool
+		name          string
+		time          time.Time
+		fee           uint64
+		expectedError error
 	}{
 		{
-			name:         "pre-fork - correctly priced",
-			time:         defaultGenesisTime,
-			fee:          0,
-			expectsError: false,
+			name:          "pre-fork - correctly priced",
+			time:          genesistest.DefaultValidatorStartTime,
+			fee:           0,
+			expectedError: nil,
 		},
 		{
-			name:         "post-fork - incorrectly priced",
-			time:         ap3Time,
-			fee:          100*defaultTxFee - 1*units.NanoAvax,
-			expectsError: true,
+			name:          "post-fork - incorrectly priced",
+			time:          ap3Time,
+			fee:           100*defaultTxFee - 1*units.NanoAvax,
+			expectedError: utxo.ErrInsufficientUnlockedFunds,
 		},
 		{
-			name:         "post-fork - correctly priced",
-			time:         ap3Time,
-			fee:          100 * defaultTxFee,
-			expectsError: false,
+			name:          "post-fork - correctly priced",
+			time:          ap3Time,
+			fee:           100 * defaultTxFee,
+			expectedError: nil,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			require := require.New(t)
 
-			env := newEnvironment()
-			env.config.ApricotPhase3Time = ap3Time
+			env := newEnvironment(t, upgradetest.Banff)
+			env.config.UpgradeConfig.ApricotPhase3Time = ap3Time
 
-			defer func() {
-				if err := shutdownEnvironment(env); err != nil {
-					t.Fatal(err)
-				}
-			}()
-			ins, outs, _, signers, err := env.utxosHandler.Spend(preFundedKeys, 0, test.fee, ids.ShortEmpty)
-			require.NoError(err)
-
-			subnetAuth, subnetSigners, err := env.utxosHandler.Authorize(env.state, testSubnet1.ID(), preFundedKeys)
-			require.NoError(err)
-
-			signers = append(signers, subnetSigners)
-
-			// Create the tx
-
-			utx := &txs.CreateChainTx{
-				BaseTx: txs.BaseTx{BaseTx: avax.BaseTx{
-					NetworkID:    env.ctx.NetworkID,
-					BlockchainID: env.ctx.ChainID,
-					Ins:          ins,
-					Outs:         outs,
-				}},
-				SubnetID:   testSubnet1.ID(),
-				VMID:       constants.AVMID,
-				SubnetAuth: subnetAuth,
+			addrs := set.NewSet[ids.ShortID](len(genesistest.DefaultFundedKeys))
+			for _, key := range genesistest.DefaultFundedKeys {
+				addrs.Add(key.Address())
 			}
-			tx := &txs.Tx{Unsigned: utx}
-			err = tx.Sign(txs.Codec, signers)
+
+			env.state.SetTimestamp(test.time) // to duly set fee
+
+			config := *env.config
+			config.StaticFeeConfig.CreateBlockchainTxFee = test.fee
+			subnetID := testSubnet1.ID()
+			wallet := newWallet(t, env, walletConfig{
+				config:    &config,
+				subnetIDs: []ids.ID{subnetID},
+			})
+
+			tx, err := wallet.IssueCreateChainTx(
+				subnetID,
+				nil,
+				ids.GenerateTestID(),
+				nil,
+				"",
+			)
 			require.NoError(err)
 
 			stateDiff, err := state.NewDiff(lastAcceptedID, env)
@@ -265,13 +244,59 @@ func TestCreateChainTxAP3FeeChange(t *testing.T) {
 
 			stateDiff.SetTimestamp(test.time)
 
-			executor := StandardTxExecutor{
-				Backend: &env.backend,
-				State:   stateDiff,
-				Tx:      tx,
-			}
-			err = tx.Unsigned.Visit(&executor)
-			require.Equal(test.expectsError, err != nil)
+			feeCalculator := state.PickFeeCalculator(env.config, stateDiff)
+			_, _, _, err = StandardTx(
+				&env.backend,
+				feeCalculator,
+				tx,
+				stateDiff,
+			)
+			require.ErrorIs(err, test.expectedError)
 		})
 	}
+}
+
+func TestEtnaCreateChainTxInvalidWithManagedSubnet(t *testing.T) {
+	require := require.New(t)
+	env := newEnvironment(t, upgradetest.Etna)
+	env.ctx.Lock.Lock()
+	defer env.ctx.Lock.Unlock()
+
+	subnetID := testSubnet1.ID()
+	wallet := newWallet(t, env, walletConfig{
+		subnetIDs: []ids.ID{subnetID},
+	})
+
+	tx, err := wallet.IssueCreateChainTx(
+		subnetID,
+		nil,
+		constants.AVMID,
+		nil,
+		"chain name",
+	)
+	require.NoError(err)
+
+	stateDiff, err := state.NewDiff(lastAcceptedID, env)
+	require.NoError(err)
+
+	builderDiff, err := state.NewDiffOn(stateDiff)
+	require.NoError(err)
+
+	stateDiff.SetSubnetToL1Conversion(
+		subnetID,
+		state.SubnetToL1Conversion{
+			ConversionID: ids.GenerateTestID(),
+			ChainID:      ids.GenerateTestID(),
+			Addr:         []byte("address"),
+		},
+	)
+
+	feeCalculator := state.PickFeeCalculator(env.config, builderDiff)
+	_, _, _, err = StandardTx(
+		&env.backend,
+		feeCalculator,
+		tx,
+		stateDiff,
+	)
+	require.ErrorIs(err, errIsImmutable)
 }

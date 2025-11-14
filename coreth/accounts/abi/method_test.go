@@ -45,6 +45,7 @@ const methoddata = `
 ]`
 
 func TestMethodString(t *testing.T) {
+	t.Parallel()
 	var table = []struct {
 		method      string
 		expectation string
@@ -94,11 +95,12 @@ func TestMethodString(t *testing.T) {
 
 	for _, test := range table {
 		var got string
-		if test.method == "fallback" {
+		switch test.method {
+		case "fallback":
 			got = abi.Fallback.String()
-		} else if test.method == "receive" {
+		case "receive":
 			got = abi.Receive.String()
-		} else {
+		default:
 			got = abi.Methods[test.method].String()
 		}
 		if got != test.expectation {
@@ -108,6 +110,7 @@ func TestMethodString(t *testing.T) {
 }
 
 func TestMethodSig(t *testing.T) {
+	t.Parallel()
 	var cases = []struct {
 		method string
 		expect string

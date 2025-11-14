@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package logging
@@ -11,11 +11,11 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-
+	"golang.org/x/exp/maps"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-var _ Factory = &factory{}
+var _ Factory = (*factory)(nil)
 
 // Factory creates new instances of different types of Logger
 type Factory interface {
@@ -25,16 +25,16 @@ type Factory interface {
 	// MakeChain creates a new logger to log the events of chain [chainID]
 	MakeChain(chainID string) (Logger, error)
 
-	// SetLogLevels sets log levels for all loggers in factory with given logger name, level pairs.
+	// SetLogLevel sets log levels for all loggers in factory with given logger name, level pairs.
 	SetLogLevel(name string, level Level) error
 
-	// SetDisplayLevels sets log display levels for all loggers in factory with given logger name, level pairs.
+	// SetDisplayLevel sets log display levels for all loggers in factory with given logger name, level pairs.
 	SetDisplayLevel(name string, level Level) error
 
-	// GetLogLevels returns all log levels in factory as name, level pairs
+	// GetLogLevel returns all log levels in factory as name, level pairs
 	GetLogLevel(name string) (Level, error)
 
-	// GetDisplayLevels returns all log display levels in factory as name, level pairs
+	// GetDisplayLevel returns all log display levels in factory as name, level pairs
 	GetDisplayLevel(name string) (Level, error)
 
 	// GetLoggerNames returns the names of all logs created by this factory
@@ -89,7 +89,7 @@ func (f *factory) makeLogger(config Config) (Logger, error) {
 	fileCore := NewWrappedCore(config.LogLevel, rw, fileEnc)
 	prefix := config.LogFormat.WrapPrefix(config.MsgPrefix)
 
-	l := NewLogger(config.Assertions, prefix, consoleCore, fileCore)
+	l := NewLogger(prefix, consoleCore, fileCore)
 	f.loggers[config.LoggerName] = logWrapper{
 		logger:       l,
 		displayLevel: consoleCore.AtomicLevel,
@@ -167,11 +167,7 @@ func (f *factory) GetLoggerNames() []string {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
 
-	names := make([]string, 0, len(f.loggers))
-	for name := range f.loggers {
-		names = append(names, name)
-	}
-	return names
+	return maps.Keys(f.loggers)
 }
 
 func (f *factory) Close() {

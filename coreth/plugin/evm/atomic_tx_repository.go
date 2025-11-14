@@ -6,7 +6,6 @@ package evm
 import (
 	"encoding/binary"
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -17,6 +16,7 @@ import (
 	"github.com/ava-labs/avalanchego/database/prefixdb"
 	"github.com/ava-labs/avalanchego/database/versiondb"
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/units"
 	"github.com/ava-labs/avalanchego/utils/wrappers"
 )
@@ -30,7 +30,9 @@ var (
 	atomicHeightTxDBPrefix     = []byte("atomicHeightTxDB")
 	atomicRepoMetadataDBPrefix = []byte("atomicRepoMetadataDB")
 	maxIndexedHeightKey        = []byte("maxIndexedAtomicTxHeight")
-	bonusBlocksRepairedKey     = []byte("bonusBlocksRepaired")
+
+	// Historically used to track the completion of a migration
+	// bonusBlocksRepairedKey     = []byte("bonusBlocksRepaired")
 )
 
 // AtomicTxRepository defines an entity that manages storage and indexing of
@@ -42,10 +44,8 @@ type AtomicTxRepository interface {
 	Write(height uint64, txs []*Tx) error
 	WriteBonus(height uint64, txs []*Tx) error
 
-	IterateByHeight(uint64) database.Iterator
-
-	IsBonusBlocksRepaired() (bool, error)
-	MarkBonusBlocksRepaired(repairedEntries uint64) error
+	IterateByHeight(start uint64) database.Iterator
+	Codec() codec.Manager
 }
 
 // atomicTxRepository is a prefixdb implementation of the AtomicTxRepository interface
@@ -67,7 +67,9 @@ type atomicTxRepository struct {
 	codec codec.Manager
 }
 
-func NewAtomicTxRepository(db *versiondb.Database, codec codec.Manager, lastAcceptedHeight uint64) (*atomicTxRepository, error) {
+func NewAtomicTxRepository(
+	db *versiondb.Database, codec codec.Manager, lastAcceptedHeight uint64,
+) (*atomicTxRepository, error) {
 	repo := &atomicTxRepository{
 		acceptedAtomicTxDB:         prefixdb.New(atomicTxIDDBPrefix, db),
 		acceptedAtomicTxByHeightDB: prefixdb.New(atomicHeightTxDBPrefix, db),
@@ -75,7 +77,10 @@ func NewAtomicTxRepository(db *versiondb.Database, codec codec.Manager, lastAcce
 		codec:                      codec,
 		db:                         db,
 	}
-	return repo, repo.initializeHeightIndex(lastAcceptedHeight)
+	if err := repo.initializeHeightIndex(lastAcceptedHeight); err != nil {
+		return nil, err
+	}
+	return repo, nil
 }
 
 // initializeHeightIndex initializes the atomic repository and takes care of any required migration from the previous database
@@ -259,7 +264,7 @@ func (a *atomicTxRepository) write(height uint64, txs []*Tx, bonus bool) error {
 		// with txs initialized from the txID index.
 		copyTxs := make([]*Tx, len(txs))
 		copy(copyTxs, txs)
-		sort.Slice(copyTxs, func(i, j int) bool { return copyTxs[i].ID().Hex() < copyTxs[j].ID().Hex() })
+		utils.Sort(copyTxs)
 		txs = copyTxs
 	}
 	heightBytes := make([]byte, wrappers.LongLen)
@@ -357,12 +362,6 @@ func (a *atomicTxRepository) IterateByHeight(height uint64) database.Iterator {
 	return a.acceptedAtomicTxByHeightDB.NewIteratorWithStart(heightBytes)
 }
 
-func (a *atomicTxRepository) IsBonusBlocksRepaired() (bool, error) {
-	return a.atomicRepoMetadataDB.Has(bonusBlocksRepairedKey)
-}
-
-func (a *atomicTxRepository) MarkBonusBlocksRepaired(repairedEntries uint64) error {
-	val := make([]byte, wrappers.LongLen)
-	binary.BigEndian.PutUint64(val, repairedEntries)
-	return a.atomicRepoMetadataDB.Put(bonusBlocksRepairedKey, val)
+func (a *atomicTxRepository) Codec() codec.Manager {
+	return a.codec
 }

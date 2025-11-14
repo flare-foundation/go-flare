@@ -1,26 +1,28 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package registry
 
-import "github.com/ava-labs/avalanchego/ids"
+import (
+	"context"
 
-var _ VMRegistry = &vmRegistry{}
+	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/vms"
+)
+
+var _ VMRegistry = (*vmRegistry)(nil)
 
 // VMRegistry defines functionality to get any new virtual machines on the node,
 // and install them if they're not already installed.
 type VMRegistry interface {
 	// Reload installs all non-installed vms on the node.
-	Reload() ([]ids.ID, map[ids.ID]error, error)
-	// ReloadWithReadLock installs all non-installed vms on the node assuming
-	// the http read lock is currently held.
-	ReloadWithReadLock() ([]ids.ID, map[ids.ID]error, error)
+	Reload(ctx context.Context) ([]ids.ID, map[ids.ID]error, error)
 }
 
 // VMRegistryConfig defines configurations for VMRegistry
 type VMRegistryConfig struct {
-	VMGetter     VMGetter
-	VMRegisterer VMRegisterer
+	VMGetter  VMGetter
+	VMManager vms.Manager
 }
 
 type vmRegistry struct {
@@ -34,17 +36,7 @@ func NewVMRegistry(config VMRegistryConfig) VMRegistry {
 	}
 }
 
-func (r *vmRegistry) Reload() ([]ids.ID, map[ids.ID]error, error) {
-	return r.reload(r.config.VMRegisterer)
-}
-
-func (r *vmRegistry) ReloadWithReadLock() ([]ids.ID, map[ids.ID]error, error) {
-	return r.reload(readRegisterer{
-		registerer: r.config.VMRegisterer,
-	})
-}
-
-func (r *vmRegistry) reload(registerer registerer) ([]ids.ID, map[ids.ID]error, error) {
+func (r *vmRegistry) Reload(ctx context.Context) ([]ids.ID, map[ids.ID]error, error) {
 	_, unregisteredVMs, err := r.config.VMGetter.Get()
 	if err != nil {
 		return nil, nil, err
@@ -54,7 +46,7 @@ func (r *vmRegistry) reload(registerer registerer) ([]ids.ID, map[ids.ID]error, 
 	failedVMs := make(map[ids.ID]error)
 
 	for vmID, factory := range unregisteredVMs {
-		if err := registerer.Register(vmID, factory); err != nil {
+		if err := r.config.VMManager.RegisterFactory(ctx, vmID, factory); err != nil {
 			failedVMs[vmID] = err
 			continue
 		}

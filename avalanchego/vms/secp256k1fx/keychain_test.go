@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2021, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019-2024, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package secp256k1fx
@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/utils/crypto"
+	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
 	"github.com/ava-labs/avalanchego/utils/formatting"
 )
 
@@ -27,8 +27,7 @@ var (
 )
 
 func TestNewKeychain(t *testing.T) {
-	require := require.New(t)
-	require.NotNil(NewKeychain())
+	require.NotNil(t, NewKeychain())
 }
 
 func TestKeychainGetUnknownAddr(t *testing.T) {
@@ -47,16 +46,16 @@ func TestKeychainAdd(t *testing.T) {
 	skBytes, err := formatting.Decode(formatting.HexNC, keys[0])
 	require.NoError(err)
 
-	skIntff, err := kc.factory.ToPrivateKey(skBytes)
+	sk, err := secp256k1.ToPrivateKey(skBytes)
 	require.NoError(err)
-	sk, ok := skIntff.(*crypto.PrivateKeySECP256K1R)
-	require.True(ok, "Factory should have returned secp256k1r private key")
 	kc.Add(sk)
 
 	addr, _ := ids.ShortFromString(addrs[0])
 	rsk, exists := kc.Get(addr)
 	require.True(exists)
-	require.Equal(sk.Bytes(), rsk.Bytes())
+	require.IsType(&secp256k1.PrivateKey{}, rsk)
+	rsksecp := rsk.(*secp256k1.PrivateKey)
+	require.Equal(sk.Bytes(), rsksecp.Bytes())
 
 	addrs := kc.Addresses()
 	require.Equal(1, addrs.Len())
@@ -67,7 +66,7 @@ func TestKeychainNew(t *testing.T) {
 	require := require.New(t)
 	kc := NewKeychain()
 
-	require.Equal(0, kc.Addresses().Len())
+	require.Zero(kc.Addresses().Len())
 
 	sk, err := kc.New()
 	require.NoError(err)
@@ -83,15 +82,13 @@ func TestKeychainMatch(t *testing.T) {
 	require := require.New(t)
 	kc := NewKeychain()
 
-	sks := []*crypto.PrivateKeySECP256K1R{}
+	sks := []*secp256k1.PrivateKey{}
 	for _, keyStr := range keys {
 		skBytes, err := formatting.Decode(formatting.HexNC, keyStr)
 		require.NoError(err)
 
-		skIntf, err := kc.factory.ToPrivateKey(skBytes)
+		sk, err := secp256k1.ToPrivateKey(skBytes)
 		require.NoError(err)
-		sk, ok := skIntf.(*crypto.PrivateKeySECP256K1R)
-		require.True(ok, "Factory should have returned secp256k1r private key")
 		sks = append(sks, sk)
 	}
 
@@ -130,15 +127,13 @@ func TestKeychainSpendMint(t *testing.T) {
 	require := require.New(t)
 	kc := NewKeychain()
 
-	sks := []*crypto.PrivateKeySECP256K1R{}
+	sks := []*secp256k1.PrivateKey{}
 	for _, keyStr := range keys {
 		skBytes, err := formatting.Decode(formatting.HexNC, keyStr)
 		require.NoError(err)
 
-		skIntf, err := kc.factory.ToPrivateKey(skBytes)
+		sk, err := secp256k1.ToPrivateKey(skBytes)
 		require.NoError(err)
-		sk, ok := skIntf.(*crypto.PrivateKeySECP256K1R)
-		require.True(ok, "Factory should have returned secp256k1r private key")
 		sks = append(sks, sk)
 	}
 
@@ -161,8 +156,8 @@ func TestKeychainSpendMint(t *testing.T) {
 	vinput, keys, err := kc.Spend(&mint, 0)
 	require.NoError(err)
 
-	input, ok := vinput.(*Input)
-	require.True(ok)
+	require.IsType(&Input{}, vinput)
+	input := vinput.(*Input)
 	require.NoError(input.Verify())
 	require.Equal([]uint32{0, 1}, input.SigIndices)
 	require.Len(keys, 2)
@@ -174,15 +169,13 @@ func TestKeychainSpendTransfer(t *testing.T) {
 	require := require.New(t)
 	kc := NewKeychain()
 
-	sks := []*crypto.PrivateKeySECP256K1R{}
+	sks := []*secp256k1.PrivateKey{}
 	for _, keyStr := range keys {
 		skBytes, err := formatting.Decode(formatting.HexNC, keyStr)
 		require.NoError(err)
 
-		skIntf, err := kc.factory.ToPrivateKey(skBytes)
+		sk, err := secp256k1.ToPrivateKey(skBytes)
 		require.NoError(err)
-		sk, ok := skIntf.(*crypto.PrivateKeySECP256K1R)
-		require.True(ok, "Factory should have returned secp256k1r private key")
 		sks = append(sks, sk)
 	}
 
@@ -212,8 +205,8 @@ func TestKeychainSpendTransfer(t *testing.T) {
 	vinput, keys, err := kc.Spend(&transfer, 54321)
 	require.NoError(err)
 
-	input, ok := vinput.(*TransferInput)
-	require.True(ok)
+	require.IsType(&TransferInput{}, vinput)
+	input := vinput.(*TransferInput)
 	require.NoError(input.Verify())
 	require.Equal(uint64(12345), input.Amount())
 	require.Equal([]uint32{0, 1}, input.SigIndices)
@@ -229,10 +222,8 @@ func TestKeychainString(t *testing.T) {
 	skBytes, err := formatting.Decode(formatting.HexNC, keys[0])
 	require.NoError(err)
 
-	skIntf, err := kc.factory.ToPrivateKey(skBytes)
+	sk, err := secp256k1.ToPrivateKey(skBytes)
 	require.NoError(err)
-	sk, ok := skIntf.(*crypto.PrivateKeySECP256K1R)
-	require.True(ok, "Factory should have returned secp256k1r private key")
 	kc.Add(sk)
 
 	expected := "Key[0]: Key: 0xb1ed77ad48555d49f03a7465f0685a7d86bfd5f3a3ccf1be01971ea8dec5471c Address: B6D4v1VtPYLbiUvYXtW4Px8oE9imC2vGW"
@@ -246,10 +237,8 @@ func TestKeychainPrefixedString(t *testing.T) {
 	skBytes, err := formatting.Decode(formatting.HexNC, keys[0])
 	require.NoError(err)
 
-	skIntf, err := kc.factory.ToPrivateKey(skBytes)
+	sk, err := secp256k1.ToPrivateKey(skBytes)
 	require.NoError(err)
-	sk, ok := skIntf.(*crypto.PrivateKeySECP256K1R)
-	require.True(ok, "Factory should have returned secp256k1r private key")
 	kc.Add(sk)
 
 	expected := "xDKey[0]: Key: 0xb1ed77ad48555d49f03a7465f0685a7d86bfd5f3a3ccf1be01971ea8dec5471c Address: B6D4v1VtPYLbiUvYXtW4Px8oE9imC2vGW"

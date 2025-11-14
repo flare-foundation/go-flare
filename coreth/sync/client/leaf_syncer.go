@@ -20,28 +20,27 @@ var (
 	errFailedToFetchLeafs = errors.New("failed to fetch leafs")
 )
 
-const defaultLeafRequestLimit = 1024
-
 // LeafSyncTask represents a complete task to be completed by the leaf syncer.
 // Note: each LeafSyncTask is processed on its own goroutine and there will
 // not be concurrent calls to the callback methods. Implementations should return
 // the same value for Root, Account, Start, and NodeType throughout the sync.
 // The value returned by End can change between calls to OnLeafs.
 type LeafSyncTask interface {
-	Root() common.Hash                 // Root of the trie to sync
-	Account() common.Hash              // Account hash of the trie to sync (only applicable to storage tries)
-	Start() []byte                     // Starting key to request new leaves
-	End() []byte                       // End key to request new leaves
-	NodeType() message.NodeType        // Specifies the message type (atomic/state trie) for the leaf syncer to send
-	OnStart() (bool, error)            // Callback when tasks begins, returns true if work can be skipped
-	OnLeafs(keys, vals [][]byte) error // Callback when new leaves are received from the network
-	OnFinish() error                   // Callback when there are no more leaves in the trie to sync or when we reach End()
+	Root() common.Hash                  // Root of the trie to sync
+	Account() common.Hash               // Account hash of the trie to sync (only applicable to storage tries)
+	Start() []byte                      // Starting key to request new leaves
+	End() []byte                        // End key to request new leaves
+	NodeType() message.NodeType         // Specifies the message type (atomic/state trie) for the leaf syncer to send
+	OnStart() (bool, error)             // Callback when tasks begins, returns true if work can be skipped
+	OnLeafs(keys, vals [][]byte) error  // Callback when new leaves are received from the network
+	OnFinish(ctx context.Context) error // Callback when there are no more leaves in the trie to sync or when we reach End()
 }
 
 type CallbackLeafSyncer struct {
-	client LeafClient
-	done   chan error
-	tasks  <-chan LeafSyncTask
+	client      LeafClient
+	done        chan error
+	tasks       <-chan LeafSyncTask
+	requestSize uint16
 }
 
 type LeafClient interface {
@@ -51,11 +50,12 @@ type LeafClient interface {
 }
 
 // NewCallbackLeafSyncer creates a new syncer object to perform leaf sync of tries.
-func NewCallbackLeafSyncer(client LeafClient, tasks <-chan LeafSyncTask) *CallbackLeafSyncer {
+func NewCallbackLeafSyncer(client LeafClient, tasks <-chan LeafSyncTask, requestSize uint16) *CallbackLeafSyncer {
 	return &CallbackLeafSyncer{
-		client: client,
-		done:   make(chan error),
-		tasks:  tasks,
+		client:      client,
+		done:        make(chan error),
+		tasks:       tasks,
+		requestSize: requestSize,
 	}
 }
 
@@ -101,7 +101,7 @@ func (c *CallbackLeafSyncer) syncTask(ctx context.Context, task LeafSyncTask) er
 			Root:     root,
 			Account:  task.Account(),
 			Start:    start,
-			Limit:    defaultLeafRequestLimit,
+			Limit:    c.requestSize,
 			NodeType: task.NodeType(),
 		})
 		if err != nil {
@@ -133,7 +133,7 @@ func (c *CallbackLeafSyncer) syncTask(ctx context.Context, task LeafSyncTask) er
 		// If we have completed syncing this task, invoke [OnFinish] and mark the task
 		// as complete.
 		if done || !leafsResponse.More {
-			return task.OnFinish()
+			return task.OnFinish(ctx)
 		}
 
 		if len(leafsResponse.Keys) == 0 {
