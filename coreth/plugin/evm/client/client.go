@@ -1,44 +1,42 @@
 // (c) 2019-2020, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
-package evm
+package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
-	"github.com/ethereum/go-ethereum/common"
 	"golang.org/x/exp/slog"
 
 	"github.com/ava-labs/avalanchego/api"
 	"github.com/ava-labs/avalanchego/ids"
-	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
 	"github.com/ava-labs/avalanchego/utils/formatting"
 	"github.com/ava-labs/avalanchego/utils/formatting/address"
 	"github.com/ava-labs/avalanchego/utils/json"
 	"github.com/ava-labs/avalanchego/utils/rpc"
+	"github.com/ava-labs/coreth/plugin/evm/atomic"
+	"github.com/ava-labs/coreth/plugin/evm/config"
 )
 
 // Interface compliance
 var _ Client = (*client)(nil)
 
+var errInvalidAddr = errors.New("invalid hex address")
+
 // Client interface for interacting with EVM [chain]
 type Client interface {
 	IssueTx(ctx context.Context, txBytes []byte, options ...rpc.Option) (ids.ID, error)
-	GetAtomicTxStatus(ctx context.Context, txID ids.ID, options ...rpc.Option) (Status, error)
+	GetAtomicTxStatus(ctx context.Context, txID ids.ID, options ...rpc.Option) (atomic.Status, error)
 	GetAtomicTx(ctx context.Context, txID ids.ID, options ...rpc.Option) ([]byte, error)
 	GetAtomicUTXOs(ctx context.Context, addrs []ids.ShortID, sourceChain string, limit uint32, startAddress ids.ShortID, startUTXOID ids.ID, options ...rpc.Option) ([][]byte, ids.ShortID, ids.ID, error)
-	ExportKey(ctx context.Context, userPass api.UserPass, addr common.Address, options ...rpc.Option) (*secp256k1.PrivateKey, string, error)
-	ImportKey(ctx context.Context, userPass api.UserPass, privateKey *secp256k1.PrivateKey, options ...rpc.Option) (common.Address, error)
-	Import(ctx context.Context, userPass api.UserPass, to common.Address, sourceChain string, options ...rpc.Option) (ids.ID, error)
-	ExportAVAX(ctx context.Context, userPass api.UserPass, amount uint64, to ids.ShortID, targetChain string, options ...rpc.Option) (ids.ID, error)
-	Export(ctx context.Context, userPass api.UserPass, amount uint64, to ids.ShortID, targetChain string, assetID string, options ...rpc.Option) (ids.ID, error)
 	StartCPUProfiler(ctx context.Context, options ...rpc.Option) error
 	StopCPUProfiler(ctx context.Context, options ...rpc.Option) error
 	MemoryProfile(ctx context.Context, options ...rpc.Option) error
 	LockProfile(ctx context.Context, options ...rpc.Option) error
 	SetLogLevel(ctx context.Context, level slog.Level, options ...rpc.Option) error
-	GetVMConfig(ctx context.Context, options ...rpc.Option) (*Config, error)
+	GetVMConfig(ctx context.Context, options ...rpc.Option) (*config.Config, error)
 }
 
 // Client implementation for interacting with EVM [chain]
@@ -74,8 +72,14 @@ func (c *client) IssueTx(ctx context.Context, txBytes []byte, options ...rpc.Opt
 	return res.TxID, err
 }
 
+// GetAtomicTxStatusReply defines the GetAtomicTxStatus replies returned from the API
+type GetAtomicTxStatusReply struct {
+	Status      atomic.Status `json:"status"`
+	BlockHeight *json.Uint64  `json:"blockHeight,omitempty"`
+}
+
 // GetAtomicTxStatus returns the status of [txID]
-func (c *client) GetAtomicTxStatus(ctx context.Context, txID ids.ID, options ...rpc.Option) (Status, error) {
+func (c *client) GetAtomicTxStatus(ctx context.Context, txID ids.ID, options ...rpc.Option) (atomic.Status, error) {
 	res := &GetAtomicTxStatusReply{}
 	err := c.requester.SendRequest(ctx, "avax.getAtomicTxStatus", &api.JSONTxID{
 		TxID: txID,
@@ -131,80 +135,6 @@ func (c *client) GetAtomicUTXOs(ctx context.Context, addrs []ids.ShortID, source
 	return utxos, endAddr, endUTXOID, err
 }
 
-// ExportKey returns the private key corresponding to [addr] controlled by [user]
-// in both Avalanche standard format and hex format
-func (c *client) ExportKey(ctx context.Context, user api.UserPass, addr common.Address, options ...rpc.Option) (*secp256k1.PrivateKey, string, error) {
-	res := &ExportKeyReply{}
-	err := c.requester.SendRequest(ctx, "avax.exportKey", &ExportKeyArgs{
-		UserPass: user,
-		Address:  addr.Hex(),
-	}, res, options...)
-	return res.PrivateKey, res.PrivateKeyHex, err
-}
-
-// ImportKey imports [privateKey] to [user]
-func (c *client) ImportKey(ctx context.Context, user api.UserPass, privateKey *secp256k1.PrivateKey, options ...rpc.Option) (common.Address, error) {
-	res := &api.JSONAddress{}
-	err := c.requester.SendRequest(ctx, "avax.importKey", &ImportKeyArgs{
-		UserPass:   user,
-		PrivateKey: privateKey,
-	}, res, options...)
-	if err != nil {
-		return common.Address{}, err
-	}
-	return ParseEthAddress(res.Address)
-}
-
-// Import sends an import transaction to import funds from [sourceChain] and
-// returns the ID of the newly created transaction
-func (c *client) Import(ctx context.Context, user api.UserPass, to common.Address, sourceChain string, options ...rpc.Option) (ids.ID, error) {
-	res := &api.JSONTxID{}
-	err := c.requester.SendRequest(ctx, "avax.import", &ImportArgs{
-		UserPass:    user,
-		To:          to,
-		SourceChain: sourceChain,
-	}, res, options...)
-	return res.TxID, err
-}
-
-// ExportAVAX sends AVAX from this chain to the address specified by [to].
-// Returns the ID of the newly created atomic transaction
-func (c *client) ExportAVAX(
-	ctx context.Context,
-	user api.UserPass,
-	amount uint64,
-	to ids.ShortID,
-	targetChain string,
-	options ...rpc.Option,
-) (ids.ID, error) {
-	return c.Export(ctx, user, amount, to, targetChain, "AVAX", options...)
-}
-
-// Export sends an asset from this chain to the P/C-Chain.
-// After this tx is accepted, the AVAX must be imported to the P/C-chain with an importTx.
-// Returns the ID of the newly created atomic transaction
-func (c *client) Export(
-	ctx context.Context,
-	user api.UserPass,
-	amount uint64,
-	to ids.ShortID,
-	targetChain string,
-	assetID string,
-	options ...rpc.Option,
-) (ids.ID, error) {
-	res := &api.JSONTxID{}
-	err := c.requester.SendRequest(ctx, "avax.export", &ExportArgs{
-		ExportAVAXArgs: ExportAVAXArgs{
-			UserPass:    user,
-			Amount:      json.Uint64(amount),
-			TargetChain: targetChain,
-			To:          to.String(),
-		},
-		AssetID: assetID,
-	}, res, options...)
-	return res.TxID, err
-}
-
 func (c *client) StartCPUProfiler(ctx context.Context, options ...rpc.Option) error {
 	return c.adminRequester.SendRequest(ctx, "admin.startCPUProfiler", struct{}{}, &api.EmptyReply{}, options...)
 }
@@ -221,6 +151,10 @@ func (c *client) LockProfile(ctx context.Context, options ...rpc.Option) error {
 	return c.adminRequester.SendRequest(ctx, "admin.lockProfile", struct{}{}, &api.EmptyReply{}, options...)
 }
 
+type SetLogLevelArgs struct {
+	Level string `json:"level"`
+}
+
 // SetLogLevel dynamically sets the log level for the C Chain
 func (c *client) SetLogLevel(ctx context.Context, level slog.Level, options ...rpc.Option) error {
 	return c.adminRequester.SendRequest(ctx, "admin.setLogLevel", &SetLogLevelArgs{
@@ -228,8 +162,12 @@ func (c *client) SetLogLevel(ctx context.Context, level slog.Level, options ...r
 	}, &api.EmptyReply{}, options...)
 }
 
+type ConfigReply struct {
+	Config *config.Config `json:"config"`
+}
+
 // GetVMConfig returns the current config of the VM
-func (c *client) GetVMConfig(ctx context.Context, options ...rpc.Option) (*Config, error) {
+func (c *client) GetVMConfig(ctx context.Context, options ...rpc.Option) (*config.Config, error) {
 	res := &ConfigReply{}
 	err := c.adminRequester.SendRequest(ctx, "admin.getVMConfig", struct{}{}, res, options...)
 	return res.Config, err
