@@ -17,7 +17,7 @@ avalanchego_path="$AVALANCHE_PATH/build/avalanchego"
 GOPATH="$(go env GOPATH)"
 
 # Settings for coreth
-coreth_version=${CORETH_VERSION:-'v0.13.9-rc.1'}
+coreth_version=${CORETH_VERSION:-'v0.14.1-rc.1'}
 plugin_dir=${PLUGIN_DIR:-$HOME/.avalanchego/plugins}
 evm_path=${EVM_PATH:-$plugin_dir/evm}
 coreth_path="$AVALANCHE_PATH/../coreth"
@@ -43,7 +43,7 @@ fi
 
 # Current commit (shared between image build and its test script)
 # WARNING: this will use the most recent commit even if there are un-committed changes present
-full_commit_hash="$(git --git-dir="$AVALANCHE_PATH/../.git" rev-parse HEAD)"
+full_commit_hash="$(git --git-dir="$AVALANCHE_PATH/.git" rev-parse HEAD)"
 commit_hash="${full_commit_hash::8}"
 
 git_commit=${AVALANCHEGO_COMMIT:-$( git rev-list -1 HEAD )}

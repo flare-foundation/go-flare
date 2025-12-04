@@ -14,7 +14,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ava-labs/avalanchego/chains"
-	"github.com/ava-labs/avalanchego/genesis"
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/network"
 	"github.com/ava-labs/avalanchego/network/peer"
@@ -26,6 +25,7 @@ import (
 	"github.com/ava-labs/avalanchego/utils/json"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/set"
+	"github.com/ava-labs/avalanchego/utils/units"
 	"github.com/ava-labs/avalanchego/version"
 	"github.com/ava-labs/avalanchego/vms"
 	"github.com/ava-labs/avalanchego/vms/nftfx"
@@ -34,7 +34,82 @@ import (
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 )
 
-var errNoChainProvided = errors.New("argument 'chain' not given")
+var (
+	errNoChainProvided = errors.New("argument 'chain' not given")
+
+	mainnetGetTxFeeResponse = GetTxFeeResponse{
+		CreateSubnetTxFee:             json.Uint64(1 * units.Avax),
+		TransformSubnetTxFee:          json.Uint64(10 * units.Avax),
+		CreateBlockchainTxFee:         json.Uint64(1 * units.Avax),
+		AddPrimaryNetworkValidatorFee: json.Uint64(0),
+		AddPrimaryNetworkDelegatorFee: json.Uint64(0),
+		AddSubnetValidatorFee:         json.Uint64(units.MilliAvax),
+		AddSubnetDelegatorFee:         json.Uint64(units.MilliAvax),
+	}
+	flareGetTxFeeResponse = GetTxFeeResponse{
+		CreateSubnetTxFee:             json.Uint64(100 * units.MilliAvax),
+		TransformSubnetTxFee:          json.Uint64(100 * units.MilliAvax),
+		CreateBlockchainTxFee:         json.Uint64(100 * units.MilliAvax),
+		AddPrimaryNetworkValidatorFee: json.Uint64(0),
+		AddPrimaryNetworkDelegatorFee: json.Uint64(0),
+		AddSubnetValidatorFee:         json.Uint64(units.MilliAvax),
+		AddSubnetDelegatorFee:         json.Uint64(units.MilliAvax),
+	}
+	costwoGetTxFeeResponse = GetTxFeeResponse{
+		CreateSubnetTxFee:             json.Uint64(100 * units.MilliAvax),
+		TransformSubnetTxFee:          json.Uint64(100 * units.MilliAvax),
+		CreateBlockchainTxFee:         json.Uint64(100 * units.MilliAvax),
+		AddPrimaryNetworkValidatorFee: json.Uint64(0),
+		AddPrimaryNetworkDelegatorFee: json.Uint64(0),
+		AddSubnetValidatorFee:         json.Uint64(units.MilliAvax),
+		AddSubnetDelegatorFee:         json.Uint64(units.MilliAvax),
+	}
+	localFlareGetTxFeeResponse = GetTxFeeResponse{
+		CreateSubnetTxFee:             json.Uint64(100 * units.MilliAvax),
+		TransformSubnetTxFee:          json.Uint64(100 * units.MilliAvax),
+		CreateBlockchainTxFee:         json.Uint64(100 * units.MilliAvax),
+		AddPrimaryNetworkValidatorFee: json.Uint64(0),
+		AddPrimaryNetworkDelegatorFee: json.Uint64(0),
+		AddSubnetValidatorFee:         json.Uint64(units.MilliAvax),
+		AddSubnetDelegatorFee:         json.Uint64(units.MilliAvax),
+	}
+	songbirdGetTxFeeResponse = GetTxFeeResponse{
+		CreateSubnetTxFee:             json.Uint64(units.MilliAvax),
+		TransformSubnetTxFee:          json.Uint64(units.MilliAvax),
+		CreateBlockchainTxFee:         json.Uint64(units.MilliAvax),
+		AddPrimaryNetworkValidatorFee: json.Uint64(0),
+		AddPrimaryNetworkDelegatorFee: json.Uint64(0),
+		AddSubnetValidatorFee:         json.Uint64(units.MilliAvax),
+		AddSubnetDelegatorFee:         json.Uint64(units.MilliAvax),
+	}
+	costonGetTxFeeResponse = GetTxFeeResponse{
+		CreateSubnetTxFee:             json.Uint64(100 * units.MilliAvax),
+		TransformSubnetTxFee:          json.Uint64(100 * units.MilliAvax),
+		CreateBlockchainTxFee:         json.Uint64(100 * units.MilliAvax),
+		AddPrimaryNetworkValidatorFee: json.Uint64(0),
+		AddPrimaryNetworkDelegatorFee: json.Uint64(0),
+		AddSubnetValidatorFee:         json.Uint64(units.MilliAvax),
+		AddSubnetDelegatorFee:         json.Uint64(units.MilliAvax),
+	}
+	localGetTxFeeResponse = GetTxFeeResponse{
+		CreateSubnetTxFee:             json.Uint64(100 * units.MilliAvax),
+		TransformSubnetTxFee:          json.Uint64(100 * units.MilliAvax),
+		CreateBlockchainTxFee:         json.Uint64(100 * units.MilliAvax),
+		AddPrimaryNetworkValidatorFee: json.Uint64(0),
+		AddPrimaryNetworkDelegatorFee: json.Uint64(0),
+		AddSubnetValidatorFee:         json.Uint64(units.MilliAvax),
+		AddSubnetDelegatorFee:         json.Uint64(units.MilliAvax),
+	}
+	defaultGetTxFeeResponse = GetTxFeeResponse{
+		CreateSubnetTxFee:             json.Uint64(100 * units.MilliAvax),
+		TransformSubnetTxFee:          json.Uint64(100 * units.MilliAvax),
+		CreateBlockchainTxFee:         json.Uint64(100 * units.MilliAvax),
+		AddPrimaryNetworkValidatorFee: json.Uint64(0),
+		AddPrimaryNetworkDelegatorFee: json.Uint64(0),
+		AddSubnetValidatorFee:         json.Uint64(units.MilliAvax),
+		AddSubnetDelegatorFee:         json.Uint64(units.MilliAvax),
+	}
+)
 
 // Info is the API service for unprivileged info on a node
 type Info struct {
@@ -49,13 +124,15 @@ type Info struct {
 }
 
 type Parameters struct {
-	Version     *version.Application
-	NodeID      ids.NodeID
-	NodePOP     *signer.ProofOfPossession
-	NetworkID   uint32
-	TxFeeConfig genesis.TxFeeConfig
-	VMManager   vms.Manager
-	Upgrades    upgrade.Config
+	Version   *version.Application
+	NodeID    ids.NodeID
+	NodePOP   *signer.ProofOfPossession
+	NetworkID uint32
+	VMManager vms.Manager
+	Upgrades  upgrade.Config
+
+	TxFee            uint64
+	CreateAssetTxFee uint64
 }
 
 func NewService(
@@ -402,20 +479,31 @@ type GetTxFeeResponse struct {
 
 // GetTxFee returns the transaction fee in nAVAX.
 func (i *Info) GetTxFee(_ *http.Request, _ *struct{}, reply *GetTxFeeResponse) error {
-	i.log.Debug("API called",
+	i.log.Warn("deprecated API called",
 		zap.String("service", "info"),
 		zap.String("method", "getTxFee"),
 	)
 
-	reply.TxFee = json.Uint64(i.TxFeeConfig.StaticFeeConfig.TxFee)
-	reply.CreateAssetTxFee = json.Uint64(i.TxFeeConfig.CreateAssetTxFee)
-	reply.CreateSubnetTxFee = json.Uint64(i.TxFeeConfig.StaticFeeConfig.CreateSubnetTxFee)
-	reply.TransformSubnetTxFee = json.Uint64(i.TxFeeConfig.StaticFeeConfig.TransformSubnetTxFee)
-	reply.CreateBlockchainTxFee = json.Uint64(i.TxFeeConfig.StaticFeeConfig.CreateBlockchainTxFee)
-	reply.AddPrimaryNetworkValidatorFee = json.Uint64(i.TxFeeConfig.StaticFeeConfig.AddPrimaryNetworkValidatorFee)
-	reply.AddPrimaryNetworkDelegatorFee = json.Uint64(i.TxFeeConfig.StaticFeeConfig.AddPrimaryNetworkDelegatorFee)
-	reply.AddSubnetValidatorFee = json.Uint64(i.TxFeeConfig.StaticFeeConfig.AddSubnetValidatorFee)
-	reply.AddSubnetDelegatorFee = json.Uint64(i.TxFeeConfig.StaticFeeConfig.AddSubnetDelegatorFee)
+	switch i.NetworkID {
+	case constants.MainnetID:
+		*reply = mainnetGetTxFeeResponse
+	case constants.FlareID:
+		*reply = flareGetTxFeeResponse
+	case constants.CostwoID:
+		*reply = costwoGetTxFeeResponse
+	case constants.LocalFlareID:
+		*reply = localFlareGetTxFeeResponse
+	case constants.SongbirdID:
+		*reply = songbirdGetTxFeeResponse
+	case constants.CostonID:
+		*reply = costonGetTxFeeResponse
+	case constants.LocalID:
+		*reply = localGetTxFeeResponse
+	default:
+		*reply = defaultGetTxFeeResponse
+	}
+	reply.TxFee = json.Uint64(i.TxFee)
+	reply.CreateAssetTxFee = json.Uint64(i.CreateAssetTxFee)
 	return nil
 }
 
