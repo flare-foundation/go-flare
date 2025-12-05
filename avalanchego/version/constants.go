@@ -49,7 +49,7 @@ var (
 	CurrentSgb = &Semantic{
 		Major: 0,
 		Minor: 10,
-		Patch: 0,
+		Patch: 2,
 	}
 	CurrentSgbApp = &Application{
 		Name:  Client,
