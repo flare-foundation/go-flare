@@ -1,4 +1,4 @@
-import { networkIDs, pvm, UnsignedTx, utils } from "@flarenetwork/flarejs";
+import { networkIDs, pvm, utils } from "@flarenetwork/flarejs";
 import { issuePChainTx, localFlareContext } from "./utils";
 import { runTest } from "./runner";
 
@@ -11,39 +11,22 @@ async function addDelegator(nodeId: string, endTime: number, weight: number) {
     const { utxos } = await ctx.pvmapi.getUTXOs({
         addresses: [ctx.addressP]
     });
+    const feeState = await ctx.pvmapi.getFeeState();
 
-    let tx: UnsignedTx;
-    if (ctx.isEtnaForkActive) {
-        console.log("Etna fork is active, using new transaction format.");
-        const feeState = await ctx.pvmapi.getFeeState();
-        tx = pvm.e.newAddPermissionlessDelegatorTx(
-            {
-                feeState,
-                utxos,
-                nodeId,
-                subnetId: networkIDs.PrimaryNetworkID.toString(),
-                start: BigInt(Date.now()) / 1000n,
-                end: BigInt(endTime),
-                weight: BigInt(weight * 1e9),
-                fromAddressesBytes: [utils.bech32ToBytes(ctx.addressP)],
-                rewardAddresses: [utils.bech32ToBytes(ctx.addressP)],
-            },
-            ctx.context,
-        );
-    } else {
-        console.log("Etna fork is not active, using legacy transaction format.");
-        tx = pvm.newAddPermissionlessDelegatorTx(
+    const tx = pvm.e.newAddPermissionlessDelegatorTx(
+        {
+            feeState,
+            utxos,
+            nodeId,
+            subnetId: networkIDs.PrimaryNetworkID.toString(),
+            start: BigInt(Date.now()) / 1000n,
+            end: BigInt(endTime),
+            weight: BigInt(weight * 1e9),
+            fromAddressesBytes: [utils.bech32ToBytes(ctx.addressP)],
+            rewardAddresses: [utils.bech32ToBytes(ctx.addressP)],
+        },
         ctx.context,
-        utxos,
-        [utils.bech32ToBytes(ctx.addressP)],
-        nodeId,
-        networkIDs.PrimaryNetworkID.toString(),
-        BigInt(Date.now()) / 1000n,
-        BigInt(endTime),
-        BigInt(weight * 1e9),
-        [utils.bech32ToBytes(ctx.addressP)],
-        );
-    }
+    );
     await issuePChainTx(ctx.pvmapi, tx, ctx.privateKey);
 }
 

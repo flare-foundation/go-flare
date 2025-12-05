@@ -1,4 +1,4 @@
-import { networkIDs, pvm, UnsignedTx, utils } from "@flarenetwork/flarejs";
+import { networkIDs, pvm, utils } from "@flarenetwork/flarejs";
 import { issuePChainTx, localFlareContext } from "./utils";
 import { runTest } from "./runner";
 
@@ -15,51 +15,26 @@ async function addValidator(nodeId: string, endTime: number, weight: number) {
     const { utxos } = await ctx.pvmapi.getUTXOs({
         addresses: [ctx.addressP]
     });
+    const feeState = await ctx.pvmapi.getFeeState();
 
-    let tx: UnsignedTx;
-    if (ctx.isEtnaForkActive) {
-        console.log("Etna fork is active, using new transaction format.");
-        const feeState = await ctx.pvmapi.getFeeState();
-        tx = pvm.e.newAddPermissionlessValidatorTx(
-            {
-                feeState,
-                utxos,
-                nodeId,
-                subnetId: networkIDs.PrimaryNetworkID.toString(),
-                start: BigInt(Date.now()) / 1000n,
-                end: BigInt(endTime),
-                weight: BigInt(weight * 1e9),
-                shares: 10_0000,
-                fromAddressesBytes: [utils.bech32ToBytes(ctx.addressP)],
-                rewardAddresses: [utils.bech32ToBytes(ctx.addressP)],
-                delegatorRewardsOwner: [utils.bech32ToBytes(ctx.addressP)],
-                publicKey: utils.hexToBuffer(blsPublicKey),
-                signature: utils.hexToBuffer(blsSignature),
-            },
-            ctx.context,
-        );
-    } else {
-        console.log("Etna fork is not active, using legacy transaction format.");
-        tx = pvm.newAddPermissionlessValidatorTx(
-            ctx.context,
+    const tx = pvm.e.newAddPermissionlessValidatorTx(
+        {
+            feeState,
             utxos,
-            [utils.bech32ToBytes(ctx.addressP)],
             nodeId,
-            networkIDs.PrimaryNetworkID.toString(),
-            BigInt(Date.now()) / 1000n,
-            BigInt(endTime),
-            BigInt(weight * 1e9),
-            [utils.bech32ToBytes(ctx.addressP)],
-            [utils.bech32ToBytes(ctx.addressP)],
-            10_0000,
-            undefined,
-            1,
-            0n,
-            utils.hexToBuffer(blsPublicKey),
-            utils.hexToBuffer(blsSignature)
-        );
-    }
-
+            subnetId: networkIDs.PrimaryNetworkID.toString(),
+            start: BigInt(Date.now()) / 1000n,
+            end: BigInt(endTime),
+            weight: BigInt(weight * 1e9),
+            shares: 10_0000,
+            fromAddressesBytes: [utils.bech32ToBytes(ctx.addressP)],
+            rewardAddresses: [utils.bech32ToBytes(ctx.addressP)],
+            delegatorRewardsOwner: [utils.bech32ToBytes(ctx.addressP)],
+            publicKey: utils.hexToBuffer(blsPublicKey),
+            signature: utils.hexToBuffer(blsSignature),
+        },
+        ctx.context,
+    );
     await issuePChainTx(ctx.pvmapi, tx, ctx.privateKey);
 }
 
