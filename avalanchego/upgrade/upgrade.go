@@ -72,6 +72,7 @@ var (
 		CortinaTime:           time.Date(2025, time.May, 13, 12, 0, 0, 0, time.UTC),
 		DurangoTime:           time.Date(2025, time.August, 5, 12, 0, 0, 0, time.UTC),
 		EtnaTime:              time.Date(2025, time.December, 2, 12, 0, 0, 0, time.UTC),
+		FUpgradeTime:          UnscheduledActivationTime,
 	}
 	Songbird = Config{
 		ApricotPhase1Time:     InitiallyActiveTime,
@@ -86,6 +87,7 @@ var (
 		CortinaTime:           time.Date(2025, time.May, 6, 12, 0, 0, 0, time.UTC),
 		DurangoTime:           time.Date(2025, time.July, 22, 12, 0, 0, 0, time.UTC),
 		EtnaTime:              time.Date(2025, time.November, 25, 12, 0, 0, 0, time.UTC),
+		FUpgradeTime:          UnscheduledActivationTime,
 	}
 	Costwo = Config{
 		ApricotPhase1Time:     InitiallyActiveTime,
@@ -100,6 +102,7 @@ var (
 		CortinaTime:           time.Date(2025, time.April, 8, 12, 0, 0, 0, time.UTC),
 		DurangoTime:           time.Date(2025, time.June, 24, 12, 0, 0, 0, time.UTC),
 		EtnaTime:              time.Date(2025, time.November, 13, 14, 0, 0, 0, time.UTC),
+		FUpgradeTime:          UnscheduledActivationTime,
 	}
 	Coston = Config{
 		ApricotPhase1Time:     InitiallyActiveTime,
@@ -113,6 +116,7 @@ var (
 		CortinaTime:           time.Date(2025, time.March, 27, 13, 0, 0, 0, time.UTC),
 		DurangoTime:           time.Date(2025, time.July, 1, 12, 0, 0, 0, time.UTC),
 		EtnaTime:              time.Date(2025, time.November, 13, 10, 0, 0, 0, time.UTC),
+		FUpgradeTime:          UnscheduledActivationTime,
 	}
 	LocalFlare = Config{
 		ApricotPhase1Time:            ZeroTime,
@@ -129,6 +133,7 @@ var (
 		CortinaXChainStopVertexID:    ids.Empty,
 		DurangoTime:                  ZeroTime,
 		EtnaTime:                     ZeroTime,
+		FUpgradeTime:                 UnscheduledActivationTime,
 	}
 	Local = Config{
 		ApricotPhase1Time:            ZeroTime,
@@ -145,6 +150,7 @@ var (
 		CortinaXChainStopVertexID:    ids.Empty,
 		DurangoTime:                  ZeroTime,
 		EtnaTime:                     ZeroTime,
+		FUpgradeTime:                 UnscheduledActivationTime,
 	}
 	Default = Config{
 		ApricotPhase1Time:            InitiallyActiveTime,
