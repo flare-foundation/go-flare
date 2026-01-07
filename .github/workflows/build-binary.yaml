@@ -11,6 +11,7 @@ env:
 
 jobs:
   build:
+    name: Build go-flare
     uses: ./.github/workflows/build.yaml
     with:
       go_version: "1.22.12"
@@ -18,6 +19,7 @@ jobs:
       artifact_name: "avalanchego"
 
   build-verify:
+    name: Verification Build
     uses: ./.github/workflows/build.yaml
     with:
       go_version: "1.22.12"
@@ -25,6 +27,7 @@ jobs:
       artifact_name: "avalanchego-verify"
 
   release:
+    name: Release
     runs-on: ubuntu-24.04
     needs: [build, build-verify]
     if: github.ref_type == 'tag'
