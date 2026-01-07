@@ -189,7 +189,9 @@ func main() {
 		os.Setenv("BOOTSTRAP_IDS", bootstrap_IDs)
 	}
 
+	path := "/app/build/avalanchego"
 	args := []string{
+		path, // argv[0] must be the program name
 		"--http-host", os.Getenv("HTTP_HOST"),
 		"--http-port", os.Getenv("HTTP_PORT"),
 		"--staking-port", os.Getenv("STAKING_PORT"),
@@ -209,7 +211,6 @@ func main() {
 		args = append(args, strings.Fields(extra)...)
 	}
 	fmt.Fprintln(os.Stderr, args)
-	path := "/app/build/avalanchego"
 
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		fmt.Fprintln(os.Stderr, "file does not exist")
