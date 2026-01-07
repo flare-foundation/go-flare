@@ -6,90 +6,97 @@ on:
     branches:
     tags:
 
-env:
-  go_version: 1.22.12
-
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    name: Build go-flare
+    uses: ./.github/workflows/build.yaml
+    with:
+      go_version: "${{ vars.GO_VERSION }}"
+      ubuntu_version: "${{ vars.UBUNTU_VERSION }}"
+      artifact_name: "${{ vars.BUILD_ARTIFACT_NAME }}"
+
+  build-verify:
+    name: Verification Build
+    uses: ./.github/workflows/build.yaml
+    with:
+      go_version: "${{ vars.GO_VERSION }}"
+      ubuntu_version: "${{ vars.UBUNTU_VERSION }}"
+      artifact_name: "${{ vars.BUILD_ARTIFACT_NAME }}-verify"
+
+  release:
+    name: Release
+    runs-on: "ubuntu-${{ vars.UBUNTU_VERSION }}"
+    needs: [build, build-verify]
+    if: github.ref_type == 'tag'
     permissions:
       contents: write
       id-token: write
     steps:
-    - uses: actions/checkout@v3
-      with:
-        fetch-depth: 0
+      - run: sudo apt-get update -y && sudo apt-get install -y diffoscope-minimal
 
-    - name: Set up Go
-      uses: actions/setup-go@v3
-      with:
-        go-version: ${{ env.go_version }}
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # @v3
 
-    - name: Set release variables
-      run: |
-        if [[ "${{ github.ref_type }}" == "tag" ]]; then
+      - name: Download artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # @v4
+        with:
+          path: artifacts
+
+      - name: Verify build
+        run: |
+          HASH_MAIN=$(sha256sum artifacts/${{ vars.BUILD_ARTIFACT_NAME }}/avalanchego | awk '{print $1}')
+          HASH_VERIFY=$(sha256sum artifacts/${{ vars.BUILD_ARTIFACT_NAME }}-verify/avalanchego | awk '{print $1}')
+          
+          if [ "$HASH_MAIN" = "$HASH_VERIFY" ]; then
+            echo "Hashes match"
+          else
+            echo "Hashes don't match"
+            diffoscope artifacts/${{ vars.BUILD_ARTIFACT_NAME }}/avalanchego artifacts/${{ vars.BUILD_ARTIFACT_NAME }}-verify/avalanchego || true
+
+            exit 1
+          fi
+
+      - name: Set release variables
+        run: |
           RELEASE_TAG="${{ github.ref_name }}"
-        else
-          RELEASE_TAG="dev"
-        fi
-        echo "RELEASE_TAG=${RELEASE_TAG}" >> $GITHUB_ENV
-        echo "ARTIFACT_NAME=go-flare-${RELEASE_TAG}-linux-amd64.zip" >> $GITHUB_ENV
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> $GITHUB_ENV
+          echo "ARTIFACT_NAME=go-flare-${RELEASE_TAG}-linux-amd64.zip" >> $GITHUB_ENV
 
-    - run: sudo apt-get update -y && sudo apt-get install -y rsync
+      - name: Package build for release
+        run: |
+          cd artifacts/${{ vars.BUILD_ARTIFACT_NAME }}
+          zip -r ../../${{ env.ARTIFACT_NAME }} .
 
-    - name: build
-      id: build
-      env:
-        GOPATH: ${{ github.workspace }}/go
-      run: |
-        cd avalanchego
-        ./scripts/build.sh
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@d7d6bc7722e3daa8354c50bcb52f4837da5e9b6a  # @v3.8.1
 
-    - name: Package build for release
-      if: github.ref_type == 'tag'
-      run: |
-        cd avalanchego/build
-        zip -r ../../${{ env.ARTIFACT_NAME }} .
+      - name: Sign release binary
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          cosign sign-blob --yes \
+            --output-signature ${{ env.ARTIFACT_NAME }}.sig \
+            --output-certificate ${{ env.ARTIFACT_NAME }}.pem \
+            ${{ env.ARTIFACT_NAME }}
 
-    - name: Install Cosign
-      if: github.ref_type == 'tag'
-      uses: sigstore/cosign-installer@v3.8.1
+      - name: Verify release binary signature
+        env:
+          COSIGN_EXPERIMENTAL: 1
+        run: |
+          cosign verify-blob \
+            --certificate ${{ env.ARTIFACT_NAME }}.pem \
+            --certificate-identity=https://github.com/${{ github.repository }}/.github/workflows/build-binary.yaml@${{ github.ref }} \
+            --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+            --signature ${{ env.ARTIFACT_NAME }}.sig \
+            ${{ env.ARTIFACT_NAME }}
 
-    - name: Sign release binary
-      if: github.ref_type == 'tag'
-      shell: bash
-      env:
-        COSIGN_EXPERIMENTAL: 1
-      run: |
-        cosign sign-blob --yes \
-          --output-signature ${{ env.ARTIFACT_NAME }}.sig \
-          --output-certificate ${{ env.ARTIFACT_NAME }}.pem \
-          ${{ env.ARTIFACT_NAME }}
+      - name: Release
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844  # @v1
+        with:
+          body: "TODO"
+          files: ${{ env.ARTIFACT_NAME }}*
 
-    - name: Verify release binary signature
-      if: github.ref_type == 'tag'
-      shell: bash
-      env:
-        COSIGN_EXPERIMENTAL: 1
-      run: |
-        cosign verify-blob \
-          --certificate ${{ env.ARTIFACT_NAME }}.pem \
-          --certificate-identity=https://github.com/${{ github.repository }}/.github/workflows/build-binary.yaml@${{ github.ref }} \
-          --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
-          --signature ${{ env.ARTIFACT_NAME }}.sig \
-          ${{ env.ARTIFACT_NAME }}
-
-    - name: Release
-      uses: softprops/action-gh-release@v1
-      if: github.ref_type == 'tag'
-      with:
-        body: "TODO"
-        files: ${{ env.ARTIFACT_NAME }}*
-
-    - name: Archive production artifacts
-      if: github.ref_type == 'tag'
-      uses: actions/upload-artifact@v4
-      with:
-        name: dist-bin
-        path: |
-          ${{ env.ARTIFACT_NAME }}
+      - name: Archive production artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # @v4
+        with:
+          name: dist-bin
+          path: ${{ env.ARTIFACT_NAME }}
