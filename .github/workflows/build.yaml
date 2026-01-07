@@ -1,0 +1,42 @@
+name: Build Binary
+
+on:
+  workflow_call:
+    inputs:
+      go_version:
+        required: true
+        type: string
+      ubuntu_version:
+        required: true
+        type: string
+      artifact_name:
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-${{ inputs.ubuntu_version }}
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: ${{ inputs.go_version }}
+
+    - run: sudo apt-get update -y && sudo apt-get install -y rsync
+
+    - name: Build
+      env:
+        GOPATH: ${{ github.workspace }}/go
+      run: |
+        cd avalanchego
+        ./scripts/build.sh
+
+    - name: Upload build
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact_name }}
+        path: avalanchego/build/
