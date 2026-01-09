@@ -1,0 +1,80 @@
+name: SLSA3 Builder
+
+on:
+  workflow_call:
+    inputs:
+      go_version:
+        required: true
+        type: string
+      ubuntu_version:
+        required: true
+        type: string
+      build_artifact_name:
+        required: true
+        type: string
+    outputs:
+      build-artifacts-name:
+        description: "Name of uploaded artifacts"
+        value: ${{ jobs.slsa-run.outputs.build-artifacts-name }}
+      attestations-artifact-name:
+        description: "Name of attestations artifact"
+        value: ${{ jobs.rename-attestations.outputs.attestations-artifact-name }}
+
+permissions: read-all
+
+jobs:
+  slsa-setup:
+    permissions:
+      id-token: write
+      contents: read
+    runs-on: ubuntu-${{ inputs.ubuntu_version }}
+    outputs:
+      slsa-token: ${{ steps.setup.outputs.slsa-token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744
+        with:
+          fetch-depth: 0
+
+      - name: Setup SLSA
+        id: setup
+        uses: slsa-framework/slsa-github-generator/actions/delegator/setup-generic@v2.1.0
+        with:
+          slsa-workflow-recipient: "delegator_generic_slsa3.yml"
+          slsa-runner-label: "ubuntu-latest"  # Only supports ubuntu-latest for now
+          slsa-build-action-path: "./.github/actions/slsa3-build-callback"
+          slsa-workflow-inputs: ${{ toJson(inputs) }}
+
+  slsa-run:
+    needs: [slsa-setup]
+    permissions:
+      id-token: write
+      contents: write
+      packages: write
+      actions: read
+    uses: slsa-framework/slsa-github-generator/.github/workflows/delegator_generic_slsa3.yml@v2.1.0
+    with:
+      slsa-token: ${{ needs.slsa-setup.outputs.slsa-token }}
+
+  rename-attestations:
+    needs: [slsa-run]
+    runs-on: ubuntu-${{ inputs.ubuntu_version }}
+    outputs:
+      attestations-artifact-name: ${{ inputs.build_artifact_name }}-attestations
+    steps:
+      - name: Download attestations
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.slsa-run.outputs.attestations-download-name }}
+          path: attestations
+
+      - name: Upload with clean name
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.build_artifact_name }}-attestations
+          path: attestations/
+
+      - name: Delete original
+        uses: geekyeggo/delete-artifact@v5
+        with:
+          name: ${{ needs.slsa-run.outputs.attestations-download-name }}

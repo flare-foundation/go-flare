@@ -1,4 +1,4 @@
-name: Build Binary
+name: Build Go Binaries For Verification
 
 on:
   workflow_call:
@@ -9,9 +9,14 @@ on:
       ubuntu_version:
         required: true
         type: string
-      artifact_name:
+      build_artifact_name:
         required: true
         type: string
+    
+    outputs:
+      build_artifact_name:
+        description: "Name of uploaded artifacts"
+        value: ${{ inputs.build_artifact_name }}
 
 jobs:
   build:
@@ -20,23 +25,15 @@ jobs:
     - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # @v3
       with:
         fetch-depth: 0
-
-    - name: Set up Go
-      uses: actions/setup-go@be3c94b385c4f180051c996d336f57a34c397495 # @v3
-      with:
-        go-version: ${{ inputs.go_version }}
-
-    - run: sudo apt-get update -y && sudo apt-get install -y rsync
-
+  
     - name: Build
-      env:
-        GOPATH: ${{ github.workspace }}/go
-      run: |
-        cd avalanchego
-        ./scripts/build.sh
+      uses: ./.github/actions/go-build
+      with:
+        go_version: ${{ inputs.go_version }}
+        working_directory: .
 
     - name: Upload build
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # @v4
       with:
-        name: ${{ inputs.artifact_name }}
+        name: ${{ inputs.build_artifact_name }}
         path: avalanchego/build/

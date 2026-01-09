@@ -29,4 +29,12 @@ source "$AVALANCHE_PATH"/scripts/constants.sh
 
 build_args="$race"
 echo "Building AvalancheGo..."
-go build $build_args -modcacherw -ldflags "-X github.com/ava-labs/avalanchego/version.GitCommit=$git_commit $static_ld_flags" -o "$avalanchego_path" "$AVALANCHE_PATH/main/"*.go
+
+go build \
+  -trimpath \
+  -buildvcs=false \
+  $build_args \
+  -modcacherw \
+  -ldflags "-X github.com/ava-labs/avalanchego/version.GitCommit=$git_commit $static_ld_flags" \
+  -o "$avalanchego_path" \
+  "$AVALANCHE_PATH/main/"*.go

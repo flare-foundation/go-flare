@@ -8,68 +8,93 @@ on:
 
 jobs:
   build:
-    name: Build go-flare
-    uses: ./.github/workflows/build.yaml
+    name: Build go-flare with SLSA
+    uses: ./.github/workflows/build-go-slsa3.yaml
     with:
       go_version: "${{ vars.GO_VERSION }}"
       ubuntu_version: "${{ vars.UBUNTU_VERSION }}"
-      artifact_name: "${{ vars.BUILD_ARTIFACT_NAME }}"
+      build_artifact_name: "avalanchego"
 
-  build-verify:
-    name: Verification Build
-    uses: ./.github/workflows/build.yaml
+  build-verification:
+    if: github.ref_type == 'tag'
+    name: Go Verification Build
+    uses: ./.github/workflows/build-go-verification.yaml
     with:
       go_version: "${{ vars.GO_VERSION }}"
       ubuntu_version: "${{ vars.UBUNTU_VERSION }}"
-      artifact_name: "${{ vars.BUILD_ARTIFACT_NAME }}-verify"
+      build_artifact_name: "avalanchego-verification"
 
   release:
     name: Release
     runs-on: "ubuntu-${{ vars.UBUNTU_VERSION }}"
-    needs: [build, build-verify]
+    needs: [build, build-verification]
     if: github.ref_type == 'tag'
     permissions:
       contents: write
       id-token: write
     steps:
-      - run: sudo apt-get update -y && sudo apt-get install -y diffoscope-minimal
+      - name: Install diffoscope
+        run: sudo apt-get update -y && sudo apt-get install -y diffoscope-minimal
+      
+      - name: Install slsa-verifier
+        uses: slsa-framework/slsa-verifier/actions/installer@v2.6.0
+      
+      - name: Install Cosign
+        if: github.ref_type == 'tag'
+        uses: sigstore/cosign-installer@v3.8.1
 
-      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # @v3
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744
 
       - name: Download artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # @v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           path: artifacts
 
-      - name: Verify build
+      - name: Extract artifacts
         run: |
-          HASH_MAIN=$(sha256sum artifacts/${{ vars.BUILD_ARTIFACT_NAME }}/avalanchego | awk '{print $1}')
-          HASH_VERIFY=$(sha256sum artifacts/${{ vars.BUILD_ARTIFACT_NAME }}-verify/avalanchego | awk '{print $1}')
+          mkdir -p release/
+
+          tar -xzf artifacts/avalanchego/folder.tgz -C artifacts/avalanchego/
+          mv artifacts/avalanchego/binaries/avalanchego release/
+
+          tar -xzf artifacts/avalanchego-attestations/folder.tgz -C artifacts/avalanchego-attestations/
+          mv artifacts/avalanchego-attestations/*-slsa-attestations/avalanchego-binaries.build.slsa release/avalanchego.build.slsa
+
+      - name: Verify reproducible build
+        run: |
+          HASH_MAIN=$(sha256sum release/avalanchego | awk '{print $1}')
+          HASH_VERIFY=$(sha256sum artifacts/avalanchego-verification/avalanchego | awk '{print $1}')
           
           if [ "$HASH_MAIN" = "$HASH_VERIFY" ]; then
             echo "Hashes match"
           else
             echo "Hashes don't match"
-            diffoscope artifacts/${{ vars.BUILD_ARTIFACT_NAME }}/avalanchego artifacts/${{ vars.BUILD_ARTIFACT_NAME }}-verify/avalanchego || true
 
+            diffoscope release/avalanchego artifacts/avalanchego-verification/avalanchego || true
+            
             exit 1
           fi
 
-      - name: Set release variables
+      - name: Verify SLSA provenance
+        run: |
+          slsa-verifier verify-artifact \
+            release/avalanchego \
+            --provenance-path release/avalanchego.build.slsa \
+            --source-uri github.com/${{ github.repository }} \
+            --builder-id https://github.com/${{ github.repository }}/.github/workflows/build-go-slsa3.yaml@refs/tags/${{ github.ref_name }}
+
+      - name: Package release
         run: |
           RELEASE_TAG="${{ github.ref_name }}"
-          echo "RELEASE_TAG=${RELEASE_TAG}" >> $GITHUB_ENV
-          echo "ARTIFACT_NAME=go-flare-${RELEASE_TAG}-linux-amd64.zip" >> $GITHUB_ENV
-
-      - name: Package build for release
-        run: |
-          cd artifacts/${{ vars.BUILD_ARTIFACT_NAME }}
-          zip -r ../../${{ env.ARTIFACT_NAME }} .
-
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@d7d6bc7722e3daa8354c50bcb52f4837da5e9b6a  # @v3.8.1
+          ARTIFACT_NAME="go-flare-${RELEASE_TAG}-linux-amd64.zip"
+          
+          cd release
+          zip -r ../$ARTIFACT_NAME .
+          
+          echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_ENV      
 
       - name: Sign release binary
+        shell: bash
         env:
           COSIGN_EXPERIMENTAL: 1
         run: |
@@ -79,6 +104,7 @@ jobs:
             ${{ env.ARTIFACT_NAME }}
 
       - name: Verify release binary signature
+        shell: bash
         env:
           COSIGN_EXPERIMENTAL: 1
         run: |
@@ -90,13 +116,14 @@ jobs:
             ${{ env.ARTIFACT_NAME }}
 
       - name: Release
-        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844  # @v1
+        uses: softprops/action-gh-release@v1
         with:
           body: "TODO"
           files: ${{ env.ARTIFACT_NAME }}*
 
       - name: Archive production artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # @v4
+        uses: actions/upload-artifact@v4
         with:
           name: dist-bin
-          path: ${{ env.ARTIFACT_NAME }}
+          path: |
+            ${{ env.ARTIFACT_NAME }}
