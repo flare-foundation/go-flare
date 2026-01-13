@@ -57,7 +57,7 @@ jobs:
           mv artifacts/avalanchego/binaries/avalanchego release/
 
           tar -xzf artifacts/avalanchego-attestations/folder.tgz -C artifacts/avalanchego-attestations/
-          mv artifacts/avalanchego-attestations/*-slsa-attestations/avalanchego-binaries.build.slsa release/avalanchego.build.slsa
+          mv artifacts/avalanchego-attestations/*-slsa-attestations/avalanchego-binaries.build.slsa artifacts/avalanchego.build.slsa
 
       - name: Verify reproducible build
         run: |
@@ -78,7 +78,7 @@ jobs:
         run: |
           slsa-verifier verify-artifact \
             release/avalanchego \
-            --provenance-path release/avalanchego.build.slsa \
+            --provenance-path artifacts/avalanchego.build.slsa \
             --source-uri github.com/${{ github.repository }} \
             --builder-id https://github.com/${{ github.repository }}/.github/workflows/build-go-slsa3.yaml@refs/tags/${{ github.ref_name }}
 
@@ -89,6 +89,8 @@ jobs:
           
           cd release
           zip -r ../$ARTIFACT_NAME .
+
+          mv ../artifacts/avalanchego.build.slsa ../$ARTIFACT_NAME.build.slsa
           
           echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_ENV      
 
