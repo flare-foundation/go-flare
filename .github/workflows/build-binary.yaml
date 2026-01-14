@@ -59,17 +59,21 @@ jobs:
           tar -xzf artifacts/avalanchego-attestations/folder.tgz -C artifacts/avalanchego-attestations/
           mv artifacts/avalanchego-attestations/*-slsa-attestations/avalanchego-binaries.build.slsa artifacts/avalanchego.build.slsa
 
+          echo "AVALANCHEGO_BINARY=release/avalanchego" >> $GITHUB_ENV
+          echo "AVALANCHEGO_VERIFICATION_BINARY=artifacts/avalanchego-verification/avalanchego" >> $GITHUB_ENV
+          echo "SLSA_PROVENANCE=artifacts/avalanchego.build.slsa" >> $GITHUB_ENV
+
       - name: Verify reproducible build
         run: |
-          HASH_MAIN=$(sha256sum release/avalanchego | awk '{print $1}')
-          HASH_VERIFY=$(sha256sum artifacts/avalanchego-verification/avalanchego | awk '{print $1}')
+          HASH_MAIN=$(sha256sum ${{ env.AVALANCHEGO_BINARY }} | awk '{print $1}')
+          HASH_VERIFY=$(sha256sum ${{ env.AVALANCHEGO_VERIFICATION_BINARY }} | awk '{print $1}')
           
           if [ "$HASH_MAIN" = "$HASH_VERIFY" ]; then
             echo "Hashes match"
           else
             echo "Hashes don't match"
 
-            diffoscope release/avalanchego artifacts/avalanchego-verification/avalanchego || true
+            diffoscope ${{ env.AVALANCHEGO_BINARY }} ${{ env.AVALANCHEGO_VERIFICATION_BINARY }} || true
             
             exit 1
           fi
@@ -77,8 +81,8 @@ jobs:
       - name: Verify SLSA provenance
         run: |
           slsa-verifier verify-artifact \
-            release/avalanchego \
-            --provenance-path artifacts/avalanchego.build.slsa \
+            ${{ env.AVALANCHEGO_BINARY }} \
+            --provenance-path ${{ env.SLSA_PROVENANCE }} \
             --source-uri github.com/${{ github.repository }} \
             --builder-id https://github.com/${{ github.repository }}/.github/workflows/build-go-slsa3.yaml@refs/tags/${{ github.ref_name }}
 
@@ -90,7 +94,7 @@ jobs:
           cd release
           zip -r ../$ARTIFACT_NAME .
 
-          mv ../artifacts/avalanchego.build.slsa ../$ARTIFACT_NAME.build.slsa
+          mv ../${{ env.SLSA_PROVENANCE }} ../$ARTIFACT_NAME.build.slsa
           
           echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_ENV      
 
