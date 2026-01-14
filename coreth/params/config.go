@@ -79,8 +79,8 @@ var (
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
 		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
-		DAOForkBlock:        nil,
-		DAOForkSupport:      false,
+		DAOForkBlock:        big.NewInt(0),
+		DAOForkSupport:      true,
 		EIP150Block:         big.NewInt(0),
 		EIP155Block:         big.NewInt(0),
 		EIP158Block:         big.NewInt(0),
@@ -104,6 +104,7 @@ var (
 			CortinaBlockTimestamp:           utils.NewUint64(0),
 			DurangoBlockTimestamp:           utils.NewUint64(0),
 			EtnaTimestamp:                   utils.NewUint64(0),
+			FortunaTimestamp:                utils.NewUint64(0),
 		},
 	}
 
@@ -111,8 +112,8 @@ var (
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
 		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
-		DAOForkBlock:        nil,
-		DAOForkSupport:      false,
+		DAOForkBlock:        big.NewInt(0),
+		DAOForkSupport:      true,
 		EIP150Block:         big.NewInt(0),
 		EIP155Block:         big.NewInt(0),
 		EIP158Block:         big.NewInt(0),
@@ -134,6 +135,7 @@ var (
 			CortinaBlockTimestamp:           nil,
 			DurangoBlockTimestamp:           nil,
 			EtnaTimestamp:                   nil,
+			FortunaTimestamp:                nil,
 		},
 	}
 
@@ -141,8 +143,8 @@ var (
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
 		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
-		DAOForkBlock:        nil,
-		DAOForkSupport:      false,
+		DAOForkBlock:        big.NewInt(0),
+		DAOForkSupport:      true,
 		EIP150Block:         big.NewInt(0),
 		EIP155Block:         big.NewInt(0),
 		EIP158Block:         big.NewInt(0),
@@ -164,6 +166,7 @@ var (
 			CortinaBlockTimestamp:           nil,
 			DurangoBlockTimestamp:           nil,
 			EtnaTimestamp:                   nil,
+			FortunaTimestamp:                nil,
 		},
 	}
 
@@ -171,8 +174,8 @@ var (
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
 		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
-		DAOForkBlock:        nil,
-		DAOForkSupport:      false,
+		DAOForkBlock:        big.NewInt(0),
+		DAOForkSupport:      true,
 		EIP150Block:         big.NewInt(0),
 		EIP155Block:         big.NewInt(0),
 		EIP158Block:         big.NewInt(0),
@@ -195,6 +198,7 @@ var (
 			CortinaBlockTimestamp:           nil,
 			DurangoBlockTimestamp:           nil,
 			EtnaTimestamp:                   nil,
+			FortunaTimestamp:                nil,
 		},
 	}
 
@@ -202,8 +206,8 @@ var (
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
 		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
-		DAOForkBlock:        nil,
-		DAOForkSupport:      false,
+		DAOForkBlock:        big.NewInt(0),
+		DAOForkSupport:      true,
 		EIP150Block:         big.NewInt(0),
 		EIP155Block:         big.NewInt(0),
 		EIP158Block:         big.NewInt(0),
@@ -227,6 +231,7 @@ var (
 			CortinaBlockTimestamp:           nil,
 			DurangoBlockTimestamp:           nil,
 			EtnaTimestamp:                   nil,
+			FortunaTimestamp:                nil,
 		},
 	}
 
@@ -234,8 +239,8 @@ var (
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
 		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
-		DAOForkBlock:        nil,
-		DAOForkSupport:      false,
+		DAOForkBlock:        big.NewInt(0),
+		DAOForkSupport:      true,
 		EIP150Block:         big.NewInt(0),
 		EIP155Block:         big.NewInt(0),
 		EIP158Block:         big.NewInt(0),
@@ -259,6 +264,7 @@ var (
 			CortinaBlockTimestamp:           nil,
 			DurangoBlockTimestamp:           nil,
 			EtnaTimestamp:                   nil,
+			FortunaTimestamp:                nil,
 		},
 	}
 
@@ -266,8 +272,8 @@ var (
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
 		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
-		DAOForkBlock:        nil,
-		DAOForkSupport:      false,
+		DAOForkBlock:        big.NewInt(0),
+		DAOForkSupport:      true,
 		EIP150Block:         big.NewInt(0),
 		EIP155Block:         big.NewInt(0),
 		EIP158Block:         big.NewInt(0),
@@ -291,6 +297,7 @@ var (
 			CortinaBlockTimestamp:           nil,
 			DurangoBlockTimestamp:           nil,
 			EtnaTimestamp:                   nil,
+			FortunaTimestamp:                nil,
 		},
 	}
 
@@ -298,8 +305,8 @@ var (
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
 		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
-		DAOForkBlock:        nil,
-		DAOForkSupport:      false,
+		DAOForkBlock:        big.NewInt(0),
+		DAOForkSupport:      true,
 		EIP150Block:         big.NewInt(0),
 		EIP155Block:         big.NewInt(0),
 		EIP158Block:         big.NewInt(0),
@@ -323,6 +330,7 @@ var (
 			CortinaBlockTimestamp:           nil,
 			DurangoBlockTimestamp:           nil,
 			EtnaTimestamp:                   nil,
+			FortunaTimestamp:                nil,
 		},
 	}
 
@@ -330,8 +338,8 @@ var (
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
 		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
-		DAOForkBlock:        nil,
-		DAOForkSupport:      false,
+		DAOForkBlock:        big.NewInt(0),
+		DAOForkSupport:      true,
 		EIP150Block:         big.NewInt(0),
 		EIP155Block:         big.NewInt(0),
 		EIP158Block:         big.NewInt(0),
@@ -355,6 +363,7 @@ var (
 			CortinaBlockTimestamp:           nil,
 			DurangoBlockTimestamp:           nil,
 			EtnaTimestamp:                   nil,
+			FortunaTimestamp:                nil,
 		},
 	}
 
@@ -362,8 +371,8 @@ var (
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
 		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
-		DAOForkBlock:        nil,
-		DAOForkSupport:      false,
+		DAOForkBlock:        big.NewInt(0),
+		DAOForkSupport:      true,
 		EIP150Block:         big.NewInt(0),
 		EIP155Block:         big.NewInt(0),
 		EIP158Block:         big.NewInt(0),
@@ -387,6 +396,7 @@ var (
 			CortinaBlockTimestamp:           nil,
 			DurangoBlockTimestamp:           nil,
 			EtnaTimestamp:                   nil,
+			FortunaTimestamp:                nil,
 		},
 	}
 
@@ -394,8 +404,8 @@ var (
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
 		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
-		DAOForkBlock:        nil,
-		DAOForkSupport:      false,
+		DAOForkBlock:        big.NewInt(0),
+		DAOForkSupport:      true,
 		EIP150Block:         big.NewInt(0),
 		EIP155Block:         big.NewInt(0),
 		EIP158Block:         big.NewInt(0),
@@ -419,6 +429,7 @@ var (
 			CortinaBlockTimestamp:           nil,
 			DurangoBlockTimestamp:           nil,
 			EtnaTimestamp:                   nil,
+			FortunaTimestamp:                nil,
 		},
 	}
 
@@ -426,8 +437,8 @@ var (
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
 		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
-		DAOForkBlock:        nil,
-		DAOForkSupport:      false,
+		DAOForkBlock:        big.NewInt(0),
+		DAOForkSupport:      true,
 		EIP150Block:         big.NewInt(0),
 		EIP155Block:         big.NewInt(0),
 		EIP158Block:         big.NewInt(0),
@@ -451,6 +462,7 @@ var (
 			CortinaBlockTimestamp:           utils.NewUint64(0),
 			DurangoBlockTimestamp:           nil,
 			EtnaTimestamp:                   nil,
+			FortunaTimestamp:                nil,
 		},
 	}
 
@@ -458,8 +470,8 @@ var (
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
 		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
-		DAOForkBlock:        nil,
-		DAOForkSupport:      false,
+		DAOForkBlock:        big.NewInt(0),
+		DAOForkSupport:      true,
 		EIP150Block:         big.NewInt(0),
 		EIP155Block:         big.NewInt(0),
 		EIP158Block:         big.NewInt(0),
@@ -484,6 +496,7 @@ var (
 			CortinaBlockTimestamp:           utils.NewUint64(0),
 			DurangoBlockTimestamp:           utils.NewUint64(0),
 			EtnaTimestamp:                   nil,
+			FortunaTimestamp:                nil,
 		},
 	}
 
@@ -491,8 +504,8 @@ var (
 		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
 		ChainID:             FlareChainID,
 		HomesteadBlock:      big.NewInt(0),
-		DAOForkBlock:        nil,
-		DAOForkSupport:      false,
+		DAOForkBlock:        big.NewInt(0),
+		DAOForkSupport:      true,
 		EIP150Block:         big.NewInt(0),
 		EIP155Block:         big.NewInt(0),
 		EIP158Block:         big.NewInt(0),
@@ -518,6 +531,42 @@ var (
 			CortinaBlockTimestamp:           utils.NewUint64(0),
 			DurangoBlockTimestamp:           utils.NewUint64(0),
 			EtnaTimestamp:                   utils.NewUint64(0),
+			FortunaTimestamp:                nil,
+		},
+	}
+
+	TestFlareFortunaChainConfig = &ChainConfig{
+		AvalancheContext:    AvalancheContext{utils.TestSnowContext()},
+		ChainID:             FlareChainID,
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        big.NewInt(0),
+		DAOForkSupport:      true,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         big.NewInt(0),
+		ShanghaiTime:        utils.NewUint64(0),
+		CancunTime:          utils.NewUint64(0),
+		NetworkUpgrades: NetworkUpgrades{
+			ApricotPhase1BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase2BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase3BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase4BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhase5BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePre6BlockTimestamp:  utils.NewUint64(0),
+			ApricotPhase6BlockTimestamp:     utils.NewUint64(0),
+			ApricotPhasePost6BlockTimestamp: utils.NewUint64(0),
+			BanffBlockTimestamp:             utils.NewUint64(0),
+			CortinaBlockTimestamp:           utils.NewUint64(0),
+			DurangoBlockTimestamp:           utils.NewUint64(0),
+			EtnaTimestamp:                   utils.NewUint64(0),
+			FortunaTimestamp:                utils.NewUint64(0),
 		},
 	}
 

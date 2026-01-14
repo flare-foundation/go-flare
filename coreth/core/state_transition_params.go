@@ -5,6 +5,7 @@ import (
 	"math/big"
 
 	"github.com/ava-labs/coreth/params"
+	"github.com/ava-labs/coreth/plugin/evm/upgrade/ap4"
 	"github.com/ava-labs/coreth/utils"
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -18,7 +19,7 @@ var (
 // Used in tests
 func nonFlareChain(st *StateTransition) (common.Address, uint64, bool, bool, error) {
 	return common.HexToAddress("0x000000000000000000000000000000000000dEaD"),
-		uint64(params.ApricotPhase4MinBaseFee),
+		uint64(ap4.MinBaseFee),
 		false,
 		false,
 		nil
@@ -28,7 +29,7 @@ func nonFlareChain(st *StateTransition) (common.Address, uint64, bool, bool, err
 // burnAddress, nominalGasPrice, isFlare chain, isSongbird chain, error
 func stateTransitionParamsFlare(st *StateTransition) (common.Address, uint64, bool, bool, error) {
 	return common.HexToAddress("0x000000000000000000000000000000000000dEaD"),
-		uint64(params.ApricotPhase4MinBaseFee),
+		uint64(ap4.MinBaseFee),
 		true,
 		false,
 		nil

@@ -33,6 +33,7 @@ nohup ./build/avalanchego \
   --staking-tls-cert-file=$LAUNCH_DIR/staking/local/staker1.crt \
   --staking-tls-key-file=$LAUNCH_DIR/staking/local/staker1.key \
   --staking-signer-key-file=$LAUNCH_DIR/staking/local/signer1.key \
+  --chain-config-dir=/Users/marko/Documents/work/Flare/chain-config-debug \
   --log-level=debug >$LAUNCH_DIR/logs/local/node1/launch.log 2>&1 &
 NODE_1_PID=$(echo $!)
 sleep 3
@@ -52,6 +53,7 @@ nohup ./build/avalanchego \
   --staking-tls-cert-file=$LAUNCH_DIR/staking/local/staker2.crt \
   --staking-tls-key-file=$LAUNCH_DIR/staking/local/staker2.key \
   --staking-signer-key-file=$LAUNCH_DIR/staking/local/signer2.key \
+  --chain-config-dir=/Users/marko/Documents/work/Flare/chain-config-debug \
   --log-level=debug >$LAUNCH_DIR/logs/local/node2/launch.log 2>&1 &
 NODE_2_PID=$(echo $!)
 sleep 3
@@ -69,6 +71,7 @@ nohup ./build/avalanchego \
   --staking-tls-cert-file=$LAUNCH_DIR/staking/local/staker3.crt \
   --staking-tls-key-file=$LAUNCH_DIR/staking/local/staker3.key \
   --staking-signer-key-file=$LAUNCH_DIR/staking/local/signer3.key \
+  --chain-config-dir=/Users/marko/Documents/work/Flare/chain-config-debug \
   --log-level=debug >$LAUNCH_DIR/logs/local/node3/launch.log 2>&1 &
 NODE_3_PID=$(echo $!)
 sleep 3
@@ -86,6 +89,7 @@ nohup ./build/avalanchego \
   --staking-tls-cert-file=$LAUNCH_DIR/staking/local/staker4.crt \
   --staking-tls-key-file=$LAUNCH_DIR/staking/local/staker4.key \
   --staking-signer-key-file=$LAUNCH_DIR/staking/local/signer4.key \
+  --chain-config-dir=/Users/marko/Documents/work/Flare/chain-config-debug \
   --log-level=debug >$LAUNCH_DIR/logs/local/node4/launch.log 2>&1 &
 NODE_4_PID=$(echo $!)
 sleep 3
@@ -103,6 +107,7 @@ nohup ./build/avalanchego \
   --staking-tls-cert-file=$LAUNCH_DIR/staking/local/staker5.crt \
   --staking-tls-key-file=$LAUNCH_DIR/staking/local/staker5.key \
   --staking-signer-key-file=$LAUNCH_DIR/staking/local/signer5.key \
+  --chain-config-dir=/Users/marko/Documents/work/Flare/chain-config-debug \
   --log-level=debug >$LAUNCH_DIR/logs/local/node5/launch.log 2>&1 &
 NODE_5_PID=$(echo $!)
 sleep 3

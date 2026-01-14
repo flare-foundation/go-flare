@@ -36,7 +36,7 @@ var (
 		CortinaXChainStopVertexID: ids.FromStringOrPanic("jrGWDh5Po9FMj54depyunNixpia5PN4aAYxfmNzU8n752Rjga"),
 		DurangoTime:               time.Date(2024, time.March, 6, 16, 0, 0, 0, time.UTC),
 		EtnaTime:                  time.Date(2024, time.December, 16, 17, 0, 0, 0, time.UTC),
-		FUpgradeTime:              UnscheduledActivationTime,
+		FortunaTime:               time.Date(2025, time.April, 8, 15, 0, 0, 0, time.UTC),
 	}
 	// Fuji = Config{
 	// 	ApricotPhase1Time:            time.Date(2021, time.March, 26, 14, 0, 0, 0, time.UTC),
@@ -72,7 +72,7 @@ var (
 		CortinaTime:           time.Date(2025, time.May, 13, 12, 0, 0, 0, time.UTC),
 		DurangoTime:           time.Date(2025, time.August, 5, 12, 0, 0, 0, time.UTC),
 		EtnaTime:              time.Date(2025, time.December, 2, 12, 0, 0, 0, time.UTC),
-		FUpgradeTime:          UnscheduledActivationTime,
+		FortunaTime:           UnscheduledActivationTime,
 	}
 	Songbird = Config{
 		ApricotPhase1Time:     InitiallyActiveTime,
@@ -87,7 +87,7 @@ var (
 		CortinaTime:           time.Date(2025, time.May, 6, 12, 0, 0, 0, time.UTC),
 		DurangoTime:           time.Date(2025, time.July, 22, 12, 0, 0, 0, time.UTC),
 		EtnaTime:              time.Date(2025, time.November, 25, 12, 0, 0, 0, time.UTC),
-		FUpgradeTime:          UnscheduledActivationTime,
+		FortunaTime:           UnscheduledActivationTime,
 	}
 	Costwo = Config{
 		ApricotPhase1Time:     InitiallyActiveTime,
@@ -102,7 +102,7 @@ var (
 		CortinaTime:           time.Date(2025, time.April, 8, 12, 0, 0, 0, time.UTC),
 		DurangoTime:           time.Date(2025, time.June, 24, 12, 0, 0, 0, time.UTC),
 		EtnaTime:              time.Date(2025, time.November, 13, 14, 0, 0, 0, time.UTC),
-		FUpgradeTime:          UnscheduledActivationTime,
+		FortunaTime:           UnscheduledActivationTime,
 	}
 	Coston = Config{
 		ApricotPhase1Time:     InitiallyActiveTime,
@@ -116,7 +116,7 @@ var (
 		CortinaTime:           time.Date(2025, time.March, 27, 13, 0, 0, 0, time.UTC),
 		DurangoTime:           time.Date(2025, time.July, 1, 12, 0, 0, 0, time.UTC),
 		EtnaTime:              time.Date(2025, time.November, 13, 10, 0, 0, 0, time.UTC),
-		FUpgradeTime:          UnscheduledActivationTime,
+		FortunaTime:           UnscheduledActivationTime,
 	}
 	LocalFlare = Config{
 		ApricotPhase1Time:            ZeroTime,
@@ -133,7 +133,7 @@ var (
 		CortinaXChainStopVertexID:    ids.Empty,
 		DurangoTime:                  ZeroTime,
 		EtnaTime:                     ZeroTime,
-		FUpgradeTime:                 UnscheduledActivationTime,
+		FortunaTime:                  ZeroTime,
 	}
 	Local = Config{
 		ApricotPhase1Time:            ZeroTime,
@@ -150,7 +150,7 @@ var (
 		CortinaXChainStopVertexID:    ids.Empty,
 		DurangoTime:                  ZeroTime,
 		EtnaTime:                     ZeroTime,
-		FUpgradeTime:                 UnscheduledActivationTime,
+		FortunaTime:                  ZeroTime,
 	}
 	Default = Config{
 		ApricotPhase1Time:            InitiallyActiveTime,
@@ -167,7 +167,7 @@ var (
 		CortinaXChainStopVertexID:    ids.Empty,
 		DurangoTime:                  InitiallyActiveTime,
 		EtnaTime:                     InitiallyActiveTime,
-		FUpgradeTime:                 UnscheduledActivationTime,
+		FortunaTime:                  InitiallyActiveTime,
 	}
 
 	ErrInvalidUpgradeTimes = errors.New("invalid upgrade configuration")
@@ -188,7 +188,7 @@ type Config struct {
 	CortinaXChainStopVertexID    ids.ID    `json:"cortinaXChainStopVertexID"`
 	DurangoTime                  time.Time `json:"durangoTime"`
 	EtnaTime                     time.Time `json:"etnaTime"`
-	FUpgradeTime                 time.Time `json:"fUpgradeTime"`
+	FortunaTime                  time.Time `json:"fortunaTime"`
 }
 
 func (c *Config) Validate() error {
@@ -205,7 +205,7 @@ func (c *Config) Validate() error {
 		c.CortinaTime,
 		c.DurangoTime,
 		c.EtnaTime,
-		c.FUpgradeTime,
+		c.FortunaTime,
 	}
 	for i := 0; i < len(upgrades)-1; i++ {
 		if upgrades[i].After(upgrades[i+1]) {
@@ -269,8 +269,8 @@ func (c *Config) IsEtnaActivated(t time.Time) bool {
 	return !t.Before(c.EtnaTime)
 }
 
-func (c *Config) IsFUpgradeActivated(t time.Time) bool {
-	return !t.Before(c.FUpgradeTime)
+func (c *Config) IsFortunaActivated(t time.Time) bool {
+	return !t.Before(c.FortunaTime)
 }
 
 func GetConfig(networkID uint32) Config {
