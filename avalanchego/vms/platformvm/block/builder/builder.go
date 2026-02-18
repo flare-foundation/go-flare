@@ -638,7 +638,6 @@ func executeTx(
 
 	backend.Ctx.Log.Debug("successfully executed transaction",
 		zap.Stringer("txID", txID),
-		zap.Error(err),
 	)
 	txDiff.AddTx(tx, status.Committed)
 	return true, txDiff.Apply(stateDiff)
