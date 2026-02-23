@@ -1,6 +1,6 @@
 module github.com/ava-labs/coreth
 
-go 1.24.13
+go 1.23.12
 
 require (
 	github.com/VictoriaMetrics/fastcache v1.12.1
