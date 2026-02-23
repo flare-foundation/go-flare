@@ -476,7 +476,7 @@ func conflicts(backend *Backend, inputs set.Set[ids.ID], ancestor AtomicBlockCon
 		}
 		nextAncestor, ok := nextAncestorIntf.(AtomicBlockContext)
 		if !ok {
-			return fmt.Errorf("ancestor block %s had unexpected type %T", nextAncestor.ID(), nextAncestorIntf)
+			return fmt.Errorf("ancestor block %s had unexpected type %T", nextAncestorIntf.ID(), nextAncestorIntf)
 		}
 		ancestor = nextAncestor
 	}

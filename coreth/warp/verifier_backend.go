@@ -16,6 +16,7 @@ import (
 const (
 	ParseErrCode = iota + 1
 	VerifyErrCode
+	FetchErrCode
 )
 
 // Verify verifies the signature of the message
@@ -27,7 +28,7 @@ func (b *backend) Verify(ctx context.Context, unsignedMessage *avalancheWarp.Uns
 		return nil
 	} else if err != database.ErrNotFound {
 		return &common.AppError{
-			Code:    ParseErrCode,
+			Code:    FetchErrCode,
 			Message: fmt.Sprintf("failed to get message %s: %s", messageID, err.Error()),
 		}
 	}
