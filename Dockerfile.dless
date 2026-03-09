@@ -1,4 +1,4 @@
-FROM golang:1.24 AS build
+FROM golang:1.23.12-bookworm@sha256:167053a2bb901972bf2c1611f8f52c44d5fe7e762e5cab213708d82c421614db AS build
 
 RUN apt-get update -y && \
     apt-get install -y rsync
@@ -20,7 +20,7 @@ WORKDIR /entrypoint
 COPY entrypoint/main.go .
 RUN go build -ldflags="-s -w" -o /out/entrypoint main.go
 
-FROM gcr.io/distroless/base:nonroot AS final
+FROM gcr.io/distroless/base:nonroot@sha256:e00da4d3bd422820880b080115b3bad24349bef37ed46d68ed0d13e150dc8d67 AS final
 
 USER nonroot
 
