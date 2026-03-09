@@ -3,16 +3,16 @@ name: binaries
 on:
   workflow_dispatch:
   push:
-    branches:
-    tags:
+    branches: [ "main", "release/**" ]
+    tags: [ "v*" ]
 
 jobs:
   build:
     name: Build go-flare with SLSA
     uses: ./.github/workflows/build-go-slsa3.yaml
     with:
-      go_version: "${{ vars.GO_VERSION }}"
-      ubuntu_version: "${{ vars.UBUNTU_VERSION }}"
+      go_version: "1.23.12"
+      ubuntu_version: "24.04"
       build_artifact_name: "avalanchego"
 
   build-verification:
@@ -20,13 +20,13 @@ jobs:
     name: Go Verification Build
     uses: ./.github/workflows/build-go-verification.yaml
     with:
-      go_version: "${{ vars.GO_VERSION }}"
-      ubuntu_version: "${{ vars.UBUNTU_VERSION }}"
+      go_version: "1.23.12"
+      ubuntu_version: "24.04"
       build_artifact_name: "avalanchego-verification"
 
   release:
     name: Release
-    runs-on: "ubuntu-${{ vars.UBUNTU_VERSION }}"
+    runs-on: "ubuntu-24.04"
     needs: [build, build-verification]
     if: github.ref_type == 'tag'
     permissions:
