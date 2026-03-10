@@ -14,13 +14,14 @@ import (
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/crypto/bls"
+	"github.com/ava-labs/avalanchego/utils/crypto/bls/signer/localsigner"
 	avalancheWarp "github.com/ava-labs/avalanchego/vms/platformvm/warp"
 )
 
-func newValidator(t testing.TB, weight uint64) (*bls.SecretKey, *avalancheWarp.Validator) {
-	sk, err := bls.NewSecretKey()
+func newValidator(t testing.TB, weight uint64) (bls.Signer, *avalancheWarp.Validator) {
+	sk, err := localsigner.New()
 	require.NoError(t, err)
-	pk := bls.PublicFromSecretKey(sk)
+	pk := sk.PublicKey()
 	return sk, &avalancheWarp.Validator{
 		PublicKey:      pk,
 		PublicKeyBytes: bls.PublicKeyToCompressedBytes(pk),
@@ -43,17 +44,21 @@ func TestAggregateSignatures(t *testing.T) {
 	vdr1sk, vdr1 := newValidator(t, vdrWeight)
 	vdr2sk, vdr2 := newValidator(t, vdrWeight+1)
 	vdr3sk, vdr3 := newValidator(t, vdrWeight-1)
-	sig1 := bls.Sign(vdr1sk, unsignedMsg.Bytes())
-	sig2 := bls.Sign(vdr2sk, unsignedMsg.Bytes())
-	sig3 := bls.Sign(vdr3sk, unsignedMsg.Bytes())
+	sig1, err := vdr1sk.Sign(unsignedMsg.Bytes())
+	require.NoError(t, err)
+	sig2, err := vdr2sk.Sign(unsignedMsg.Bytes())
+	require.NoError(t, err)
+	sig3, err := vdr3sk.Sign(unsignedMsg.Bytes())
+	require.NoError(t, err)
 	vdrToSig := map[*avalancheWarp.Validator]*bls.Signature{
 		vdr1: sig1,
 		vdr2: sig2,
 		vdr3: sig3,
 	}
-	nonVdrSk, err := bls.NewSecretKey()
+	nonVdrSk, err := localsigner.New()
 	require.NoError(t, err)
-	nonVdrSig := bls.Sign(nonVdrSk, unsignedMsg.Bytes())
+	nonVdrSig, err := nonVdrSk.Sign(unsignedMsg.Bytes())
+	require.NoError(t, err)
 	vdrs := []*avalancheWarp.Validator{
 		{
 			PublicKey: vdr1.PublicKey,
@@ -230,7 +235,7 @@ func TestAggregateSignatures(t *testing.T) {
 			expectedErr:     nil,
 		},
 		{
-			name: "early termination of signature fetching on parent context cancelation",
+			name: "early termination of signature fetching on parent context cancellation",
 			contextWithCancelFunc: func() (context.Context, context.CancelFunc) {
 				ctx, cancel := context.WithCancel(context.Background())
 				cancel()

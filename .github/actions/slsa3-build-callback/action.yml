@@ -1,0 +1,68 @@
+name: 'Build Callback Action'
+description: 'Builds go-flare binaries for SLSA provenance'
+inputs:
+  slsa-workflow-inputs:
+    description: 'All inputs as JSON'
+    required: true
+  slsa-layout-file:
+    description: 'Location to store layout content'
+    required: true
+
+  # Unused secrets - SLSA BYOB framework requires these to be declared
+  slsa-workflow-secret1: {}
+  slsa-workflow-secret2: {}
+  slsa-workflow-secret3: {}
+  slsa-workflow-secret4: {}
+  slsa-workflow-secret5: {}
+  slsa-workflow-secret6: {}
+  slsa-workflow-secret7: {}
+  slsa-workflow-secret8: {}
+  slsa-workflow-secret9: {}
+  slsa-workflow-secret10: {}
+  slsa-workflow-secret11: {}
+  slsa-workflow-secret12: {}
+  slsa-workflow-secret13: {}
+  slsa-workflow-secret14: {}
+  slsa-workflow-secret15: {}
+
+outputs:
+  attestations:
+    description: 'Attestation metadata for built artifacts'
+    value: ${{ steps.generate-attestations.outputs.attestations }}
+  build-artifacts-name:
+    description: 'Name of uploaded build artifacts'
+    value: ${{ steps.upload.outputs.name }}
+  build-artifacts-sha256:
+    description: 'SHA256 of uploaded artifacts'
+    value: ${{ steps.upload.outputs.sha256 }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Build
+      uses: ./../__TOOL_CHECKOUT_DIR__/.github/actions/go-build
+      with:
+        go_version: ${{ fromJSON(inputs.slsa-workflow-inputs).go_version }}
+        working_directory: ./../__TOOL_CHECKOUT_DIR__
+
+    - name: Generate layout file
+      id: generate-layout
+      env:
+        SLSA_OUTPUTS_ARTIFACTS_FILE: ${{ inputs.slsa-layout-file }}
+        BUILD_DIR: ./../__TOOL_CHECKOUT_DIR__/avalanchego/build
+        BINARY_NAME: ${{ fromJSON(inputs.slsa-workflow-inputs).build_artifact_name }}
+      shell: bash
+      run: ./../__TOOL_ACTION_DIR__/generate-layout.sh
+
+    - name: Copy binaries for secure upload
+      shell: bash
+      run: |
+        mkdir -p ./binaries
+        cp -r ./../__TOOL_CHECKOUT_DIR__/avalanchego/build/* ./binaries/
+
+    - name: Upload binaries
+      id: upload
+      uses: slsa-framework/slsa-github-generator/actions/delegator/secure-upload-folder@v2.1.0
+      with:
+        name: ${{ fromJSON(inputs.slsa-workflow-inputs).build_artifact_name }}
+        path: ./binaries/

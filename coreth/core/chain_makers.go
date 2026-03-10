@@ -31,13 +31,13 @@ import (
 	"math/big"
 
 	"github.com/ava-labs/coreth/consensus"
-	"github.com/ava-labs/coreth/consensus/dummy"
 	"github.com/ava-labs/coreth/consensus/misc/eip4844"
 	"github.com/ava-labs/coreth/core/rawdb"
 	"github.com/ava-labs/coreth/core/state"
 	"github.com/ava-labs/coreth/core/types"
 	"github.com/ava-labs/coreth/core/vm"
 	"github.com/ava-labs/coreth/params"
+	"github.com/ava-labs/coreth/plugin/evm/header"
 	"github.com/ava-labs/coreth/triedb"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -373,27 +373,13 @@ func GenerateChainWithGenesis(genesis *Genesis, engine consensus.Engine, n int, 
 func (cm *chainMaker) makeHeader(parent *types.Block, gap uint64, state *state.StateDB, engine consensus.Engine) *types.Header {
 	time := parent.Time() + gap // block time is fixed at [gap] seconds
 
-	var gasLimit uint64
-	if cm.config.IsCortina(time) {
-		gasLimit = params.CortinaGasLimit
-	} else {
-		if cm.config.IsSongbirdCode() {
-			if cm.config.IsSongbirdTransition(time) {
-				gasLimit = params.SgbTransitionGasLimit
-			} else if cm.config.IsApricotPhase5(time) {
-				gasLimit = params.SgbApricotPhase5GasLimit
-			} else if cm.config.IsApricotPhase1(time) {
-				gasLimit = params.ApricotPhase1GasLimit
-			} else {
-				gasLimit = CalcGasLimit(parent.GasUsed(), parent.GasLimit(), parent.GasLimit(), parent.GasLimit())
-			}
-		} else {
-			if cm.config.IsApricotPhase1(time) {
-				gasLimit = params.ApricotPhase1GasLimit
-			} else {
-				gasLimit = CalcGasLimit(parent.GasUsed(), parent.GasLimit(), parent.GasLimit(), parent.GasLimit())
-			}
-		}
+	gasLimit, err := header.GasLimit(cm.config, parent.Header(), time)
+	if err != nil {
+		panic(err)
+	}
+	baseFee, err := header.BaseFee(cm.config, parent.Header(), time)
+	if err != nil {
+		panic(err)
 	}
 
 	header := &types.Header{
@@ -404,14 +390,9 @@ func (cm *chainMaker) makeHeader(parent *types.Block, gap uint64, state *state.S
 		GasLimit:   gasLimit,
 		Number:     new(big.Int).Add(parent.Number(), common.Big1),
 		Time:       time,
+		BaseFee:    baseFee,
 	}
-	if cm.config.IsApricotPhase3(time) {
-		var err error
-		header.Extra, header.BaseFee, err = dummy.CalcBaseFee(cm.config, parent.Header(), time)
-		if err != nil {
-			panic(err)
-		}
-	}
+
 	if cm.config.IsCancun(header.Number, header.Time) {
 		var (
 			parentExcessBlobGas uint64

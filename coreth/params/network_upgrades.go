@@ -43,6 +43,9 @@ type NetworkUpgrades struct {
 	// Note: EIP-4844 BlobTxs are not enabled in the mempool and blocks are not
 	// allowed to contain them. For details see https://github.com/avalanche-foundation/ACPs/pull/131
 	EtnaTimestamp *uint64 `json:"etnaTimestamp,omitempty"`
+	// Fortuna is a placeholder for the next upgrade.
+	// (nil = no fork, 0 = already activated)
+	FortunaTimestamp *uint64 `json:"fortunaTimestamp,omitempty"`
 }
 
 func (n *NetworkUpgrades) Equal(other *NetworkUpgrades) bool {
@@ -86,6 +89,9 @@ func (n *NetworkUpgrades) CheckNetworkUpgradesCompatible(newcfg *NetworkUpgrades
 	if isForkTimestampIncompatible(n.EtnaTimestamp, newcfg.EtnaTimestamp, time) {
 		return newTimestampCompatError("Etna fork block timestamp", n.EtnaTimestamp, newcfg.EtnaTimestamp)
 	}
+	if isForkTimestampIncompatible(n.FortunaTimestamp, newcfg.FortunaTimestamp, time) {
+		return newTimestampCompatError("Fortuna fork block timestamp", n.FortunaTimestamp, newcfg.FortunaTimestamp)
+	}
 
 	return nil
 }
@@ -104,6 +110,7 @@ func (n *NetworkUpgrades) forkOrder() []fork {
 		{name: "cortinaBlockTimestamp", timestamp: n.CortinaBlockTimestamp},
 		{name: "durangoBlockTimestamp", timestamp: n.DurangoBlockTimestamp},
 		{name: "etnaTimestamp", timestamp: n.EtnaTimestamp},
+		{name: "fortunaTimestamp", timestamp: n.FortunaTimestamp},
 	}
 }
 
@@ -185,6 +192,12 @@ func (n *NetworkUpgrades) IsEtna(time uint64) bool {
 	return isTimestampForked(n.EtnaTimestamp, time)
 }
 
+// IsFortuna returns whether [time] represents a block
+// with a timestamp after the Fortuna upgrade time.
+func (n *NetworkUpgrades) IsFortuna(time uint64) bool {
+	return isTimestampForked(n.FortunaTimestamp, time)
+}
+
 func (n *NetworkUpgrades) Description() string {
 	var banner string
 	banner += fmt.Sprintf(" - Apricot Phase 1 Timestamp:        @%-10v (https://github.com/ava-labs/avalanchego/releases/tag/v1.3.0)\n", ptrToString(n.ApricotPhase1BlockTimestamp))
@@ -199,26 +212,28 @@ func (n *NetworkUpgrades) Description() string {
 	banner += fmt.Sprintf(" - Banff Timestamp:                  @%-10v (https://github.com/ava-labs/avalanchego/releases/tag/v1.9.0)\n", ptrToString(n.BanffBlockTimestamp))
 	banner += fmt.Sprintf(" - Cortina Timestamp:                @%-10v (https://github.com/ava-labs/avalanchego/releases/tag/v1.10.0)\n", ptrToString(n.CortinaBlockTimestamp))
 	banner += fmt.Sprintf(" - Durango Timestamp:                @%-10v (https://github.com/ava-labs/avalanchego/releases/tag/v1.11.0)\n", ptrToString(n.DurangoBlockTimestamp))
-	banner += fmt.Sprintf(" - Etna Timestamp:               @%-10v (https://github.com/ava-labs/avalanchego/releases/tag/v1.12.0)\n", ptrToString(n.EtnaTimestamp))
+	banner += fmt.Sprintf(" - Etna Timestamp:                   @%-10v (https://github.com/ava-labs/avalanchego/releases/tag/v1.12.0)\n", ptrToString(n.EtnaTimestamp))
+	banner += fmt.Sprintf(" - Fortuna Timestamp:                @%-10v (https://github.com/ava-labs/avalanchego/releases/tag/v1.13.0)\n", ptrToString(n.FortunaTimestamp))
 	return banner
 }
 
-func getNetworkUpgrades(networkID uint32) NetworkUpgrades {
-	upgrade := upgrade.GetConfig(networkID)
+func GetNetworkUpgrades(networkID uint32) NetworkUpgrades {
+	agoUpgrade := upgrade.GetConfig(networkID)
 	return NetworkUpgrades{
-		ApricotPhase1BlockTimestamp:     utils.TimeToNewUint64(upgrade.ApricotPhase1Time),
-		ApricotPhase2BlockTimestamp:     utils.TimeToNewUint64(upgrade.ApricotPhase2Time),
-		ApricotPhase3BlockTimestamp:     utils.TimeToNewUint64(upgrade.ApricotPhase3Time),
-		ApricotPhase4BlockTimestamp:     utils.TimeToNewUint64(upgrade.ApricotPhase4Time),
-		ApricotPhase5BlockTimestamp:     utils.TimeToNewUint64(upgrade.ApricotPhase5Time),
-		SongbirdTransitionTimestamp:     utils.TimeToNewUint64(upgrade.SongbirdTransitionTime),
-		ApricotPhasePre6BlockTimestamp:  utils.TimeToNewUint64(upgrade.ApricotPhasePre6Time),
-		ApricotPhase6BlockTimestamp:     utils.TimeToNewUint64(upgrade.ApricotPhase6Time),
-		ApricotPhasePost6BlockTimestamp: utils.TimeToNewUint64(upgrade.ApricotPhasePost6Time),
-		BanffBlockTimestamp:             utils.TimeToNewUint64(upgrade.BanffTime),
-		CortinaBlockTimestamp:           utils.TimeToNewUint64(upgrade.CortinaTime),
-		DurangoBlockTimestamp:           utils.TimeToNewUint64(upgrade.DurangoTime),
-		EtnaTimestamp:                   utils.TimeToNewUint64(upgrade.EtnaTime),
+		ApricotPhase1BlockTimestamp:     utils.TimeToNewUint64(agoUpgrade.ApricotPhase1Time),
+		ApricotPhase2BlockTimestamp:     utils.TimeToNewUint64(agoUpgrade.ApricotPhase2Time),
+		ApricotPhase3BlockTimestamp:     utils.TimeToNewUint64(agoUpgrade.ApricotPhase3Time),
+		ApricotPhase4BlockTimestamp:     utils.TimeToNewUint64(agoUpgrade.ApricotPhase4Time),
+		ApricotPhase5BlockTimestamp:     utils.TimeToNewUint64(agoUpgrade.ApricotPhase5Time),
+		SongbirdTransitionTimestamp:     utils.TimeToNewUint64(agoUpgrade.SongbirdTransitionTime),
+		ApricotPhasePre6BlockTimestamp:  utils.TimeToNewUint64(agoUpgrade.ApricotPhasePre6Time),
+		ApricotPhase6BlockTimestamp:     utils.TimeToNewUint64(agoUpgrade.ApricotPhase6Time),
+		ApricotPhasePost6BlockTimestamp: utils.TimeToNewUint64(agoUpgrade.ApricotPhasePost6Time),
+		BanffBlockTimestamp:             utils.TimeToNewUint64(agoUpgrade.BanffTime),
+		CortinaBlockTimestamp:           utils.TimeToNewUint64(agoUpgrade.CortinaTime),
+		DurangoBlockTimestamp:           utils.TimeToNewUint64(agoUpgrade.DurangoTime),
+		EtnaTimestamp:                   utils.TimeToNewUint64(agoUpgrade.EtnaTime),
+		FortunaTimestamp:                utils.TimeToNewUint64(agoUpgrade.FortunaTime),
 	}
 }
 
@@ -230,6 +245,7 @@ type AvalancheRules struct {
 	IsCortina                                                                           bool
 	IsDurango                                                                           bool
 	IsEtna                                                                              bool
+	IsFortuna                                                                           bool
 }
 
 func (n *NetworkUpgrades) GetAvalancheRules(timestamp uint64) AvalancheRules {
@@ -247,5 +263,6 @@ func (n *NetworkUpgrades) GetAvalancheRules(timestamp uint64) AvalancheRules {
 		IsCortina:            n.IsCortina(timestamp),
 		IsDurango:            n.IsDurango(timestamp),
 		IsEtna:               n.IsEtna(timestamp),
+		IsFortuna:            n.IsFortuna(timestamp),
 	}
 }

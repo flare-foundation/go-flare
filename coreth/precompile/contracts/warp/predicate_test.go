@@ -17,6 +17,7 @@ import (
 	agoUtils "github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/crypto/bls"
+	"github.com/ava-labs/avalanchego/utils/crypto/bls/signer/localsigner"
 	"github.com/ava-labs/avalanchego/utils/set"
 	avalancheWarp "github.com/ava-labs/avalanchego/vms/platformvm/warp"
 	"github.com/ava-labs/avalanchego/vms/platformvm/warp/payload"
@@ -93,7 +94,10 @@ func init() {
 	}
 
 	for _, testVdr := range testVdrs {
-		blsSignature := bls.Sign(testVdr.sk, unsignedMsg.Bytes())
+		blsSignature, err := testVdr.sk.Sign(unsignedMsg.Bytes())
+		if err != nil {
+			panic(err)
+		}
 		blsSignatures = append(blsSignatures, blsSignature)
 	}
 
@@ -102,7 +106,7 @@ func init() {
 
 type testValidator struct {
 	nodeID ids.NodeID
-	sk     *bls.SecretKey
+	sk     bls.Signer
 	vdr    *avalancheWarp.Validator
 }
 
@@ -111,13 +115,13 @@ func (v *testValidator) Compare(o *testValidator) int {
 }
 
 func newTestValidator() *testValidator {
-	sk, err := bls.NewSecretKey()
+	sk, err := localsigner.New()
 	if err != nil {
 		panic(err)
 	}
 
 	nodeID := ids.GenerateTestNodeID()
-	pk := bls.PublicFromSecretKey(sk)
+	pk := sk.PublicKey()
 	return &testValidator{
 		nodeID: nodeID,
 		sk:     sk,
@@ -234,13 +238,16 @@ func testWarpMessageFromPrimaryNetwork(t *testing.T, requirePrimaryNetworkSigner
 	getValidatorsOutput := make(map[ids.NodeID]*validators.GetValidatorOutput)
 	blsSignatures := make([]*bls.Signature, 0, numKeys)
 	for i := 0; i < numKeys; i++ {
+		sig, err := testVdrs[i].sk.Sign(unsignedMsg.Bytes())
+		require.NoError(err)
+
 		validatorOutput := &validators.GetValidatorOutput{
 			NodeID:    testVdrs[i].nodeID,
 			Weight:    20,
 			PublicKey: testVdrs[i].vdr.PublicKey,
 		}
 		getValidatorsOutput[testVdrs[i].nodeID] = validatorOutput
-		blsSignatures = append(blsSignatures, bls.Sign(testVdrs[i].sk, unsignedMsg.Bytes()))
+		blsSignatures = append(blsSignatures, sig)
 	}
 	aggregateSignature, err := bls.AggregateSignatures(blsSignatures)
 	require.NoError(err)

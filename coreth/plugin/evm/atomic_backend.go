@@ -8,14 +8,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ava-labs/avalanchego/chains/atomic"
+	avalancheatomic "github.com/ava-labs/avalanchego/chains/atomic"
 	"github.com/ava-labs/avalanchego/codec"
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/database/prefixdb"
 	"github.com/ava-labs/avalanchego/database/versiondb"
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/wrappers"
-	syncclient "github.com/ava-labs/coreth/sync/client"
+	"github.com/ava-labs/coreth/plugin/evm/atomic"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 )
@@ -32,7 +33,7 @@ type AtomicBackend interface {
 	// and it's the caller's responsibility to call either Accept or Reject on
 	// the AtomicState which can be retreived from GetVerifiedAtomicState to commit the
 	// changes or abort them and free memory.
-	InsertTxs(blockHash common.Hash, blockHeight uint64, parentHash common.Hash, txs []*Tx) (common.Hash, error)
+	InsertTxs(blockHash common.Hash, blockHeight uint64, parentHash common.Hash, txs []*atomic.Tx) (common.Hash, error)
 
 	// Returns an AtomicState corresponding to a block hash that has been inserted
 	// but not Accepted or Rejected yet.
@@ -55,10 +56,6 @@ type AtomicBackend interface {
 	// will not have been executed on shared memory.
 	MarkApplyToSharedMemoryCursor(previousLastAcceptedHeight uint64) error
 
-	// Syncer creates and returns a new Syncer object that can be used to sync the
-	// state of the atomic trie from peers
-	Syncer(client syncclient.LeafClient, targetRoot common.Hash, targetHeight uint64, requestSize uint16) (Syncer, error)
-
 	// SetLastAccepted is used after state-sync to reset the last accepted block.
 	SetLastAccepted(lastAcceptedHash common.Hash)
 
@@ -73,7 +70,7 @@ type atomicBackend struct {
 	bonusBlocks  map[uint64]ids.ID   // Map of height to blockID for blocks to skip indexing
 	db           *versiondb.Database // Underlying database
 	metadataDB   database.Database   // Underlying database containing the atomic trie metadata
-	sharedMemory atomic.SharedMemory
+	sharedMemory avalancheatomic.SharedMemory
 
 	repo       AtomicTxRepository
 	atomicTrie AtomicTrie
@@ -84,7 +81,7 @@ type atomicBackend struct {
 
 // NewAtomicBackend creates an AtomicBackend from the specified dependencies
 func NewAtomicBackend(
-	db *versiondb.Database, sharedMemory atomic.SharedMemory,
+	db *versiondb.Database, sharedMemory avalancheatomic.SharedMemory,
 	bonusBlocks map[uint64]ids.ID, repo AtomicTxRepository,
 	lastAcceptedHeight uint64, lastAcceptedHash common.Hash, commitInterval uint64,
 ) (AtomicBackend, error) {
@@ -150,7 +147,7 @@ func (a *atomicBackend) initialize(lastAcceptedHeight uint64) error {
 		// iterate over the transactions, indexing them if the height is < commit height
 		// otherwise, add the atomic operations from the transaction to the uncommittedOpsMap
 		height = binary.BigEndian.Uint64(iter.Key())
-		txs, err := ExtractAtomicTxs(iter.Value(), true, a.codec)
+		txs, err := atomic.ExtractAtomicTxs(iter.Value(), true, a.codec)
 		if err != nil {
 			return err
 		}
@@ -266,7 +263,7 @@ func (a *atomicBackend) ApplyToSharedMemory(lastAcceptedBlock uint64) error {
 		it.Next()
 	}
 
-	batchOps := make(map[ids.ID]*atomic.Requests)
+	batchOps := make(map[ids.ID]*avalancheatomic.Requests)
 	for it.Next() {
 		height := it.BlockNumber()
 		if height > lastAcceptedBlock {
@@ -318,7 +315,7 @@ func (a *atomicBackend) ApplyToSharedMemory(lastAcceptedBlock uint64) error {
 			lastHeight = height
 			lastBlockchainID = blockchainID
 			putRequests, removeRequests = 0, 0
-			batchOps = make(map[ids.ID]*atomic.Requests)
+			batchOps = make(map[ids.ID]*avalancheatomic.Requests)
 		}
 	}
 	if err := it.Error(); err != nil {
@@ -352,12 +349,6 @@ func (a *atomicBackend) MarkApplyToSharedMemoryCursor(previousLastAcceptedHeight
 	// Set the cursor to [previousLastAcceptedHeight+1] so that we begin the iteration at the
 	// first item that has not been applied to shared memory.
 	return database.PutUInt64(a.metadataDB, appliedSharedMemoryCursorKey, previousLastAcceptedHeight+1)
-}
-
-// Syncer creates and returns a new Syncer object that can be used to sync the
-// state of the atomic trie from peers
-func (a *atomicBackend) Syncer(client syncclient.LeafClient, targetRoot common.Hash, targetHeight uint64, requestSize uint16) (Syncer, error) {
-	return newAtomicSyncer(client, a, targetRoot, targetHeight, requestSize)
 }
 
 func (a *atomicBackend) GetVerifiedAtomicState(blockHash common.Hash) (AtomicState, error) {
@@ -395,7 +386,7 @@ func (a *atomicBackend) SetLastAccepted(lastAcceptedHash common.Hash) {
 // and it's the caller's responsibility to call either Accept or Reject on
 // the AtomicState which can be retreived from GetVerifiedAtomicState to commit the
 // changes or abort them and free memory.
-func (a *atomicBackend) InsertTxs(blockHash common.Hash, blockHeight uint64, parentHash common.Hash, txs []*Tx) (common.Hash, error) {
+func (a *atomicBackend) InsertTxs(blockHash common.Hash, blockHeight uint64, parentHash common.Hash, txs []*atomic.Tx) (common.Hash, error) {
 	// access the atomic trie at the parent block
 	parentRoot, err := a.getAtomicRootAt(parentHash)
 	if err != nil {
@@ -454,4 +445,37 @@ func (a *atomicBackend) IsBonus(blockHeight uint64, blockHash common.Hash) bool 
 
 func (a *atomicBackend) AtomicTrie() AtomicTrie {
 	return a.atomicTrie
+}
+
+// mergeAtomicOps merges atomic requests represented by [txs]
+// to the [output] map, depending on whether [chainID] is present in the map.
+func mergeAtomicOps(txs []*atomic.Tx) (map[ids.ID]*avalancheatomic.Requests, error) {
+	if len(txs) > 1 {
+		// txs should be stored in order of txID to ensure consistency
+		// with txs initialized from the txID index.
+		copyTxs := make([]*atomic.Tx, len(txs))
+		copy(copyTxs, txs)
+		utils.Sort(copyTxs)
+		txs = copyTxs
+	}
+	output := make(map[ids.ID]*avalancheatomic.Requests)
+	for _, tx := range txs {
+		chainID, txRequests, err := tx.UnsignedAtomicTx.AtomicOps()
+		if err != nil {
+			return nil, err
+		}
+		mergeAtomicOpsToMap(output, chainID, txRequests)
+	}
+	return output, nil
+}
+
+// mergeAtomicOps merges atomic ops for [chainID] represented by [requests]
+// to the [output] map provided.
+func mergeAtomicOpsToMap(output map[ids.ID]*avalancheatomic.Requests, chainID ids.ID, requests *avalancheatomic.Requests) {
+	if request, exists := output[chainID]; exists {
+		request.PutRequests = append(request.PutRequests, requests.PutRequests...)
+		request.RemoveRequests = append(request.RemoveRequests, requests.RemoveRequests...)
+	} else {
+		output[chainID] = requests
+	}
 }

@@ -18,7 +18,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ava-labs/avalanchego/api/health"
-	"github.com/ava-labs/avalanchego/api/keystore"
 	"github.com/ava-labs/avalanchego/api/metrics"
 	"github.com/ava-labs/avalanchego/api/server"
 	"github.com/ava-labs/avalanchego/chains/atomic"
@@ -30,6 +29,7 @@ import (
 	"github.com/ava-labs/avalanchego/network"
 	"github.com/ava-labs/avalanchego/network/p2p"
 	"github.com/ava-labs/avalanchego/snow"
+	"github.com/ava-labs/avalanchego/snow/consensus/snowball"
 	"github.com/ava-labs/avalanchego/snow/engine/avalanche/bootstrap/queue"
 	"github.com/ava-labs/avalanchego/snow/engine/avalanche/state"
 	"github.com/ava-labs/avalanchego/snow/engine/avalanche/vertex"
@@ -187,7 +187,7 @@ type ManagerConfig struct {
 	SybilProtectionEnabled bool
 	StakingTLSSigner       crypto.Signer
 	StakingTLSCert         *staking.Certificate
-	StakingBLSKey          *bls.SecretKey
+	StakingBLSKey          bls.Signer
 	TracingEnabled         bool
 	// Must not be used unless [TracingEnabled] is true as this may be nil.
 	Tracer                    trace.Tracer
@@ -206,7 +206,6 @@ type ManagerConfig struct {
 	NetworkID                 uint32                     // ID of the network this node is connected to
 	PartialSyncPrimaryNetwork bool
 	Server                    server.Server // Handles HTTP API calls
-	Keystore                  keystore.Keystore
 	AtomicMemory              *atomic.Memory
 	AVAXAssetID               ids.ID
 	XChainID                  ids.ID          // ID of the X-Chain,
@@ -498,7 +497,7 @@ func (m *manager) buildChain(chainParams ChainParameters, sb subnets.Subnet) (*c
 			SubnetID:        chainParams.SubnetID,
 			ChainID:         chainParams.ID,
 			NodeID:          m.NodeID,
-			PublicKey:       bls.PublicFromSecretKey(m.StakingBLSKey),
+			PublicKey:       m.StakingBLSKey.PublicKey(),
 			NetworkUpgrades: m.Upgrades,
 
 			XChainID:    m.XChainID,
@@ -506,7 +505,6 @@ func (m *manager) buildChain(chainParams ChainParameters, sb subnets.Subnet) (*c
 			AVAXAssetID: m.AVAXAssetID,
 
 			Log:          chainLog,
-			Keystore:     m.Keystore.NewBlockchainKeyStore(chainParams.ID),
 			SharedMemory: m.AtomicMemory.NewSharedMemory(chainParams.ID),
 			BCLookup:     m,
 			Metrics:      metrics.NewPrefixGatherer(),
@@ -755,13 +753,11 @@ func (m *manager) createAvalancheChain(
 
 	// Initialize the ProposerVM and the vm wrapped inside it
 	var (
-		minBlockDelay       = proposervm.DefaultMinBlockDelay
-		numHistoricalBlocks = proposervm.DefaultNumHistoricalBlocks
-	)
-	if subnetCfg, ok := m.SubnetConfigs[ctx.SubnetID]; ok {
-		minBlockDelay = subnetCfg.ProposerMinBlockDelay
+		// A default subnet configuration will be present if explicit configuration is not provided
+		subnetCfg           = m.SubnetConfigs[ctx.SubnetID]
+		minBlockDelay       = subnetCfg.ProposerMinBlockDelay
 		numHistoricalBlocks = subnetCfg.ProposerNumHistoricalBlocks
-	}
+	)
 	m.Log.Info("creating proposervm wrapper",
 		zap.Time("activationTime", m.Upgrades.ApricotPhase4Time),
 		zap.Uint64("minPChainHeight", m.Upgrades.ApricotPhase4MinPChainHeight),
@@ -920,7 +916,7 @@ func (m *manager) createAvalancheChain(
 		return nil, fmt.Errorf("couldn't initialize snow base message handler: %w", err)
 	}
 
-	var snowmanConsensus smcon.Consensus = &smcon.Topological{}
+	var snowmanConsensus smcon.Consensus = &smcon.Topological{Factory: snowball.SnowflakeFactory}
 	if m.TracingEnabled {
 		snowmanConsensus = smcon.Trace(snowmanConsensus, m.Tracer)
 	}
@@ -949,7 +945,7 @@ func (m *manager) createAvalancheChain(
 
 	// create bootstrap gear
 	bootstrapCfg := smbootstrap.Config{
-		ShouldHalt:                     halter.Halted,
+		Haltable:                       &halter,
 		NonVerifyingParse:              block.ParseFunc(proposerVM.ParseLocalBlock),
 		AllGetsServer:                  snowGetHandler,
 		Ctx:                            ctx,
@@ -1006,6 +1002,7 @@ func (m *manager) createAvalancheChain(
 		TxBlocked:                      txBlocker,
 		Manager:                        vtxManager,
 		VM:                             linearizableVM,
+		Haltable:                       &halter,
 	}
 	if ctx.ChainID == m.XChainID {
 		avalancheBootstrapperConfig.StopVertexID = m.Upgrades.CortinaXChainStopVertexID
@@ -1152,13 +1149,11 @@ func (m *manager) createSnowmanChain(
 	}
 
 	var (
-		minBlockDelay       = proposervm.DefaultMinBlockDelay
-		numHistoricalBlocks = proposervm.DefaultNumHistoricalBlocks
-	)
-	if subnetCfg, ok := m.SubnetConfigs[ctx.SubnetID]; ok {
-		minBlockDelay = subnetCfg.ProposerMinBlockDelay
+		// A default subnet configuration will be present if explicit configuration is not provided
+		subnetCfg           = m.SubnetConfigs[ctx.SubnetID]
+		minBlockDelay       = subnetCfg.ProposerMinBlockDelay
 		numHistoricalBlocks = subnetCfg.ProposerNumHistoricalBlocks
-	}
+	)
 	m.Log.Info("creating proposervm wrapper",
 		zap.Time("activationTime", m.Upgrades.ApricotPhase4Time),
 		zap.Uint64("minPChainHeight", m.Upgrades.ApricotPhase4MinPChainHeight),
@@ -1311,7 +1306,7 @@ func (m *manager) createSnowmanChain(
 		return nil, fmt.Errorf("couldn't initialize snow base message handler: %w", err)
 	}
 
-	var consensus smcon.Consensus = &smcon.Topological{}
+	var consensus smcon.Consensus = &smcon.Topological{Factory: snowball.SnowflakeFactory}
 	if m.TracingEnabled {
 		consensus = smcon.Trace(consensus, m.Tracer)
 	}
@@ -1341,7 +1336,7 @@ func (m *manager) createSnowmanChain(
 
 	// create bootstrap gear
 	bootstrapCfg := smbootstrap.Config{
-		ShouldHalt:                     halter.Halted,
+		Haltable:                       &halter,
 		NonVerifyingParse:              block.ParseFunc(proposerVM.ParseLocalBlock),
 		AllGetsServer:                  snowGetHandler,
 		Ctx:                            ctx,

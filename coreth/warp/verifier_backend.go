@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/snow/engine/common"
 	avalancheWarp "github.com/ava-labs/avalanchego/vms/platformvm/warp"
 	"github.com/ava-labs/avalanchego/vms/platformvm/warp/payload"
@@ -15,6 +16,7 @@ import (
 const (
 	ParseErrCode = iota + 1
 	VerifyErrCode
+	FetchErrCode
 )
 
 // Verify verifies the signature of the message
@@ -24,6 +26,11 @@ func (b *backend) Verify(ctx context.Context, unsignedMessage *avalancheWarp.Uns
 	// Known on-chain messages should be signed
 	if _, err := b.GetMessage(messageID); err == nil {
 		return nil
+	} else if err != database.ErrNotFound {
+		return &common.AppError{
+			Code:    FetchErrCode,
+			Message: fmt.Sprintf("failed to get message %s: %s", messageID, err.Error()),
+		}
 	}
 
 	parsed, err := payload.Parse(unsignedMessage.Payload)
@@ -53,7 +60,7 @@ func (b *backend) verifyBlockMessage(ctx context.Context, blockHashPayload *payl
 	blockID := blockHashPayload.Hash
 	_, err := b.blockClient.GetAcceptedBlock(ctx, blockID)
 	if err != nil {
-		b.stats.IncBlockSignatureValidationFail()
+		b.stats.IncBlockValidationFail()
 		return &common.AppError{
 			Code:    VerifyErrCode,
 			Message: fmt.Sprintf("failed to get block %s: %s", blockID, err.Error()),

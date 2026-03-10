@@ -39,6 +39,11 @@ import (
 	"github.com/ava-labs/coreth/core/types"
 	"github.com/ava-labs/coreth/core/vm"
 	"github.com/ava-labs/coreth/params"
+	customheader "github.com/ava-labs/coreth/plugin/evm/header"
+	"github.com/ava-labs/coreth/plugin/evm/upgrade/acp176"
+	"github.com/ava-labs/coreth/plugin/evm/upgrade/ap1"
+	"github.com/ava-labs/coreth/plugin/evm/upgrade/ap3"
+	"github.com/ava-labs/coreth/plugin/evm/upgrade/cortina"
 	"github.com/ava-labs/coreth/trie"
 	"github.com/ava-labs/coreth/utils"
 	"github.com/ethereum/go-ethereum/common"
@@ -118,7 +123,7 @@ func TestStateProcessorErrors(t *testing.T) {
 						Nonce:   0,
 					},
 				},
-				GasLimit: params.CortinaGasLimit,
+				GasLimit: cortina.GasLimit,
 			}
 			// FullFaker used to skip header verification that enforces no blobs.
 			blockchain, _  = NewBlockChain(db, DefaultCacheConfig, gspec, dummy.NewFullFaker(), vm.Config{}, common.Hash{}, false)
@@ -148,9 +153,10 @@ func TestStateProcessorErrors(t *testing.T) {
 			},
 			{ // ErrGasLimitReached
 				txs: []*types.Transaction{
-					makeTx(key1, 0, common.Address{}, big.NewInt(0), 15000001, big.NewInt(225000000000), nil),
+					// This test was modified to account for ACP-176 gas limits
+					makeTx(key1, 0, common.Address{}, big.NewInt(0), acp176.MinMaxCapacity+1, big.NewInt(acp176.MinGasPrice), nil),
 				},
-				want: "could not apply tx 0 [0xc3b52e10e4e7c115ed75d81e578a8f4740ad346e95aad4d5e34bc1b1ebe41a18]: gas limit reached",
+				want: "could not apply tx 0 [0x7cfdb44b622080f5e76b30773856e030e335454a14ededc221261474cb3e17e1]: gas limit reached",
 			},
 			{ // ErrInsufficientFundsForTransfer
 				txs: []*types.Transaction{
@@ -176,15 +182,16 @@ func TestStateProcessorErrors(t *testing.T) {
 			},
 			{ // ErrGasLimitReached
 				txs: []*types.Transaction{
-					makeTx(key1, 0, common.Address{}, big.NewInt(0), params.TxGas*762, big.NewInt(225000000000), nil),
+					// This test was modified to account for ACP-176 gas limits
+					makeTx(key1, 0, common.Address{}, big.NewInt(0), params.TxGas*953, big.NewInt(acp176.MinGasPrice), nil),
 				},
-				want: "could not apply tx 0 [0x7c81a1d53e08fd8cd4561785df8fc96b136aeccbbab341429392eb14ba654896]: gas limit reached",
+				want: "could not apply tx 0 [0xaf3a1738ef4efe25d0236805edb7407af32224c4bdd6efec2f0f38d0b9408972]: gas limit reached",
 			},
 			{ // ErrFeeCapTooLow
 				txs: []*types.Transaction{
 					mkDynamicTx(0, common.Address{}, params.TxGas, big.NewInt(0), big.NewInt(0)),
 				},
-				want: "could not apply tx 0 [0xeee01b14adff8c5c12770572f3f88a63005cf0188bbcce5e9398a927bf08b8ef]: max fee per gas less than block base fee: address 0x71562b71999873DB5b286dF957af199Ec94617F7, maxFeePerGas: 0, baseFee: 225000000000",
+				want: "could not apply tx 0 [0xeee01b14adff8c5c12770572f3f88a63005cf0188bbcce5e9398a927bf08b8ef]: max fee per gas less than block base fee: address 0x71562b71999873DB5b286dF957af199Ec94617F7, maxFeePerGas: 0, baseFee: 1",
 			},
 			{ // ErrTipVeryHigh
 				txs: []*types.Transaction{
@@ -223,13 +230,13 @@ func TestStateProcessorErrors(t *testing.T) {
 			},
 			{ // ErrMaxInitCodeSizeExceeded
 				txs: []*types.Transaction{
-					mkDynamicCreationTx(0, 500000, common.Big0, big.NewInt(params.ApricotPhase3InitialBaseFee), tooBigInitCode[:]),
+					mkDynamicCreationTx(0, 500000, common.Big0, big.NewInt(ap3.InitialBaseFee), tooBigInitCode[:]),
 				},
 				want: "could not apply tx 0 [0x38feccfed5ce65f1d14b23ccf08d394e8d5bb30775b0a7ec3480283ad0c010a1]: max initcode size exceeded: code size 49153 limit 49152",
 			},
 			{ // ErrIntrinsicGas: Not enough gas to cover init code
 				txs: []*types.Transaction{
-					mkDynamicCreationTx(0, 54299, common.Big0, big.NewInt(params.ApricotPhase3InitialBaseFee), make([]byte, 320)),
+					mkDynamicCreationTx(0, 54299, common.Big0, big.NewInt(ap3.InitialBaseFee), make([]byte, 320)),
 				},
 				want: "could not apply tx 0 [0x5ebcd4f52af6f20e433a8ee110cd8370a836618f3be14c205b8c359a2addd51b]: intrinsic gas too low: have 54299, want 54300",
 			},
@@ -237,7 +244,7 @@ func TestStateProcessorErrors(t *testing.T) {
 				txs: []*types.Transaction{
 					mkBlobTx(0, common.Address{}, params.TxGas, big.NewInt(1), big.NewInt(1), big.NewInt(0), []common.Hash{(common.Hash{1})}),
 				},
-				want: "could not apply tx 0 [0x4ff3729a66567a60cd0ca62ba5a20c923fa485476f47dde48b115e15229b4b5d]: max fee per gas less than block base fee: address 0x71562b71999873DB5b286dF957af199Ec94617F7, maxFeePerGas: 1, baseFee: 225000000000",
+				want: "could not apply tx 0 [0x4ff3729a66567a60cd0ca62ba5a20c923fa485476f47dde48b115e15229b4b5d]: max fee per blob gas less than block blob gas fee: address 0x71562b71999873DB5b286dF957af199Ec94617F7 blobGasFeeCap: 0, blobBaseFee: 1",
 			},
 		} {
 			// FullFaker used to skip header verification that enforces no blobs.
@@ -279,7 +286,7 @@ func TestStateProcessorErrors(t *testing.T) {
 						Nonce:   0,
 					},
 				},
-				GasLimit: params.ApricotPhase1GasLimit,
+				GasLimit: ap1.GasLimit,
 			}
 			blockchain, _ = NewBlockChain(db, DefaultCacheConfig, gspec, dummy.NewCoinbaseFaker(), vm.Config{}, common.Hash{}, false)
 		)
@@ -319,7 +326,7 @@ func TestStateProcessorErrors(t *testing.T) {
 						Code:    common.FromHex("0xB0B0FACE"),
 					},
 				},
-				GasLimit: params.CortinaGasLimit,
+				GasLimit: cortina.GasLimit,
 			}
 			blockchain, _ = NewBlockChain(db, DefaultCacheConfig, gspec, dummy.NewCoinbaseFaker(), vm.Config{}, common.Hash{}, false)
 		)
@@ -353,6 +360,9 @@ func TestStateProcessorErrors(t *testing.T) {
 // - valid pow (fake), ancestry, difficulty, gaslimit etc
 func GenerateBadBlock(parent *types.Block, engine consensus.Engine, txs types.Transactions, config *params.ChainConfig) *types.Block {
 	fakeChainReader := newChainMaker(nil, config, engine)
+	time := parent.Time() + 10
+	gasLimit, _ := customheader.GasLimit(config, parent.Header(), time)
+	baseFee, _ := customheader.BaseFee(config, parent.Header(), time)
 	header := &types.Header{
 		ParentHash: parent.Hash(),
 		Coinbase:   parent.Coinbase(),
@@ -362,13 +372,11 @@ func GenerateBadBlock(parent *types.Block, engine consensus.Engine, txs types.Tr
 			Difficulty: parent.Difficulty(),
 			UncleHash:  parent.UncleHash(),
 		}),
-		GasLimit:  parent.GasLimit(),
+		GasLimit:  gasLimit,
 		Number:    new(big.Int).Add(parent.Number(), common.Big1),
-		Time:      parent.Time() + 10,
+		Time:      time,
 		UncleHash: types.EmptyUncleHash,
-	}
-	if config.IsApricotPhase3(header.Time) {
-		header.Extra, header.BaseFee, _ = dummy.CalcBaseFee(config, parent.Header(), header.Time)
+		BaseFee:   baseFee,
 	}
 	if config.IsApricotPhase4(header.Time) {
 		header.BlockGasCost = big.NewInt(0)
@@ -391,6 +399,7 @@ func GenerateBadBlock(parent *types.Block, engine consensus.Engine, txs types.Tr
 		cumulativeGas += tx.Gas()
 		nBlobs += len(tx.BlobHashes())
 	}
+	header.Extra, _ = customheader.ExtraPrefix(config, parent.Header(), header, nil)
 	header.Root = common.BytesToHash(hasher.Sum(nil))
 	if config.IsCancun(header.Number, header.Time) {
 		pExcess, pUsed := uint64(0), uint64(0)

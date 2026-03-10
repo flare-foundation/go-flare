@@ -53,6 +53,7 @@ import (
 	"github.com/ava-labs/coreth/core/vm"
 	"github.com/ava-labs/coreth/internal/blocktest"
 	"github.com/ava-labs/coreth/params"
+	"github.com/ava-labs/coreth/plugin/evm/upgrade/ap3"
 	"github.com/ava-labs/coreth/rpc"
 	"github.com/ava-labs/coreth/utils"
 	"github.com/ethereum/go-ethereum/common"
@@ -487,6 +488,7 @@ func (b testBackend) ExtRPCEnabled() bool                        { return false 
 func (b testBackend) RPCGasCap() uint64                          { return 10000000 }
 func (b testBackend) RPCEVMTimeout() time.Duration               { return time.Second }
 func (b testBackend) RPCTxFeeCap() float64                       { return 0 }
+func (b testBackend) PriceOptionsConfig() PriceOptionConfig      { return PriceOptionConfig{} }
 func (b testBackend) UnprotectedAllowed(*types.Transaction) bool { return false }
 func (b testBackend) SetHead(number uint64)                      {}
 func (b testBackend) HeaderByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Header, error) {
@@ -646,6 +648,12 @@ func (b testBackend) LastAcceptedBlock() *types.Block { panic("implement me") }
 func (b testBackend) SuggestPrice(ctx context.Context) (*big.Int, error) {
 	panic("implement me")
 }
+func (b testBackend) IsArchive() bool {
+	panic("implement me")
+}
+func (b testBackend) HistoricalProofQueryWindow() (queryWindow uint64) {
+	panic("implement me")
+}
 
 func TestEstimateGas(t *testing.T) {
 	t.Parallel()
@@ -743,7 +751,7 @@ func TestEstimateGas(t *testing.T) {
 			call: TransactionArgs{
 				From:     &accounts[0].addr,
 				Input:    hex2Bytes("6080604052348015600f57600080fd5b50483a1015601c57600080fd5b60003a111560315760004811603057600080fd5b5b603f80603e6000396000f3fe6080604052600080fdfea264697066735822122060729c2cee02b10748fae5200f1c9da4661963354973d9154c13a8e9ce9dee1564736f6c63430008130033"),
-				GasPrice: (*hexutil.Big)(big.NewInt(params.ApricotPhase3InitialBaseFee)), // Legacy as pricing
+				GasPrice: (*hexutil.Big)(big.NewInt(ap3.InitialBaseFee)), // Legacy as pricing
 			},
 			expectErr: nil,
 			want:      67617,
@@ -753,7 +761,7 @@ func TestEstimateGas(t *testing.T) {
 			call: TransactionArgs{
 				From:         &accounts[0].addr,
 				Input:        hex2Bytes("6080604052348015600f57600080fd5b50483a1015601c57600080fd5b60003a111560315760004811603057600080fd5b5b603f80603e6000396000f3fe6080604052600080fdfea264697066735822122060729c2cee02b10748fae5200f1c9da4661963354973d9154c13a8e9ce9dee1564736f6c63430008130033"),
-				MaxFeePerGas: (*hexutil.Big)(big.NewInt(params.ApricotPhase3InitialBaseFee)), // 1559 gas pricing
+				MaxFeePerGas: (*hexutil.Big)(big.NewInt(ap3.InitialBaseFee)), // 1559 gas pricing
 			},
 			expectErr: nil,
 			want:      67617,
@@ -1036,7 +1044,10 @@ func TestSignTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expect := `{"type":"0x2","chainId":"0xe","nonce":"0x0","to":"0x703c4b2bd70c169f5717101caee543299fc946c7","gas":"0x5208","gasPrice":null,"maxPriorityFeePerGas":"0x0","maxFeePerGas":"0x68c6171400","value":"0x1","input":"0x","accessList":[],"v":"0x1","r":"0xe89f10da0b2a39321ae31039310831f1f3ffc0fa3d58720246288bbea80acb3a","s":"0x2ee2597680fc89d5b7519724453f556fc2aebbbe0d4cff0f02bba88b46291afa","yParity":"0x1","hash":"0x0f21e9e69853eec80390601a4660714433379a61f9ca6c3cd355abb0d4426b51"}`
+	// The expected result has deviated from upstream because the base fee, and
+	// therefore the `maxFeePerGas`, resulting from [params.TestChainConfig] is
+	// different.
+	expect := `{"type":"0x2","chainId":"0xe","nonce":"0x0","to":"0x703c4b2bd70c169f5717101caee543299fc946c7","gas":"0x5208","gasPrice":null,"maxPriorityFeePerGas":"0x0","maxFeePerGas":"0x2","value":"0x1","input":"0x","accessList":[],"v":"0x0","r":"0xdae8ba4277d0f4da939d5bb543a7121d3363a8b0609dda9b2af15368b7b0a102","s":"0x30be260df9a99b487ade544e7fc465eeb81445763be1d49e771c9ad531dabe34","yParity":"0x0","hash":"0x302cba76e3b3ab85648050988f56d3151b8f44a9bb03d3bbe4ef7ae07103b30f"}`
 	if !bytes.Equal(tx, []byte(expect)) {
 		t.Errorf("result mismatch. Have:\n%s\nWant:\n%s\n", tx, expect)
 	}

@@ -35,6 +35,7 @@ import (
 	"github.com/ava-labs/coreth/core/txpool/blobpool"
 	"github.com/ava-labs/coreth/core/txpool/legacypool"
 	"github.com/ava-labs/coreth/eth/gasprice"
+	"github.com/ava-labs/coreth/internal/ethapi"
 	"github.com/ava-labs/coreth/miner"
 	"github.com/ava-labs/coreth/params"
 	"github.com/ethereum/go-ethereum/common"
@@ -180,6 +181,11 @@ type Config struct {
 	// AllowUnfinalizedQueries allow unfinalized queries
 	AllowUnfinalizedQueries bool
 
+	// HistoricalProofQueryWindow is the number of blocks before the last accepted block to be accepted for state queries.
+	// For archive nodes, it defaults to 43200 and can be set to 0 to indicate to accept any block query.
+	// For non-archive nodes, it is forcibly set to the value of [core.TipBufferSize].
+	HistoricalProofQueryWindow uint64
+
 	// AllowUnprotectedTxs allow unprotected transactions to be locally issued.
 	// Unprotected transactions are transactions that are signed without EIP-155
 	// replay protection.
@@ -216,4 +222,7 @@ type Config struct {
 	// This is useful for validators that don't need to index transactions.
 	// TransactionHistory can be still used to control unindexing old transactions.
 	SkipTxIndexing bool
+
+	// TODO: remove once we move SuggestPriceOptions to AVAX/custom API
+	PriceOptionConfig ethapi.PriceOptionConfig
 }

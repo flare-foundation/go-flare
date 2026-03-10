@@ -23,15 +23,19 @@ import (
 
 	"github.com/ava-labs/coreth/constants"
 	"github.com/ava-labs/coreth/eth/filters"
-	"github.com/ava-labs/coreth/metrics"
+	"github.com/ava-labs/coreth/plugin/evm/atomic"
+	"github.com/ava-labs/coreth/plugin/evm/config"
+	"github.com/ava-labs/coreth/plugin/evm/header"
+	"github.com/ava-labs/coreth/plugin/evm/upgrade/ap0"
+	"github.com/ava-labs/coreth/plugin/evm/upgrade/ap1"
 	"github.com/ava-labs/coreth/trie"
 	"github.com/ava-labs/coreth/utils"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ava-labs/avalanchego/api/keystore"
-	"github.com/ava-labs/avalanchego/chains/atomic"
+	"github.com/ava-labs/avalanchego/api/metrics"
+	avalancheatomic "github.com/ava-labs/avalanchego/chains/atomic"
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/database/memdb"
 	"github.com/ava-labs/avalanchego/database/prefixdb"
@@ -40,11 +44,10 @@ import (
 	"github.com/ava-labs/avalanchego/snow/validators/validatorstest"
 	"github.com/ava-labs/avalanchego/upgrade"
 	"github.com/ava-labs/avalanchego/utils/cb58"
-	"github.com/ava-labs/avalanchego/utils/crypto/bls"
+	"github.com/ava-labs/avalanchego/utils/crypto/bls/signer/localsigner"
 	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
 	"github.com/ava-labs/avalanchego/utils/formatting"
 	"github.com/ava-labs/avalanchego/utils/hashing"
-	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 	"github.com/ava-labs/avalanchego/utils/units"
@@ -76,8 +79,6 @@ var (
 	testEthAddrs     []common.Address // testEthAddrs[i] corresponds to testKeys[i]
 	testShortIDAddrs []ids.ShortID
 	testAvaxAssetID  = ids.ID{1, 2, 3}
-	username         = "Johns"
-	password         = "CjasdjhiPeirbSenfeI13" // #nosec G101
 
 	genesisJSON = func(cfg *params.ChainConfig) string {
 		g := new(core.Genesis)
@@ -115,12 +116,6 @@ var (
 		return &cpy
 	}
 
-	activateEtna = func(cfg *params.ChainConfig, etnaTime uint64) *params.ChainConfig {
-		cpy := *cfg
-		cpy.EtnaTimestamp = &etnaTime
-		return &cpy
-	}
-
 	genesisJSONApricotPhase0     = genesisJSON(params.TestFlareLaunchConfig)
 	genesisJSONApricotPhase1     = genesisJSON(params.TestFlareApricotPhase1Config)
 	genesisJSONApricotPhase2     = genesisJSON(params.TestFlareApricotPhase2Config)
@@ -134,7 +129,8 @@ var (
 	genesisJSONCortina           = genesisJSON(params.TestFlareCortinaChainConfig)
 	genesisJSONDurango           = genesisJSON(params.TestFlareDurangoChainConfig)
 	genesisJSONEtna              = genesisJSON(params.TestFlareEtnaChainConfig)
-	genesisJSONLatest            = genesisJSONEtna
+	genesisJSONFortuna           = genesisJSON(params.TestFlareFortunaChainConfig)
+	genesisJSONLatest            = genesisJSONFortuna
 
 	genesisJSONCancun = genesisJSON(activateCancun(params.TestFlareChainConfig))
 
@@ -160,8 +156,8 @@ func init() {
 		b, _ = cb58.Decode(key)
 		pk, _ := secp256k1.ToPrivateKey(b)
 		testKeys = append(testKeys, pk)
-		testEthAddrs = append(testEthAddrs, GetEthAddress(pk))
-		testShortIDAddrs = append(testShortIDAddrs, pk.PublicKey().Address())
+		testEthAddrs = append(testEthAddrs, pk.EthAddress())
+		testShortIDAddrs = append(testShortIDAddrs, pk.Address())
 	}
 }
 
@@ -228,12 +224,12 @@ func NewContext() *snow.Context {
 			return subnetID, nil
 		},
 	}
-	blsSecretKey, err := bls.NewSecretKey()
+	blsSecretKey, err := localsigner.New()
 	if err != nil {
 		panic(err)
 	}
 	ctx.WarpSigner = avalancheWarp.NewSigner(blsSecretKey, ctx.NetworkID, ctx.ChainID)
-	ctx.PublicKey = bls.PublicFromSecretKey(blsSecretKey)
+	ctx.PublicKey = blsSecretKey.PublicKey()
 	return ctx
 }
 
@@ -246,7 +242,7 @@ func setupGenesis(
 	database.Database,
 	[]byte,
 	chan commonEng.Message,
-	*atomic.Memory,
+	*avalancheatomic.Memory,
 ) {
 	if len(genesisJSON) == 0 {
 		genesisJSON = genesisJSONLatest
@@ -257,18 +253,12 @@ func setupGenesis(
 	baseDB := memdb.New()
 
 	// initialize the atomic memory
-	atomicMemory := atomic.NewMemory(prefixdb.New([]byte{0}, baseDB))
+	atomicMemory := avalancheatomic.NewMemory(prefixdb.New([]byte{0}, baseDB))
 	ctx.SharedMemory = atomicMemory.NewSharedMemory(ctx.ChainID)
 
 	// NB: this lock is intentionally left locked when this function returns.
 	// The caller of this function is responsible for unlocking.
 	ctx.Lock.Lock()
-
-	userKeystore := keystore.New(logging.NoLog{}, memdb.New())
-	if err := userKeystore.CreateUser(username, password); err != nil {
-		t.Fatal(err)
-	}
-	ctx.Keystore = userKeystore.NewBlockchainKeyStore(ctx.ChainID)
 
 	issuer := make(chan commonEng.Message, 1)
 	prefixedDB := prefixdb.New([]byte{1}, baseDB)
@@ -288,7 +278,7 @@ func GenesisVM(t *testing.T,
 	chan commonEng.Message,
 	*VM,
 	database.Database,
-	*atomic.Memory,
+	*avalancheatomic.Memory,
 	*enginetest.Sender,
 ) {
 	return GenesisVMWithClock(t, finishBootstrapping, genesisJSON, configJSON, upgradeJSON, mockable.Clock{})
@@ -307,7 +297,7 @@ func GenesisVMWithClock(
 	chan commonEng.Message,
 	*VM,
 	database.Database,
-	*atomic.Memory,
+	*avalancheatomic.Memory,
 	*enginetest.Sender,
 ) {
 	vm := &VM{clock: clock}
@@ -336,7 +326,7 @@ func GenesisVMWithClock(
 	return issuer, vm, dbManager, m, appSender
 }
 
-func addUTXO(sharedMemory *atomic.Memory, ctx *snow.Context, txID ids.ID, index uint32, assetID ids.ID, amount uint64, addr ids.ShortID) (*avax.UTXO, error) {
+func addUTXO(sharedMemory *avalancheatomic.Memory, ctx *snow.Context, txID ids.ID, index uint32, assetID ids.ID, amount uint64, addr ids.ShortID) (*avax.UTXO, error) {
 	utxo := &avax.UTXO{
 		UTXOID: avax.UTXOID{
 			TxID:        txID,
@@ -351,14 +341,14 @@ func addUTXO(sharedMemory *atomic.Memory, ctx *snow.Context, txID ids.ID, index 
 			},
 		},
 	}
-	utxoBytes, err := Codec.Marshal(codecVersion, utxo)
+	utxoBytes, err := atomic.Codec.Marshal(atomic.CodecVersion, utxo)
 	if err != nil {
 		return nil, err
 	}
 
 	xChainSharedMemory := sharedMemory.NewSharedMemory(ctx.XChainID)
 	inputID := utxo.InputID()
-	if err := xChainSharedMemory.Apply(map[ids.ID]*atomic.Requests{ctx.ChainID: {PutRequests: []*atomic.Element{{
+	if err := xChainSharedMemory.Apply(map[ids.ID]*avalancheatomic.Requests{ctx.ChainID: {PutRequests: []*avalancheatomic.Element{{
 		Key:   inputID[:],
 		Value: utxoBytes,
 		Traits: [][]byte{
@@ -374,7 +364,7 @@ func addUTXO(sharedMemory *atomic.Memory, ctx *snow.Context, txID ids.ID, index 
 // GenesisVMWithUTXOs creates a GenesisVM and generates UTXOs in the X-Chain Shared Memory containing AVAX based on the [utxos] map
 // Generates UTXOIDs by using a hash of the address in the [utxos] map such that the UTXOs will be generated deterministically.
 // If [genesisJSON] is empty, defaults to using [genesisJSONLatest]
-func GenesisVMWithUTXOs(t *testing.T, finishBootstrapping bool, genesisJSON string, configJSON string, upgradeJSON string, utxos map[ids.ShortID]uint64) (chan commonEng.Message, *VM, database.Database, *atomic.Memory, *enginetest.Sender) {
+func GenesisVMWithUTXOs(t *testing.T, finishBootstrapping bool, genesisJSON string, configJSON string, upgradeJSON string, utxos map[ids.ShortID]uint64) (chan commonEng.Message, *VM, database.Database, *avalancheatomic.Memory, *enginetest.Sender) {
 	issuer, vm, db, sharedMemory, sender := GenesisVM(t, finishBootstrapping, genesisJSON, configJSON, upgradeJSON)
 	for addr, avaxAmount := range utxos {
 		txID, err := ids.ToID(hashing.ComputeHash256(addr.Bytes()))
@@ -387,6 +377,12 @@ func GenesisVMWithUTXOs(t *testing.T, finishBootstrapping bool, genesisJSON stri
 	}
 
 	return issuer, vm, db, sharedMemory, sender
+}
+
+// resetMetrics resets the vm avalanchego metrics, and allows
+// for the VM to be re-initialized in tests.
+func resetMetrics(vm *VM) {
+	vm.ctx.Metrics = metrics.NewPrefixGatherer()
 }
 
 func TestVMConfig(t *testing.T) {
@@ -405,8 +401,8 @@ func TestVMConfigDefaults(t *testing.T) {
 	configJSON := fmt.Sprintf(`{"rpc-tx-fee-cap": %g,"eth-apis": %s}`, txFeeCap, fmt.Sprintf("[%q]", enabledEthAPIs[0]))
 	_, vm, _, _, _ := GenesisVM(t, false, "", configJSON, "")
 
-	var vmConfig Config
-	vmConfig.SetDefaults()
+	var vmConfig config.Config
+	vmConfig.SetDefaults(defaultTxPoolConfig)
 	vmConfig.RPCTxFeeCap = txFeeCap
 	vmConfig.EnabledEthAPIs = enabledEthAPIs
 	require.Equal(t, vmConfig, vm.config, "VM Config should match default with overrides")
@@ -417,8 +413,8 @@ func TestVMNilConfig(t *testing.T) {
 	_, vm, _, _, _ := GenesisVM(t, false, "", "", "")
 
 	// VM Config should match defaults if no config is passed in
-	var vmConfig Config
-	vmConfig.SetDefaults()
+	var vmConfig config.Config
+	vmConfig.SetDefaults(defaultTxPoolConfig)
 	require.Equal(t, vmConfig, vm.config, "VM Config should match default config")
 	require.NoError(t, vm.Shutdown(context.Background()))
 }
@@ -650,7 +646,7 @@ func TestIssueAtomicTxs(t *testing.T) {
 		t.Fatal("Expected logs to be non-nil")
 	}
 
-	exportTx, err := vm.newExportTx(vm.ctx.AVAXAssetID, importAmount-(2*params.AvalancheAtomicTxFee), vm.ctx.XChainID, testShortIDAddrs[0], initialBaseFee, []*secp256k1.PrivateKey{testKeys[0]})
+	exportTx, err := vm.newExportTx(vm.ctx.AVAXAssetID, importAmount-(2*ap0.AtomicTxFee), vm.ctx.XChainID, testShortIDAddrs[0], initialBaseFee, []*secp256k1.PrivateKey{testKeys[0]})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -683,13 +679,13 @@ func TestIssueAtomicTxs(t *testing.T) {
 	// Check that both atomic transactions were indexed as expected.
 	indexedImportTx, status, height, err := vm.getAtomicTx(importTx.ID())
 	assert.NoError(t, err)
-	assert.Equal(t, Accepted, status)
+	assert.Equal(t, atomic.Accepted, status)
 	assert.Equal(t, uint64(1), height, "expected height of indexed import tx to be 1")
 	assert.Equal(t, indexedImportTx.ID(), importTx.ID(), "expected ID of indexed import tx to match original txID")
 
 	indexedExportTx, status, height, err := vm.getAtomicTx(exportTx.ID())
 	assert.NoError(t, err)
-	assert.Equal(t, Accepted, status)
+	assert.Equal(t, atomic.Accepted, status)
 	assert.Equal(t, uint64(2), height, "expected height of indexed export tx to be 2")
 	assert.Equal(t, indexedExportTx.ID(), exportTx.ID(), "expected ID of indexed import tx to match original txID")
 }
@@ -744,7 +740,7 @@ func TestBuildEthTxBlock(t *testing.T) {
 
 	txs := make([]*types.Transaction, 10)
 	for i := 0; i < 10; i++ {
-		tx := types.NewTransaction(uint64(i), testEthAddrs[0], big.NewInt(10), 21000, big.NewInt(params.LaunchMinGasPrice), nil)
+		tx := types.NewTransaction(uint64(i), testEthAddrs[0], big.NewInt(10), 21000, big.NewInt(ap0.MinGasPrice), nil)
 		signedTx, err := types.SignTx(tx, types.NewEIP155Signer(vm.chainID), testKeys[0].ToECDSA())
 		if err != nil {
 			t.Fatal(err)
@@ -849,8 +845,8 @@ func testConflictingImportTxs(t *testing.T, genesis string) {
 		}
 	}()
 
-	importTxs := make([]*Tx, 0, 3)
-	conflictTxs := make([]*Tx, 0, 3)
+	importTxs := make([]*atomic.Tx, 0, 3)
+	conflictTxs := make([]*atomic.Tx, 0, 3)
 	for i, key := range testKeys {
 		importTx, err := vm.newImportTx(vm.ctx.XChainID, testEthAddrs[i], initialBaseFee, []*secp256k1.PrivateKey{key})
 		if err != nil {
@@ -944,9 +940,9 @@ func testConflictingImportTxs(t *testing.T, genesis string) {
 	var extraData []byte
 	switch {
 	case rules.IsApricotPhase5:
-		extraData, err = vm.codec.Marshal(codecVersion, []*Tx{conflictTxs[1]})
+		extraData, err = atomic.Codec.Marshal(atomic.CodecVersion, []*atomic.Tx{conflictTxs[1]})
 	default:
-		extraData, err = vm.codec.Marshal(codecVersion, conflictTxs[1])
+		extraData, err = atomic.Codec.Marshal(atomic.CodecVersion, conflictTxs[1])
 	}
 	if err != nil {
 		t.Fatal(err)
@@ -972,15 +968,15 @@ func testConflictingImportTxs(t *testing.T, genesis string) {
 		t.Fatal(err)
 	}
 
-	if err := parsedBlock.Verify(context.Background()); !errors.Is(err, errConflictingAtomicInputs) {
-		t.Fatalf("Expected to fail with err: %s, but found err: %s", errConflictingAtomicInputs, err)
+	if err := parsedBlock.Verify(context.Background()); !errors.Is(err, atomic.ErrConflictingAtomicInputs) {
+		t.Fatalf("Expected to fail with err: %s, but found err: %s", atomic.ErrConflictingAtomicInputs, err)
 	}
 
 	if !rules.IsApricotPhase5 {
 		return
 	}
 
-	extraData, err = vm.codec.Marshal(codecVersion, []*Tx{importTxs[2], conflictTxs[2]})
+	extraData, err = atomic.Codec.Marshal(atomic.CodecVersion, []*atomic.Tx{importTxs[2], conflictTxs[2]})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1008,52 +1004,25 @@ func testConflictingImportTxs(t *testing.T, genesis string) {
 		t.Fatal(err)
 	}
 
-	if err := parsedBlock.Verify(context.Background()); !errors.Is(err, errConflictingAtomicInputs) {
-		t.Fatalf("Expected to fail with err: %s, but found err: %s", errConflictingAtomicInputs, err)
+	if err := parsedBlock.Verify(context.Background()); !errors.Is(err, atomic.ErrConflictingAtomicInputs) {
+		t.Fatalf("Expected to fail with err: %s, but found err: %s", atomic.ErrConflictingAtomicInputs, err)
 	}
 }
 
 func TestReissueAtomicTxHigherGasPrice(t *testing.T) {
 	kc := secp256k1fx.NewKeychain(testKeys...)
 
-	for name, issueTxs := range map[string]func(t *testing.T, vm *VM, sharedMemory *atomic.Memory) (issued []*Tx, discarded []*Tx){
-		"single UTXO override": func(t *testing.T, vm *VM, sharedMemory *atomic.Memory) (issued []*Tx, evicted []*Tx) {
+	for name, issueTxs := range map[string]func(t *testing.T, vm *VM, sharedMemory *avalancheatomic.Memory) (issued []*atomic.Tx, discarded []*atomic.Tx){
+		"single UTXO override": func(t *testing.T, vm *VM, sharedMemory *avalancheatomic.Memory) (issued []*atomic.Tx, evicted []*atomic.Tx) {
 			utxo, err := addUTXO(sharedMemory, vm.ctx, ids.GenerateTestID(), 0, vm.ctx.AVAXAssetID, units.Avax, testShortIDAddrs[0])
 			if err != nil {
 				t.Fatal(err)
 			}
-			tx1, err := vm.newImportTxWithUTXOs(vm.ctx.XChainID, testEthAddrs[0], initialBaseFee, kc, []*avax.UTXO{utxo})
+			tx1, err := atomic.NewImportTx(vm.ctx, vm.currentRules(), vm.clock.Unix(), vm.ctx.XChainID, testEthAddrs[0], initialBaseFee, kc, []*avax.UTXO{utxo})
 			if err != nil {
 				t.Fatal(err)
 			}
-			tx2, err := vm.newImportTxWithUTXOs(vm.ctx.XChainID, testEthAddrs[0], new(big.Int).Mul(common.Big2, initialBaseFee), kc, []*avax.UTXO{utxo})
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			if err := vm.mempool.AddLocalTx(tx1); err != nil {
-				t.Fatal(err)
-			}
-			if err := vm.mempool.AddLocalTx(tx2); err != nil {
-				t.Fatal(err)
-			}
-
-			return []*Tx{tx2}, []*Tx{tx1}
-		},
-		"one of two UTXOs overrides": func(t *testing.T, vm *VM, sharedMemory *atomic.Memory) (issued []*Tx, evicted []*Tx) {
-			utxo1, err := addUTXO(sharedMemory, vm.ctx, ids.GenerateTestID(), 0, vm.ctx.AVAXAssetID, units.Avax, testShortIDAddrs[0])
-			if err != nil {
-				t.Fatal(err)
-			}
-			utxo2, err := addUTXO(sharedMemory, vm.ctx, ids.GenerateTestID(), 0, vm.ctx.AVAXAssetID, units.Avax, testShortIDAddrs[0])
-			if err != nil {
-				t.Fatal(err)
-			}
-			tx1, err := vm.newImportTxWithUTXOs(vm.ctx.XChainID, testEthAddrs[0], initialBaseFee, kc, []*avax.UTXO{utxo1, utxo2})
-			if err != nil {
-				t.Fatal(err)
-			}
-			tx2, err := vm.newImportTxWithUTXOs(vm.ctx.XChainID, testEthAddrs[0], new(big.Int).Mul(common.Big2, initialBaseFee), kc, []*avax.UTXO{utxo1})
+			tx2, err := atomic.NewImportTx(vm.ctx, vm.currentRules(), vm.clock.Unix(), vm.ctx.XChainID, testEthAddrs[0], new(big.Int).Mul(common.Big2, initialBaseFee), kc, []*avax.UTXO{utxo})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1065,9 +1034,36 @@ func TestReissueAtomicTxHigherGasPrice(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			return []*Tx{tx2}, []*Tx{tx1}
+			return []*atomic.Tx{tx2}, []*atomic.Tx{tx1}
 		},
-		"hola": func(t *testing.T, vm *VM, sharedMemory *atomic.Memory) (issued []*Tx, evicted []*Tx) {
+		"one of two UTXOs overrides": func(t *testing.T, vm *VM, sharedMemory *avalancheatomic.Memory) (issued []*atomic.Tx, evicted []*atomic.Tx) {
+			utxo1, err := addUTXO(sharedMemory, vm.ctx, ids.GenerateTestID(), 0, vm.ctx.AVAXAssetID, units.Avax, testShortIDAddrs[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			utxo2, err := addUTXO(sharedMemory, vm.ctx, ids.GenerateTestID(), 0, vm.ctx.AVAXAssetID, units.Avax, testShortIDAddrs[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			tx1, err := atomic.NewImportTx(vm.ctx, vm.currentRules(), vm.clock.Unix(), vm.ctx.XChainID, testEthAddrs[0], initialBaseFee, kc, []*avax.UTXO{utxo1, utxo2})
+			if err != nil {
+				t.Fatal(err)
+			}
+			tx2, err := atomic.NewImportTx(vm.ctx, vm.currentRules(), vm.clock.Unix(), vm.ctx.XChainID, testEthAddrs[0], new(big.Int).Mul(common.Big2, initialBaseFee), kc, []*avax.UTXO{utxo1})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if err := vm.mempool.AddLocalTx(tx1); err != nil {
+				t.Fatal(err)
+			}
+			if err := vm.mempool.AddLocalTx(tx2); err != nil {
+				t.Fatal(err)
+			}
+
+			return []*atomic.Tx{tx2}, []*atomic.Tx{tx1}
+		},
+		"hola": func(t *testing.T, vm *VM, sharedMemory *avalancheatomic.Memory) (issued []*atomic.Tx, evicted []*atomic.Tx) {
 			utxo1, err := addUTXO(sharedMemory, vm.ctx, ids.GenerateTestID(), 0, vm.ctx.AVAXAssetID, units.Avax, testShortIDAddrs[0])
 			if err != nil {
 				t.Fatal(err)
@@ -1077,17 +1073,17 @@ func TestReissueAtomicTxHigherGasPrice(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			importTx1, err := vm.newImportTxWithUTXOs(vm.ctx.XChainID, testEthAddrs[0], initialBaseFee, kc, []*avax.UTXO{utxo1})
+			importTx1, err := atomic.NewImportTx(vm.ctx, vm.currentRules(), vm.clock.Unix(), vm.ctx.XChainID, testEthAddrs[0], initialBaseFee, kc, []*avax.UTXO{utxo1})
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			importTx2, err := vm.newImportTxWithUTXOs(vm.ctx.XChainID, testEthAddrs[0], new(big.Int).Mul(big.NewInt(3), initialBaseFee), kc, []*avax.UTXO{utxo2})
+			importTx2, err := atomic.NewImportTx(vm.ctx, vm.currentRules(), vm.clock.Unix(), vm.ctx.XChainID, testEthAddrs[0], new(big.Int).Mul(big.NewInt(3), initialBaseFee), kc, []*avax.UTXO{utxo2})
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			reissuanceTx1, err := vm.newImportTxWithUTXOs(vm.ctx.XChainID, testEthAddrs[0], new(big.Int).Mul(big.NewInt(2), initialBaseFee), kc, []*avax.UTXO{utxo1, utxo2})
+			reissuanceTx1, err := atomic.NewImportTx(vm.ctx, vm.currentRules(), vm.clock.Unix(), vm.ctx.XChainID, testEthAddrs[0], new(big.Int).Mul(big.NewInt(2), initialBaseFee), kc, []*avax.UTXO{utxo1, utxo2})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1099,15 +1095,15 @@ func TestReissueAtomicTxHigherGasPrice(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if err := vm.mempool.AddLocalTx(reissuanceTx1); !errors.Is(err, errConflictingAtomicTx) {
-				t.Fatalf("Expected to fail with err: %s, but found err: %s", errConflictingAtomicTx, err)
+			if err := vm.mempool.AddLocalTx(reissuanceTx1); !errors.Is(err, atomic.ErrConflictingAtomicTx) {
+				t.Fatalf("Expected to fail with err: %s, but found err: %s", atomic.ErrConflictingAtomicTx, err)
 			}
 
 			assert.True(t, vm.mempool.Has(importTx1.ID()))
 			assert.True(t, vm.mempool.Has(importTx2.ID()))
 			assert.False(t, vm.mempool.Has(reissuanceTx1.ID()))
 
-			reissuanceTx2, err := vm.newImportTxWithUTXOs(vm.ctx.XChainID, testEthAddrs[0], new(big.Int).Mul(big.NewInt(4), initialBaseFee), kc, []*avax.UTXO{utxo1, utxo2})
+			reissuanceTx2, err := atomic.NewImportTx(vm.ctx, vm.currentRules(), vm.clock.Unix(), vm.ctx.XChainID, testEthAddrs[0], new(big.Int).Mul(big.NewInt(4), initialBaseFee), kc, []*avax.UTXO{utxo1, utxo2})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1115,7 +1111,7 @@ func TestReissueAtomicTxHigherGasPrice(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			return []*Tx{reissuanceTx2}, []*Tx{importTx1, importTx2}
+			return []*atomic.Tx{reissuanceTx2}, []*atomic.Tx{importTx1, importTx2}
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -1123,12 +1119,12 @@ func TestReissueAtomicTxHigherGasPrice(t *testing.T) {
 			issuedTxs, evictedTxs := issueTxs(t, vm, sharedMemory)
 
 			for i, tx := range issuedTxs {
-				_, issued := vm.mempool.txHeap.Get(tx.ID())
+				_, issued := vm.mempool.GetPendingTx(tx.ID())
 				assert.True(t, issued, "expected issued tx at index %d to be issued", i)
 			}
 
 			for i, tx := range evictedTxs {
-				_, discarded := vm.mempool.discardedTxs.Get(tx.ID())
+				_, discarded, _ := vm.mempool.GetTx(tx.ID())
 				assert.True(t, discarded, "expected discarded tx at index %d to be discarded", i)
 			}
 		})
@@ -1143,7 +1139,6 @@ func TestConflictingImportTxsAcrossBlocks(t *testing.T) {
 		"apricotPhase4": genesisJSONApricotPhase4,
 		"apricotPhase5": genesisJSONApricotPhase5,
 	} {
-		genesis := genesis
 		t.Run(name, func(t *testing.T) {
 			testConflictingImportTxs(t, genesis)
 		})
@@ -1241,7 +1236,7 @@ func TestSetPreferenceRace(t *testing.T) {
 	// and to be split into two separate blocks on VM2
 	txs := make([]*types.Transaction, 10)
 	for i := 0; i < 10; i++ {
-		tx := types.NewTransaction(uint64(i), testEthAddrs[1], big.NewInt(10), 21000, big.NewInt(params.LaunchMinGasPrice), nil)
+		tx := types.NewTransaction(uint64(i), testEthAddrs[1], big.NewInt(10), 21000, big.NewInt(ap0.MinGasPrice), nil)
 		signedTx, err := types.SignTx(tx, types.NewEIP155Signer(vm1.chainID), testKeys[1].ToECDSA())
 		if err != nil {
 			t.Fatal(err)
@@ -1389,10 +1384,10 @@ func TestConflictingTransitiveAncestryWithGap(t *testing.T) {
 	}
 
 	key0 := testKeys[0]
-	addr0 := key0.PublicKey().Address()
+	addr0 := key0.Address()
 
 	key1 := testKeys[1]
-	addr1 := key1.PublicKey().Address()
+	addr1 := key1.Address()
 
 	importAmount := uint64(1000000000)
 
@@ -1445,7 +1440,7 @@ func TestConflictingTransitiveAncestryWithGap(t *testing.T) {
 		t.Fatalf("Expected new block to match")
 	}
 
-	tx := types.NewTransaction(0, key.Address, big.NewInt(10), 21000, big.NewInt(params.LaunchMinGasPrice), nil)
+	tx := types.NewTransaction(0, key.Address, big.NewInt(10), 21000, big.NewInt(ap0.MinGasPrice), nil)
 	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(vm.chainID), key.PrivateKey)
 	if err != nil {
 		t.Fatal(err)
@@ -1532,22 +1527,22 @@ func TestBonusBlocksTxs(t *testing.T) {
 			Amt: importAmount,
 			OutputOwners: secp256k1fx.OutputOwners{
 				Threshold: 1,
-				Addrs:     []ids.ShortID{testKeys[0].PublicKey().Address()},
+				Addrs:     []ids.ShortID{testKeys[0].Address()},
 			},
 		},
 	}
-	utxoBytes, err := vm.codec.Marshal(codecVersion, utxo)
+	utxoBytes, err := atomic.Codec.Marshal(atomic.CodecVersion, utxo)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	xChainSharedMemory := sharedMemory.NewSharedMemory(vm.ctx.XChainID)
 	inputID := utxo.InputID()
-	if err := xChainSharedMemory.Apply(map[ids.ID]*atomic.Requests{vm.ctx.ChainID: {PutRequests: []*atomic.Element{{
+	if err := xChainSharedMemory.Apply(map[ids.ID]*avalancheatomic.Requests{vm.ctx.ChainID: {PutRequests: []*avalancheatomic.Element{{
 		Key:   inputID[:],
 		Value: utxoBytes,
 		Traits: [][]byte{
-			testKeys[0].PublicKey().Address().Bytes(),
+			testKeys[0].Address().Bytes(),
 		},
 	}}}}); err != nil {
 		t.Fatal(err)
@@ -1573,7 +1568,7 @@ func TestBonusBlocksTxs(t *testing.T) {
 	vm.atomicBackend.(*atomicBackend).bonusBlocks = map[uint64]ids.ID{blk.Height(): blk.ID()}
 
 	// Remove the UTXOs from shared memory, so that non-bonus blocks will fail verification
-	if err := vm.ctx.SharedMemory.Apply(map[ids.ID]*atomic.Requests{vm.ctx.XChainID: {RemoveRequests: [][]byte{inputID[:]}}}); err != nil {
+	if err := vm.ctx.SharedMemory.Apply(map[ids.ID]*avalancheatomic.Requests{vm.ctx.XChainID: {RemoveRequests: [][]byte{inputID[:]}}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1693,7 +1688,7 @@ func TestReorgProtection(t *testing.T) {
 	// and to be split into two separate blocks on VM2
 	txs := make([]*types.Transaction, 10)
 	for i := 0; i < 10; i++ {
-		tx := types.NewTransaction(uint64(i), address, big.NewInt(10), 21000, big.NewInt(params.LaunchMinGasPrice), nil)
+		tx := types.NewTransaction(uint64(i), address, big.NewInt(10), 21000, big.NewInt(ap0.MinGasPrice), nil)
 		signedTx, err := types.SignTx(tx, types.NewEIP155Signer(vm1.chainID), key)
 		if err != nil {
 			t.Fatal(err)
@@ -1878,7 +1873,7 @@ func TestNonCanonicalAccept(t *testing.T) {
 	// and to be split into two separate blocks on VM2
 	txs := make([]*types.Transaction, 10)
 	for i := 0; i < 10; i++ {
-		tx := types.NewTransaction(uint64(i), address, big.NewInt(10), 21000, big.NewInt(params.LaunchMinGasPrice), nil)
+		tx := types.NewTransaction(uint64(i), address, big.NewInt(10), 21000, big.NewInt(ap0.MinGasPrice), nil)
 		signedTx, err := types.SignTx(tx, types.NewEIP155Signer(vm1.chainID), key)
 		if err != nil {
 			t.Fatal(err)
@@ -2056,7 +2051,7 @@ func TestStickyPreference(t *testing.T) {
 	// and to be split into two separate blocks on VM2
 	txs := make([]*types.Transaction, 10)
 	for i := 0; i < 10; i++ {
-		tx := types.NewTransaction(uint64(i), address, big.NewInt(10), 21000, big.NewInt(params.LaunchMinGasPrice), nil)
+		tx := types.NewTransaction(uint64(i), address, big.NewInt(10), 21000, big.NewInt(ap0.MinGasPrice), nil)
 		signedTx, err := types.SignTx(tx, types.NewEIP155Signer(vm1.chainID), key)
 		if err != nil {
 			t.Fatal(err)
@@ -2312,7 +2307,7 @@ func TestUncleBlock(t *testing.T) {
 
 	txs := make([]*types.Transaction, 10)
 	for i := 0; i < 10; i++ {
-		tx := types.NewTransaction(uint64(i), address, big.NewInt(10), 21000, big.NewInt(params.LaunchMinGasPrice), nil)
+		tx := types.NewTransaction(uint64(i), address, big.NewInt(10), 21000, big.NewInt(ap0.MinGasPrice), nil)
 		signedTx, err := types.SignTx(tx, types.NewEIP155Signer(vm1.chainID), key)
 		if err != nil {
 			t.Fatal(err)
@@ -2563,7 +2558,7 @@ func TestAcceptReorg(t *testing.T) {
 	// and to be split into two separate blocks on VM2
 	txs := make([]*types.Transaction, 10)
 	for i := 0; i < 10; i++ {
-		tx := types.NewTransaction(uint64(i), address, big.NewInt(10), 21000, big.NewInt(params.LaunchMinGasPrice), nil)
+		tx := types.NewTransaction(uint64(i), address, big.NewInt(10), 21000, big.NewInt(ap0.MinGasPrice), nil)
 		signedTx, err := types.SignTx(tx, types.NewEIP155Signer(vm1.chainID), key)
 		if err != nil {
 			t.Fatal(err)
@@ -2792,7 +2787,7 @@ func TestBuildApricotPhase1Block(t *testing.T) {
 
 	txs := make([]*types.Transaction, 10)
 	for i := 0; i < 5; i++ {
-		tx := types.NewTransaction(uint64(i), address, big.NewInt(10), 21000, big.NewInt(params.LaunchMinGasPrice), nil)
+		tx := types.NewTransaction(uint64(i), address, big.NewInt(10), 21000, big.NewInt(ap0.MinGasPrice), nil)
 		signedTx, err := types.SignTx(tx, types.NewEIP155Signer(vm.chainID), key)
 		if err != nil {
 			t.Fatal(err)
@@ -2800,7 +2795,7 @@ func TestBuildApricotPhase1Block(t *testing.T) {
 		txs[i] = signedTx
 	}
 	for i := 5; i < 10; i++ {
-		tx := types.NewTransaction(uint64(i), address, big.NewInt(10), 21000, big.NewInt(params.ApricotPhase1MinGasPrice), nil)
+		tx := types.NewTransaction(uint64(i), address, big.NewInt(10), 21000, big.NewInt(ap1.MinGasPrice), nil)
 		signedTx, err := types.SignTx(tx, types.NewEIP155Signer(vm.chainID), key)
 		if err != nil {
 			t.Fatal(err)
@@ -3044,7 +3039,7 @@ func TestAtomicTxFailsEVMStateTransferBuildBlock(t *testing.T) {
 		t.Fatal("Should have failed to issue due to an invalid export tx")
 	}
 
-	if err := vm.mempool.AddTx(exportTx2); err == nil {
+	if err := vm.mempool.AddRemoteTx(exportTx2); err == nil {
 		t.Fatal("Should have failed to add because conflicting")
 	}
 
@@ -3070,13 +3065,13 @@ func TestBuildInvalidBlockHead(t *testing.T) {
 	}()
 
 	key0 := testKeys[0]
-	addr0 := key0.PublicKey().Address()
+	addr0 := key0.Address()
 
 	// Create the transaction
-	utx := &UnsignedImportTx{
+	utx := &atomic.UnsignedImportTx{
 		NetworkID:    vm.ctx.NetworkID,
 		BlockchainID: vm.ctx.ChainID,
-		Outs: []EVMOutput{{
+		Outs: []atomic.EVMOutput{{
 			Address: common.Address(addr0),
 			Amount:  1 * units.Avax,
 			AssetID: vm.ctx.AVAXAssetID,
@@ -3094,8 +3089,8 @@ func TestBuildInvalidBlockHead(t *testing.T) {
 		},
 		SourceChain: vm.ctx.XChainID,
 	}
-	tx := &Tx{UnsignedAtomicTx: utx}
-	if err := tx.Sign(vm.codec, [][]*secp256k1.PrivateKey{{key0}}); err != nil {
+	tx := &atomic.Tx{UnsignedAtomicTx: utx}
+	if err := tx.Sign(atomic.Codec, [][]*secp256k1.PrivateKey{{key0}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3174,7 +3169,7 @@ func TestConfigureLogLevel(t *testing.T) {
 				}
 			}
 
-			// If the VM was not initialized, do not attept to shut it down
+			// If the VM was not initialized, do not attempt to shut it down
 			if err == nil {
 				shutdownChan := make(chan error, 1)
 				shutdownFunc := func() {
@@ -3227,22 +3222,22 @@ func TestBuildApricotPhase4Block(t *testing.T) {
 			Amt: importAmount,
 			OutputOwners: secp256k1fx.OutputOwners{
 				Threshold: 1,
-				Addrs:     []ids.ShortID{testKeys[0].PublicKey().Address()},
+				Addrs:     []ids.ShortID{testKeys[0].Address()},
 			},
 		},
 	}
-	utxoBytes, err := vm.codec.Marshal(codecVersion, utxo)
+	utxoBytes, err := atomic.Codec.Marshal(atomic.CodecVersion, utxo)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	xChainSharedMemory := sharedMemory.NewSharedMemory(vm.ctx.XChainID)
 	inputID := utxo.InputID()
-	if err := xChainSharedMemory.Apply(map[ids.ID]*atomic.Requests{vm.ctx.ChainID: {PutRequests: []*atomic.Element{{
+	if err := xChainSharedMemory.Apply(map[ids.ID]*avalancheatomic.Requests{vm.ctx.ChainID: {PutRequests: []*avalancheatomic.Element{{
 		Key:   inputID[:],
 		Value: utxoBytes,
 		Traits: [][]byte{
-			testKeys[0].PublicKey().Address().Bytes(),
+			testKeys[0].Address().Bytes(),
 		},
 	}}}}); err != nil {
 		t.Fatal(err)
@@ -3283,7 +3278,7 @@ func TestBuildApricotPhase4Block(t *testing.T) {
 	if eExtDataGasUsed := ethBlk.ExtDataGasUsed(); eExtDataGasUsed == nil || eExtDataGasUsed.Cmp(big.NewInt(1230)) != 0 {
 		t.Fatalf("expected extDataGasUsed to be 1000 but got %d", eExtDataGasUsed)
 	}
-	minRequiredTip, err := dummy.MinRequiredTip(vm.chainConfig, ethBlk.Header())
+	minRequiredTip, err := header.EstimateRequiredTip(vm.chainConfig, ethBlk.Header())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3298,7 +3293,7 @@ func TestBuildApricotPhase4Block(t *testing.T) {
 
 	txs := make([]*types.Transaction, 10)
 	for i := 0; i < 5; i++ {
-		tx := types.NewTransaction(uint64(i), address, big.NewInt(10), 21000, big.NewInt(params.LaunchMinGasPrice), nil)
+		tx := types.NewTransaction(uint64(i), address, big.NewInt(10), 21000, big.NewInt(ap0.MinGasPrice), nil)
 		signedTx, err := types.SignTx(tx, types.NewEIP155Signer(vm.chainID), key)
 		if err != nil {
 			t.Fatal(err)
@@ -3306,7 +3301,7 @@ func TestBuildApricotPhase4Block(t *testing.T) {
 		txs[i] = signedTx
 	}
 	for i := 5; i < 10; i++ {
-		tx := types.NewTransaction(uint64(i), address, big.NewInt(10), 21000, big.NewInt(params.ApricotPhase1MinGasPrice), nil)
+		tx := types.NewTransaction(uint64(i), address, big.NewInt(10), 21000, big.NewInt(ap1.MinGasPrice), nil)
 		signedTx, err := types.SignTx(tx, types.NewEIP155Signer(vm.chainID), key)
 		if err != nil {
 			t.Fatal(err)
@@ -3342,11 +3337,11 @@ func TestBuildApricotPhase4Block(t *testing.T) {
 	if ethBlk.ExtDataGasUsed() == nil || ethBlk.ExtDataGasUsed().Cmp(common.Big0) != 0 {
 		t.Fatalf("expected extDataGasUsed to be 0 but got %d", ethBlk.ExtDataGasUsed())
 	}
-	minRequiredTip, err = dummy.MinRequiredTip(vm.chainConfig, ethBlk.Header())
+	minRequiredTip, err = header.EstimateRequiredTip(vm.chainConfig, ethBlk.Header())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if minRequiredTip == nil || minRequiredTip.Cmp(big.NewInt(0.05*params.GWei)) < 0 {
+	if minRequiredTip == nil || minRequiredTip.Cmp(big.NewInt(0.05*utils.GWei)) < 0 {
 		t.Fatalf("expected minRequiredTip to be at least 0.05 gwei but got %d", minRequiredTip)
 	}
 
@@ -3397,22 +3392,22 @@ func TestBuildApricotPhase5Block(t *testing.T) {
 			Amt: importAmount,
 			OutputOwners: secp256k1fx.OutputOwners{
 				Threshold: 1,
-				Addrs:     []ids.ShortID{testKeys[0].PublicKey().Address()},
+				Addrs:     []ids.ShortID{testKeys[0].Address()},
 			},
 		},
 	}
-	utxoBytes, err := vm.codec.Marshal(codecVersion, utxo)
+	utxoBytes, err := atomic.Codec.Marshal(atomic.CodecVersion, utxo)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	xChainSharedMemory := sharedMemory.NewSharedMemory(vm.ctx.XChainID)
 	inputID := utxo.InputID()
-	if err := xChainSharedMemory.Apply(map[ids.ID]*atomic.Requests{vm.ctx.ChainID: {PutRequests: []*atomic.Element{{
+	if err := xChainSharedMemory.Apply(map[ids.ID]*avalancheatomic.Requests{vm.ctx.ChainID: {PutRequests: []*avalancheatomic.Element{{
 		Key:   inputID[:],
 		Value: utxoBytes,
 		Traits: [][]byte{
-			testKeys[0].PublicKey().Address().Bytes(),
+			testKeys[0].Address().Bytes(),
 		},
 	}}}}); err != nil {
 		t.Fatal(err)
@@ -3453,7 +3448,7 @@ func TestBuildApricotPhase5Block(t *testing.T) {
 	if eExtDataGasUsed := ethBlk.ExtDataGasUsed(); eExtDataGasUsed == nil || eExtDataGasUsed.Cmp(big.NewInt(11230)) != 0 {
 		t.Fatalf("expected extDataGasUsed to be 11230 but got %d", eExtDataGasUsed)
 	}
-	minRequiredTip, err := dummy.MinRequiredTip(vm.chainConfig, ethBlk.Header())
+	minRequiredTip, err := header.EstimateRequiredTip(vm.chainConfig, ethBlk.Header())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3468,7 +3463,7 @@ func TestBuildApricotPhase5Block(t *testing.T) {
 
 	txs := make([]*types.Transaction, 10)
 	for i := 0; i < 10; i++ {
-		tx := types.NewTransaction(uint64(i), address, big.NewInt(10), 21000, big.NewInt(params.LaunchMinGasPrice*3), nil)
+		tx := types.NewTransaction(uint64(i), address, big.NewInt(10), 21000, big.NewInt(3*ap0.MinGasPrice), nil)
 		signedTx, err := types.SignTx(tx, types.NewEIP155Signer(vm.chainID), key)
 		if err != nil {
 			t.Fatal(err)
@@ -3504,11 +3499,11 @@ func TestBuildApricotPhase5Block(t *testing.T) {
 	if ethBlk.ExtDataGasUsed() == nil || ethBlk.ExtDataGasUsed().Cmp(common.Big0) != 0 {
 		t.Fatalf("expected extDataGasUsed to be 0 but got %d", ethBlk.ExtDataGasUsed())
 	}
-	minRequiredTip, err = dummy.MinRequiredTip(vm.chainConfig, ethBlk.Header())
+	minRequiredTip, err = header.EstimateRequiredTip(vm.chainConfig, ethBlk.Header())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if minRequiredTip == nil || minRequiredTip.Cmp(big.NewInt(0.05*params.GWei)) < 0 {
+	if minRequiredTip == nil || minRequiredTip.Cmp(big.NewInt(0.05*utils.GWei)) < 0 {
 		t.Fatalf("expected minRequiredTip to be at least 0.05 gwei but got %d", minRequiredTip)
 	}
 
@@ -3581,8 +3576,8 @@ func TestConsecutiveAtomicTransactionsRevertSnapshot(t *testing.T) {
 
 	// Add the two conflicting transactions directly to the mempool, so that two consecutive transactions
 	// will fail verification when build block is called.
-	vm.mempool.AddTx(importTxs[1])
-	vm.mempool.AddTx(importTxs[2])
+	vm.mempool.AddRemoteTx(importTxs[1])
+	vm.mempool.AddRemoteTx(importTxs[2])
 
 	if _, err := vm.BuildBlock(context.Background()); err == nil {
 		t.Fatal("Expected build block to fail due to empty block")
@@ -3678,7 +3673,7 @@ func TestBuildBlockDoesNotExceedAtomicGasLimit(t *testing.T) {
 		utxo, err := addUTXO(sharedMemory, vm.ctx, txID, uint32(i), vm.ctx.AVAXAssetID, importAmount, testShortIDAddrs[0])
 		assert.NoError(t, err)
 
-		importTx, err := vm.newImportTxWithUTXOs(vm.ctx.XChainID, testEthAddrs[0], initialBaseFee, kc, []*avax.UTXO{utxo})
+		importTx, err := atomic.NewImportTx(vm.ctx, vm.currentRules(), vm.clock.Unix(), vm.ctx.XChainID, testEthAddrs[0], initialBaseFee, kc, []*avax.UTXO{utxo})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3756,7 +3751,7 @@ func TestExtraStateChangeAtomicGasLimitExceeded(t *testing.T) {
 
 	validEthBlock := blk1.(*chain.BlockWrapper).Block.(*Block).ethBlock
 
-	extraData, err := vm2.codec.Marshal(codecVersion, []*Tx{importTx})
+	extraData, err := atomic.Codec.Marshal(atomic.CodecVersion, []*atomic.Tx{importTx})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -3778,16 +3773,12 @@ func TestExtraStateChangeAtomicGasLimitExceeded(t *testing.T) {
 	}
 
 	// Hack: test [onExtraStateChange] directly to ensure it catches the atomic gas limit error correctly.
-	if _, _, err := vm2.onExtraStateChange(ethBlk2, state); err == nil || !strings.Contains(err.Error(), "exceeds atomic gas limit") {
+	if _, _, err := vm2.onExtraStateChange(ethBlk2, nil, state); err == nil || !strings.Contains(err.Error(), "exceeds atomic gas limit") {
 		t.Fatalf("Expected block to fail verification due to exceeded atomic gas limit, but found error: %v", err)
 	}
 }
 
 func TestSkipChainConfigCheckCompatible(t *testing.T) {
-	// Hack: registering metrics uses global variables, so we need to disable metrics here so that we can initialize the VM twice.
-	metrics.Enabled = false
-	defer func() { metrics.Enabled = true }()
-
 	importAmount := uint64(50000000)
 	issuer, vm, dbManager, _, appSender := GenesisVMWithUTXOs(t, true, genesisJSONApricotPhase1, "", "", map[ids.ShortID]uint64{
 		testShortIDAddrs[0]: importAmount,
@@ -3816,9 +3807,13 @@ func TestSkipChainConfigCheckCompatible(t *testing.T) {
 	genesisWithUpgradeBytes, err := json.Marshal(genesisWithUpgrade)
 	require.NoError(t, err)
 
+	resetMetrics(vm)
+
 	// this will not be allowed
 	err = reinitVM.Initialize(context.Background(), vm.ctx, dbManager, genesisWithUpgradeBytes, []byte{}, []byte{}, issuer, []*commonEng.Fx{}, appSender)
 	require.ErrorContains(t, err, "mismatching ApricotPhase2 fork block timestamp in database")
+
+	resetMetrics(vm)
 
 	// try again with skip-upgrade-check
 	config := []byte(`{"skip-upgrade-check": true}`)
@@ -3986,26 +3981,4 @@ func TestNoBlobsAllowed(t *testing.T) {
 	require.ErrorContains(err, "blobs not enabled on avalanche networks")
 	err = vmBlock.Verify(ctx)
 	require.ErrorContains(err, "blobs not enabled on avalanche networks")
-}
-
-func TestMinFeeSetAtEtna(t *testing.T) {
-	require := require.New(t)
-	now := time.Now()
-	etnaTime := uint64(now.Add(1 * time.Second).Unix())
-
-	genesis := genesisJSON(
-		activateEtna(params.TestFlareEtnaChainConfig, etnaTime),
-	)
-	clock := mockable.Clock{}
-	clock.Set(now)
-
-	_, vm, _, _, _ := GenesisVMWithClock(t, false, genesis, "", "", clock)
-	initial := vm.txPool.MinFee()
-	require.Equal(params.ApricotPhase4MinBaseFee, initial.Int64())
-
-	require.Eventually(
-		func() bool { return params.EtnaMinBaseFee == vm.txPool.MinFee().Int64() },
-		5*time.Second,
-		1*time.Second,
-	)
 }

@@ -11,6 +11,7 @@ import (
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/crypto/bls"
+	"github.com/ava-labs/avalanchego/utils/crypto/bls/signer/localsigner"
 	"github.com/ava-labs/avalanchego/utils/set"
 
 	safemath "github.com/ava-labs/avalanchego/utils/math"
@@ -135,10 +136,10 @@ func TestSetGet(t *testing.T) {
 	_, ok := s.Get(nodeID)
 	require.False(ok)
 
-	sk, err := bls.NewSecretKey()
+	sk, err := localsigner.New()
 	require.NoError(err)
 
-	pk := bls.PublicFromSecretKey(sk)
+	pk := sk.PublicKey()
 	require.NoError(s.Add(nodeID, pk, ids.Empty, 1))
 
 	vdr0, ok := s.Get(nodeID)
@@ -202,10 +203,10 @@ func TestSetMap(t *testing.T) {
 	m := s.Map()
 	require.Empty(m)
 
-	sk, err := bls.NewSecretKey()
+	sk, err := localsigner.New()
 	require.NoError(err)
 
-	pk := bls.PublicFromSecretKey(sk)
+	pk := sk.PublicKey()
 	nodeID0 := ids.GenerateTestNodeID()
 	require.NoError(s.Add(nodeID0, pk, ids.Empty, 2))
 
@@ -299,11 +300,11 @@ func TestSetSample(t *testing.T) {
 	require.NoError(err)
 	require.Empty(sampled)
 
-	sk, err := bls.NewSecretKey()
+	sk, err := localsigner.New()
 	require.NoError(err)
 
 	nodeID0 := ids.GenerateTestNodeID()
-	pk := bls.PublicFromSecretKey(sk)
+	pk := sk.PublicKey()
 	require.NoError(s.Add(nodeID0, pk, ids.Empty, 1))
 
 	sampled, err = s.Sample(1)
@@ -354,9 +355,9 @@ func TestSetAddCallback(t *testing.T) {
 	require := require.New(t)
 
 	nodeID0 := ids.BuildTestNodeID([]byte{1})
-	sk0, err := bls.NewSecretKey()
+	sk0, err := localsigner.New()
 	require.NoError(err)
-	pk0 := bls.PublicFromSecretKey(sk0)
+	pk0 := sk0.PublicKey()
 	txID0 := ids.GenerateTestID()
 	weight0 := uint64(1)
 

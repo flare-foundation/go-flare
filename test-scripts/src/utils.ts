@@ -26,7 +26,6 @@ export interface TestContext {
   pvmapi: pvm.PVMApi;
   avmapi: avm.AVMApi;
   infoapi: info.InfoApi;
-  isEtnaForkActive: boolean;
   provider: JsonRpcProvider;
   addressC: string;
   addressP: string;
@@ -67,17 +66,12 @@ export async function getContext(url: string): Promise<TestContext> {
   const context = await Context.getContextFromURI(url);
   const provider = new JsonRpcProvider(url + "/ext/bc/C/rpc");
 
-  const { etnaTime } = await infoapi.getUpgradesInfo();
-  const etnaDateTime = new Date(etnaTime);
-  const now = new Date();
-
   return {
     context,
     evmapi,
     pvmapi,
     avmapi,
     infoapi,
-    isEtnaForkActive: now > etnaDateTime,
     provider,
     addressC: TestCAddress,
     addressP: TestPAddress,

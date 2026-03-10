@@ -17,7 +17,7 @@ avalanchego_path="$AVALANCHE_PATH/build/avalanchego"
 GOPATH="$(go env GOPATH)"
 
 # Settings for coreth
-coreth_version=${CORETH_VERSION:-'v0.13.9-rc.1'}
+coreth_version=${CORETH_VERSION:-'v0.15.0-rc.0'}
 plugin_dir=${PLUGIN_DIR:-$HOME/.avalanchego/plugins}
 evm_path=${EVM_PATH:-$plugin_dir/evm}
 coreth_path="$AVALANCHE_PATH/../coreth"
@@ -62,9 +62,7 @@ fi
 # We use "export" here instead of just setting a bash variable because we need
 # to pass this flag to all child processes spawned by the shell.
 export CGO_CFLAGS="-O2 -D__BLST_PORTABLE__"
-# While CGO_ENABLED doesn't need to be explicitly set, it produces a much more
-# clear error due to the default value change in go1.20.
-export CGO_ENABLED=1
+export CGO_ENABLED=1 # Required for cross-compilation
 
 # Disable version control fallbacks
 export GOPROXY="https://proxy.golang.org"

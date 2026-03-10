@@ -16,7 +16,6 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 
-	"github.com/ava-labs/avalanchego/api/info"
 	"github.com/ava-labs/avalanchego/config"
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/network/peer"
@@ -70,17 +69,6 @@ var _ = e2e.DescribePChain("[L1]", func() {
 	ginkgo.It("creates and updates L1 validators", func() {
 		env := e2e.GetEnv(tc)
 		nodeURI := env.GetRandomNodeURI()
-
-		tc.By("verifying Etna is activated", func() {
-			infoClient := info.NewClient(nodeURI.URI)
-			upgrades, err := infoClient.Upgrades(tc.DefaultContext())
-			require.NoError(err)
-
-			now := time.Now()
-			if !upgrades.IsEtnaActivated(now) {
-				ginkgo.Skip("Etna is not activated. L1s are enabled post-Etna, skipping test.")
-			}
-		})
 
 		tc.By("loading the wallet")
 		var (
@@ -198,10 +186,11 @@ var _ = e2e.DescribePChain("[L1]", func() {
 		var (
 			networkID           = env.GetNetwork().GetNetworkID()
 			genesisPeerMessages = buffer.NewUnboundedBlockingDeque[p2pmessage.InboundMessage](1)
+			stakingAddress      = e2e.GetLocalStakingAddress(tc, subnetGenesisNode)
 		)
 		genesisPeer, err := peer.StartTestPeer(
 			tc.DefaultContext(),
-			subnetGenesisNode.StakingAddress,
+			stakingAddress,
 			networkID,
 			router.InboundHandlerFunc(func(_ context.Context, m p2pmessage.InboundMessage) {
 				tc.Log().Info("received a message",
@@ -213,6 +202,8 @@ var _ = e2e.DescribePChain("[L1]", func() {
 			}),
 		)
 		require.NoError(err)
+
+		subnetGenesisNodeURI := e2e.GetLocalURI(tc, subnetGenesisNode)
 
 		address := []byte{}
 		tc.By("issuing a ConvertSubnetToL1Tx", func() {
@@ -232,9 +223,9 @@ var _ = e2e.DescribePChain("[L1]", func() {
 			)
 			require.NoError(err)
 
-			tc.By("ensuring the genesis peer has accepted the tx at "+subnetGenesisNode.URI, func() {
+			tc.By("ensuring the genesis peer has accepted the tx at "+subnetGenesisNodeURI, func() {
 				var (
-					client = platformvm.NewClient(subnetGenesisNode.URI)
+					client = platformvm.NewClient(subnetGenesisNodeURI)
 					txID   = tx.ID()
 				)
 				tc.Eventually(
@@ -432,9 +423,9 @@ var _ = e2e.DescribePChain("[L1]", func() {
 				)
 				require.NoError(err)
 
-				tc.By("ensuring the genesis peer has accepted the tx at "+subnetGenesisNode.URI, func() {
+				tc.By("ensuring the genesis peer has accepted the tx at "+subnetGenesisNodeURI, func() {
 					var (
-						client = platformvm.NewClient(subnetGenesisNode.URI)
+						client = platformvm.NewClient(subnetGenesisNodeURI)
 						txID   = tx.ID()
 					)
 					tc.Eventually(
@@ -570,9 +561,9 @@ var _ = e2e.DescribePChain("[L1]", func() {
 				)
 				require.NoError(err)
 
-				tc.By("ensuring the genesis peer has accepted the tx at "+subnetGenesisNode.URI, func() {
+				tc.By("ensuring the genesis peer has accepted the tx at "+subnetGenesisNodeURI, func() {
 					var (
-						client = platformvm.NewClient(subnetGenesisNode.URI)
+						client = platformvm.NewClient(subnetGenesisNodeURI)
 						txID   = tx.ID()
 					)
 					tc.Eventually(
