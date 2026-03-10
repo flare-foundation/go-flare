@@ -87,7 +87,7 @@ var (
 		CortinaTime:           time.Date(2025, time.May, 6, 12, 0, 0, 0, time.UTC),
 		DurangoTime:           time.Date(2025, time.July, 22, 12, 0, 0, 0, time.UTC),
 		EtnaTime:              time.Date(2025, time.November, 25, 12, 0, 0, 0, time.UTC),
-		FortunaTime:           time.Date(2026, time.March, 24, 12, 0, 0, 0, time.UTC),
+		FortunaTime:           time.Date(2026, time.March, 31, 12, 0, 0, 0, time.UTC),
 	}
 	Costwo = Config{
 		ApricotPhase1Time:     InitiallyActiveTime,
