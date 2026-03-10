@@ -2,6 +2,18 @@
 
 Here are listed specific changes to the code for the Flare and Songbird networks. For a comprehensive list of general changes, see [here](./avalanchego/RELEASES.md) for the AvalancheGo project and [here](./coreth/RELEASES.md) for the Coreth project.
 
+## v1.13.0
+
+The changes go into effect
+ * March 17, 2026 at 12 PM UTC for the Coston network,
+ * March 24, 2026 at 12 PM UTC for the Coston2 network,
+ * March 31, 2026 at 12 PM UTC for the Songbird network,
+ * April 14, 2026 at 12 PM UTC for the Flare network.
+
+### Note:
+
+ * We recommend setting `gas-target` to `15000000` in the C-chain config. See [Optimizing C-Chain Gas Fees](https://www.avax.network/about/blog/octane-optimizing-c-chain-gas-fees) for more details.
+
 ## v1.12.0
 
 The changes go into effect

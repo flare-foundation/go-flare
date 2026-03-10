@@ -46,5 +46,6 @@
     "log-level": "info",
     "offline-pruning-enabled": false,
     "offline-pruning-bloom-filter-size": 512,
-    "offline-pruning-data-directory": ""
+    "offline-pruning-data-directory": "",
+    "gas-target": 15000000
 }
