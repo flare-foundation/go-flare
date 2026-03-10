@@ -80,11 +80,15 @@ jobs:
 
       - name: Verify SLSA provenance
         run: |
-          slsa-verifier verify-artifact \
-            ${{ env.AVALANCHEGO_BINARY }} \
-            --provenance-path ${{ env.SLSA_PROVENANCE }} \
-            --source-uri github.com/${{ github.repository }} \
-            --builder-id https://github.com/${{ github.repository }}/.github/workflows/build-go-slsa3.yaml@refs/tags/${{ github.ref_name }}
+          if [[ "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            slsa-verifier verify-artifact \
+              ${{ env.AVALANCHEGO_BINARY }} \
+              --provenance-path ${{ env.SLSA_PROVENANCE }} \
+              --source-uri github.com/${{ github.repository }} \
+              --builder-id https://github.com/${{ github.repository }}/.github/workflows/build-go-slsa3.yaml@refs/tags/${{ github.ref_name }}
+          else
+            echo "Skipping SLSA verification for non-release tag: ${{ github.ref_name }}"
+          fi
 
       - name: Package release
         run: |
