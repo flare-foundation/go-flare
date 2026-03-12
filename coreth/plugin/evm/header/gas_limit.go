@@ -139,6 +139,7 @@ func VerifyGasLimit(
 					header.GasLimit,
 				)
 			}
+			return nil
 		case config.IsApricotPhase5(header.Time):
 			if header.GasLimit != ap5.SgbGasLimit {
 				return fmt.Errorf("%w: expected to be %d in ApricotPhase5 on Songbird, but found %d",
@@ -147,6 +148,7 @@ func VerifyGasLimit(
 					header.GasLimit,
 				)
 			}
+			return nil
 		}
 		fallthrough
 	case config.IsApricotPhase1(header.Time):
