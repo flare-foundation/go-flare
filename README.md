@@ -82,6 +82,8 @@ docker buildx imagetools inspect ghcr.io/flare-foundation/go-flare:<TAG> \
 
 ### Verify GitHub artifact attestations
 
+Browse all attestations for this repository: <https://github.com/flare-foundation/go-flare/attestations>
+
 Requires [GitHub CLI](https://cli.github.com/) 2.49 or later:
 
 ```bash

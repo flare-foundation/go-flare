@@ -13,6 +13,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     env:
       USE_DOCKER_HUB: false
     steps:
@@ -187,7 +188,7 @@ jobs:
           --format '{{ json (index .SBOM "linux/amd64").SPDX }}' > std-sbom.spdx.json
 
     - name: Attest standard image SBOM
-      uses: actions/attest-sbom@v2
+      uses: actions/attest-sbom@v4
       with:
         subject-name: ghcr.io/${{ github.repository }}
         subject-digest: ${{ env.IMAGE_DIGEST }}
@@ -201,7 +202,7 @@ jobs:
           --format '{{ json (index .SBOM "linux/amd64").SPDX }}' > dless-sbom.spdx.json
 
     - name: Attest distroless image SBOM
-      uses: actions/attest-sbom@v2
+      uses: actions/attest-sbom@v4
       with:
         subject-name: ghcr.io/${{ github.repository }}
         subject-digest: ${{ env.DLESS_IMAGE_DIGEST }}
