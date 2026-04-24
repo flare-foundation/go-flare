@@ -15,7 +15,7 @@ jobs:
       id-token: write
       attestations: write
     env:
-      USE_DOCKER_HUB: false
+      USE_DOCKER_HUB: true
     steps:
     - uses: actions/checkout@v4
       with:
