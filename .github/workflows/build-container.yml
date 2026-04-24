@@ -14,7 +14,7 @@ jobs:
       packages: write
       id-token: write
     env:
-      USE_DOCKER_HUB: true
+      USE_DOCKER_HUB: false
     steps:
     - uses: actions/checkout@v4
       with:
