@@ -8,3 +8,9 @@ node_modules/
 
 # Local node data directories
 db-node*/
+
+# Local node for staking
+staking-node*/
+
+# Solidity local secrets
+solidity/.env

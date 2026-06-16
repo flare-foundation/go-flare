@@ -23,6 +23,8 @@
     "node:docker:logs:node2": "docker logs -f titan-node2",
     "node:docker:logs:node3": "docker logs -f titan-node3",
     "node:docker:test:health": "bash ./titan-network/scripts/test-health.sh",
-    "node:docker:test:peers": "bash ./titan-network/scripts/test-peers.sh"
+    "node:docker:test:peers": "bash ./titan-network/scripts/test-peers.sh",
+    "sol:compile": "pnpm --filter titan-solidity run compile",
+    "sol:deploy:local": "pnpm --filter titan-solidity run deploy:local"
   }
 }
