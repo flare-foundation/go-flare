@@ -1,0 +1,8 @@
+{
+  "name": "go-titan",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "install:all": "pnpm install -r"
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "networkID": 781337,
+  "message": "Titan Network PoC Testnet - Simple Genesis",
+  "startTime": 0,
+  "initialStakeDuration": 1209600,
+  "initialStakeDurationOffset": 0,
+  "testWallets": [],
+  "initialStakers": [],
+  "cChainGenesis": {
+    "config": {
+      "chainId": 781337,
+      "homesteadBlock": 0,
+      "eip150Block": 0,
+      "eip155Block": 0,
+      "eip158Block": 0,
+      "byzantiumBlock": 0,
+      "constantinopleBlock": 0,
+      "petersburgBlock": 0,
+      "istanbulBlock": 0,
+      "muirGlacierBlock": 0,
+      "subnetEVMTimestamp": 0,
+      "feeConfig": {
+        "gasLimit": 8000000,
+        "targetBlockRate": 2,
+        "minBaseFee": 25000000000,
+        "targetGas": 15000000,
+        "baseFeeChangeDenominator": 36,
+        "minBlockGasCost": 0,
+        "maxBlockGasCost": 1000000000000000,
+        "blockGasCostStep": 200000000000
+      }
+    },
+    "nonce": "0x0",
+    "timestamp": "0x0",
+    "extraData": "0x",
+    "gasLimit": "0x7a1200",
+    "difficulty": "0x0",
+    "mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "coinbase": "0x0000000000000000000000000000000000000000",
+    "alloc": {
+      "0xf56e38f35d52d30c512086B1564cFaAA5686B769": { "balance": "1000000000000000000000000000" },
+      "0x0FA0f5B26763b3baE5fF9d4d156542c0CA8AaA02": { "balance": "1000000000000000000000000000" },
+      "0x22e6d2e3e613006Fc39620760A4322872fBe336d": { "balance": "1000000000000000000000000000" },
+      "0x49077293fe7049400A91D14395dbCad16A98Ea47": { "balance": "5000000000000000000000000000" },
+      "0xC2Ff7887DED0C04F64F10677fb828CE4b4178e91": { "balance": "2000000000000000000000000000" }
+    }
+  }
+}

@@ -3,3 +3,5 @@
 local-scripts/
 plans/
 audits/
+
+node_modules/
