@@ -41,3 +41,62 @@ The `avaxAddr` values in the example config must be valid X-chain addresses for 
 3. Start the bootstrap node.
 4. Start provider nodes.
 5. Verify node sync and chain behavior.
+
+## Multi-node Docker (node1/node2/node3)
+
+The root scripts now support a 3-node local/UAT test topology:
+
+1. `pnpm run node:docker:stop:all`
+2. `pnpm run node:docker:start:all`
+
+Ports:
+
+- node1 API: `9650`, staking: `9651`
+- node2 API: `9652`, staking: `9653`
+- node3 API: `9654`, staking: `9655`
+
+### How to test the nodes
+
+1. Health endpoints:
+
+```bash
+pnpm run node:docker:test:health
+```
+
+2. Peer discovery (JSON-RPC `info.peers` on all nodes):
+
+```bash
+pnpm run node:docker:test:peers
+```
+
+3. Follow logs:
+
+```bash
+pnpm run node:docker:logs:node1
+pnpm run node:docker:logs:node2
+pnpm run node:docker:logs:node3
+```
+
+Expected behavior in this local/UAT setup:
+
+- node1 starts first and acts as the initial bootstrap target
+- node2 and node3 auto-bootstrap from `http://titan-node1:9650/ext/info`
+- health should become stable once peer links are established
+
+## Add more nodes later
+
+The current pattern is intentionally simple to extend.
+
+1. Copy `titan-network/scripts/start-node3-bg.sh` to a new file (example: `start-node4-bg.sh`).
+2. Update container name, DB folder, and host ports:
+	- `--name titan-node4`
+	- `-p 9656:9650` and `-p 9657:9651`
+	- `db-node4`
+3. Keep bootstrap endpoint pointed to node1:
+	- `AUTOCONFIGURE_BOOTSTRAP_ENDPOINT=http://titan-node1:9650/ext/info`
+4. Add a root `package.json` script entry:
+	- `"node:docker:start:node4:bg": "bash ./titan-network/scripts/start-node4-bg.sh"`
+5. Append the new node start command in `node:docker:start:all`.
+6. Expand `test-health.sh` and `test-peers.sh` with the node4 API port (`9656`).
+
+Node DB folders are ignored from git by `.gitignore` rule `db-node*/`, so adding `db-node4`, `db-node5`, etc. will not pollute commits.

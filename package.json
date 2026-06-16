@@ -3,6 +3,26 @@
   "private": true,
   "packageManager": "pnpm@9.15.4",
   "scripts": {
-    "install:all": "pnpm install -r"
+    "install:all": "pnpm install -r",
+    "node:build:avalanchego": "bash -lc \"cd avalanchego && ./scripts/build.sh\"",
+    "node:start:node1": "avalanchego\\build\\avalanchego.exe --genesis=.\\titan-network\\origin.json --network-id=781337 --http-host=0.0.0.0 --http-port=9650 --staking-port=9651 --db-dir=.\\db-node1 --log-level=info",
+    "node:start:node1:genesis": "avalanchego\\build\\avalanchego.exe --genesis=.\\titan-network\\genesis.json --network-id=781337 --http-host=0.0.0.0 --http-port=9650 --staking-port=9651 --db-dir=.\\db-node1 --log-level=info",
+    "node:build-and-start:node1": "pnpm run node:build:avalanchego && pnpm run node:start:node1",
+    "node:docker:build": "docker build -t go-titan-local .",
+    "node:docker:start:node1": "docker run --rm -it -p 9650:9650 -p 9651:9651 -v %cd%\\titan-network:/app/titan -v %cd%\\db-node1:/app/db -e AUTOCONFIGURE_PUBLIC_IP=0 -e AUTOCONFIGURE_BOOTSTRAP=0 -e DB_DIR=/app/db -e EXTRA_ARGUMENTS=\"--genesis=/app/titan/origin.json --network-id=781337 --http-host=0.0.0.0 --http-port=9650 --staking-port=9651 --db-dir=/app/db --log-level=info\" go-titan-local",
+    "node:docker:build-and-start:node1": "pnpm run node:docker:build && pnpm run node:docker:start:node1",
+    "node:docker:start:node1:prebuilt": "docker run --rm -it -p 9650:9650 -p 9651:9651 -v %cd%\\titan-network:/app/titan -v %cd%\\db-node1:/app/db -e AUTOCONFIGURE_PUBLIC_IP=0 -e AUTOCONFIGURE_BOOTSTRAP=0 -e DB_DIR=/app/db -e EXTRA_ARGUMENTS=\"--genesis=/app/titan/origin.json --network-id=781337 --http-host=0.0.0.0 --http-port=9650 --staking-port=9651 --db-dir=/app/db --log-level=info\" flarefoundation/go-flare:latest",
+    "node:docker:network:create": "bash ./titan-network/scripts/create-network.sh",
+    "node:docker:start:node1:bg": "bash ./titan-network/scripts/start-node1-bg.sh",
+    "node:docker:start:node2:bg": "bash ./titan-network/scripts/start-node2-bg.sh",
+    "node:docker:start:node3:bg": "bash ./titan-network/scripts/start-node3-bg.sh",
+    "node:docker:free-ports": "bash ./titan-network/scripts/free-ports.sh",
+    "node:docker:start:all": "bash ./titan-network/scripts/start-all.sh",
+    "node:docker:stop:all": "bash ./titan-network/scripts/stop-all.sh",
+    "node:docker:logs:node1": "docker logs -f titan-node1",
+    "node:docker:logs:node2": "docker logs -f titan-node2",
+    "node:docker:logs:node3": "docker logs -f titan-node3",
+    "node:docker:test:health": "bash ./titan-network/scripts/test-health.sh",
+    "node:docker:test:peers": "bash ./titan-network/scripts/test-peers.sh"
   }
 }

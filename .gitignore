@@ -5,3 +5,6 @@ plans/
 audits/
 
 node_modules/
+
+# Local node data directories
+db-node*/

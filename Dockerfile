@@ -12,6 +12,8 @@ COPY ./coreth /app/coreth
 
 WORKDIR /app/avalanchego/
 
+RUN find /app/avalanchego/scripts -type f -name "*.sh" -exec sed -i 's/\r$//' {} +
+
 RUN /app/avalanchego/scripts/build.sh
 
 FROM ubuntu:24.04
