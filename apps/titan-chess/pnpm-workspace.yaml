@@ -1,0 +1,6 @@
+allowBuilds:
+  bufferutil: true
+  keccak: true
+  sharp: true
+  stockfish: true
+  utf-8-validate: true

@@ -188,7 +188,7 @@ export function ContractStudio() {
     setCompiled(null);
     setCompileErrors([]);
     setHasCompiledOnce(false);
-    setConstructorArgValues({});
+    setConstructorArgValues(template.constructorDefaults ?? {});
     setDeployError("");
     setDeployResult(null);
     setActiveStep("edit");
@@ -217,7 +217,10 @@ export function ContractStudio() {
       const response = await fetch("/api/titan/compile", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ source }),
+        body: JSON.stringify({
+          source,
+          fileName: selectedTemplate.fileName ?? `${selectedTemplate.name}.sol`,
+        }),
       });
 
       const result = (await response.json()) as
@@ -233,7 +236,9 @@ export function ContractStudio() {
       setCompiled(result.contract);
       const initialArgs: Record<string, string> = {};
       for (const input of result.contract.constructorInputs) {
-        initialArgs[input.name || input.type] = defaultArgValue(input);
+        const key = input.name || input.type;
+        initialArgs[key] =
+          selectedTemplate.constructorDefaults?.[key] ?? defaultArgValue(input);
       }
       setConstructorArgValues(initialArgs);
       setActiveStep("deploy");

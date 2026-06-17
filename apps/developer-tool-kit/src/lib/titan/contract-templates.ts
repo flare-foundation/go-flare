@@ -1,8 +1,13 @@
+import { TITAN_CHESS_ESCROW_SOURCE } from "@/lib/titan/sources/titan-chess-escrow.source";
+
 export type ContractTemplate = {
   id: string;
   name: string;
   description: string;
   source: string;
+  fileName?: string;
+  /** Default constructor arg values keyed by parameter name */
+  constructorDefaults?: Record<string, string>;
 };
 
 export const CONTRACT_TEMPLATES: ContractTemplate[] = [
@@ -81,6 +86,19 @@ contract SimpleStorage {
     }
 }
 `,
+  },
+  {
+    id: "titan-chess-escrow",
+    name: "TitanChessEscrow",
+    description:
+      "FIFO wager queue: player stakes TITAN, Stockfish operator matches stake, winner takes the pot. For apps/titan-chess.",
+    fileName: "TitanChessEscrow.sol",
+    source: TITAN_CHESS_ESCROW_SOURCE,
+    constructorDefaults: {
+      _stockfishOperator: "0x49077293fe7049400A91D14395dbCad16A98Ea47",
+      _minStake: "10000000000000000",
+      _maxStake: "1000000000000000000",
+    },
   },
 ];
 

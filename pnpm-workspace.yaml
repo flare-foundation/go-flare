@@ -2,3 +2,4 @@ packages:
   - "test-scripts"
   - "solidity"
   - "apps/developer-tool-kit"
+  - "apps/titan-chess"
