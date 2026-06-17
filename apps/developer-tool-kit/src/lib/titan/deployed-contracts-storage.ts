@@ -7,6 +7,8 @@ export type DeployedContractRecord = {
   transactionHash: string | null;
   deployer: string | null;
   deployedAt: string;
+  /** Built-in template id when deployed from Contract Studio (greeter, counter, …). */
+  templateId?: string | null;
 };
 
 const STORAGE_KEY = "titan-deployed-contracts";

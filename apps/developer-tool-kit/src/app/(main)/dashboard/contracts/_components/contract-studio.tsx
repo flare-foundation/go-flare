@@ -9,6 +9,7 @@ import {
   Code2,
   ExternalLink,
   FileCode2,
+  FlaskConical,
   History,
   Loader2,
   Play,
@@ -42,6 +43,7 @@ import {
   getConstructorAbi,
   parseConstructorArgValue,
 } from "@/lib/titan/deploy-contract";
+import { ContractPlayground } from "@/app/(main)/dashboard/contracts/_components/contract-playground";
 import {
   addDeployedContract,
   type DeployedContractRecord,
@@ -49,6 +51,7 @@ import {
   loadDeployedContracts,
   removeDeployedContract,
 } from "@/lib/titan/deployed-contracts-storage";
+import { isSandboxContract, templateIdForContractName } from "@/lib/titan/contract-sandbox";
 import { shortAddress } from "@/lib/titan/format";
 import { parseWalletError } from "@/lib/titan/wallet-errors";
 import { isOnTitanChain, isWalletConnected, useWalletStore } from "@/stores/wallet/wallet-store";
@@ -74,6 +77,7 @@ export function ContractStudio() {
   const [trackAddress, setTrackAddress] = useState("");
   const [trackError, setTrackError] = useState("");
   const [isTracking, setIsTracking] = useState(false);
+  const [activePlayground, setActivePlayground] = useState<string | null>(null);
 
   const address = useWalletStore((s) => s.address);
   const chainId = useWalletStore((s) => s.chainId);
@@ -93,14 +97,19 @@ export function ContractStudio() {
   }, []);
 
   function rememberDeployment(result: DeployResult, contractName: string) {
+    const templateId = templateIdForContractName(contractName);
     setDeployedContracts(
       addDeployedContract({
         contractName,
         contractAddress: result.contractAddress,
         transactionHash: result.transactionHash,
         deployer: address,
+        templateId,
       }),
     );
+    if (templateId) {
+      setActivePlayground(result.contractAddress);
+    }
   }
 
   async function handleTrackAddress() {
@@ -291,49 +300,80 @@ export function ContractStudio() {
             </p>
           ) : (
             <div className="divide-y rounded-md border">
-              {deployedContracts.map((record) => (
-                <div
-                  key={record.id}
-                  className="flex flex-col gap-2 px-3 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium">{record.contractName}</span>
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {shortAddress(record.contractAddress)}
-                      </span>
+              {deployedContracts.map((record) => {
+                const sandboxReady = isSandboxContract(record);
+                const playgroundOpen = activePlayground === record.contractAddress;
+
+                return (
+                  <div key={record.id}>
+                    <div className="flex flex-col gap-2 px-3 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">{record.contractName}</span>
+                          {sandboxReady && (
+                            <Badge variant="outline" className="text-[10px]">
+                              Sandbox
+                            </Badge>
+                          )}
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {shortAddress(record.contractAddress)}
+                          </span>
+                        </div>
+                        <p className="font-mono text-xs break-all text-muted-foreground">{record.contractAddress}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {new Date(record.deployedAt).toLocaleString()}
+                          {record.deployer ? ` · deployer ${shortAddress(record.deployer)}` : ""}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 shrink-0">
+                        {sandboxReady && (
+                          <Button
+                            size="sm"
+                            variant={playgroundOpen ? "default" : "outline"}
+                            onClick={() =>
+                              setActivePlayground((current) =>
+                                current === record.contractAddress ? null : record.contractAddress,
+                              )
+                            }
+                          >
+                            <FlaskConical className="h-3.5 w-3.5" />
+                            {playgroundOpen ? "Hide sandbox" : "Try it"}
+                          </Button>
+                        )}
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={`/dashboard/activity?q=${encodeURIComponent(record.contractAddress)}`}>
+                            Explorer
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </Link>
+                        </Button>
+                        {record.transactionHash && (
+                          <Button asChild size="sm" variant="ghost">
+                            <Link href={`/dashboard/activity?q=${encodeURIComponent(record.transactionHash)}`}>
+                              Deploy tx
+                            </Link>
+                          </Button>
+                        )}
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => {
+                            if (playgroundOpen) setActivePlayground(null);
+                            handleRemoveContract(record.contractAddress);
+                          }}
+                          title="Remove from list"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
-                    <p className="font-mono text-xs break-all text-muted-foreground">{record.contractAddress}</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {new Date(record.deployedAt).toLocaleString()}
-                      {record.deployer ? ` · deployer ${shortAddress(record.deployer)}` : ""}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    <Button asChild size="sm" variant="outline">
-                      <Link href={`/dashboard/activity?q=${encodeURIComponent(record.contractAddress)}`}>
-                        Explorer
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </Link>
-                    </Button>
-                    {record.transactionHash && (
-                      <Button asChild size="sm" variant="ghost">
-                        <Link href={`/dashboard/activity?q=${encodeURIComponent(record.transactionHash)}`}>
-                          Deploy tx
-                        </Link>
-                      </Button>
+                    {playgroundOpen && (
+                      <div className="border-t bg-muted/10 px-3 py-3">
+                        <ContractPlayground record={record} />
+                      </div>
                     )}
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => handleRemoveContract(record.contractAddress)}
-                      title="Remove from list"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -515,6 +555,15 @@ export function ContractStudio() {
                     <span className="font-mono">{deployResult.transactionHash}</span>
                   </p>
                   <div className="flex flex-wrap gap-2">
+                    {templateIdForContractName(compiled?.contractName ?? "") && (
+                      <Button
+                        size="sm"
+                        onClick={() => setActivePlayground(deployResult.contractAddress)}
+                      >
+                        <FlaskConical className="h-3.5 w-3.5" />
+                        Open sandbox
+                      </Button>
+                    )}
                     <Button asChild size="sm" variant="outline">
                       <Link href={`/dashboard/activity?q=${encodeURIComponent(deployResult.contractAddress)}`}>
                         View in Explorer
