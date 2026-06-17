@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import Link from "next/link";
 
@@ -9,9 +9,12 @@ import {
   Code2,
   ExternalLink,
   FileCode2,
+  History,
   Loader2,
   Play,
+  Plus,
   Rocket,
+  Trash2,
   Wallet,
 } from "lucide-react";
 import type { Abi, AbiParameter } from "viem";
@@ -39,6 +42,13 @@ import {
   getConstructorAbi,
   parseConstructorArgValue,
 } from "@/lib/titan/deploy-contract";
+import {
+  addDeployedContract,
+  type DeployedContractRecord,
+  isContractAddress,
+  loadDeployedContracts,
+  removeDeployedContract,
+} from "@/lib/titan/deployed-contracts-storage";
 import { shortAddress } from "@/lib/titan/format";
 import { parseWalletError } from "@/lib/titan/wallet-errors";
 import { isOnTitanChain, isWalletConnected, useWalletStore } from "@/stores/wallet/wallet-store";
@@ -60,6 +70,10 @@ export function ContractStudio() {
   const [isDeploying, setIsDeploying] = useState(false);
   const [deployError, setDeployError] = useState("");
   const [deployResult, setDeployResult] = useState<DeployResult | null>(null);
+  const [deployedContracts, setDeployedContracts] = useState<DeployedContractRecord[]>([]);
+  const [trackAddress, setTrackAddress] = useState("");
+  const [trackError, setTrackError] = useState("");
+  const [isTracking, setIsTracking] = useState(false);
 
   const address = useWalletStore((s) => s.address);
   const chainId = useWalletStore((s) => s.chainId);
@@ -73,6 +87,58 @@ export function ContractStudio() {
     () => CONTRACT_TEMPLATES.find((t) => t.id === templateId) ?? defaultTemplate,
     [defaultTemplate, templateId],
   );
+
+  useEffect(() => {
+    setDeployedContracts(loadDeployedContracts());
+  }, []);
+
+  function rememberDeployment(result: DeployResult, contractName: string) {
+    setDeployedContracts(
+      addDeployedContract({
+        contractName,
+        contractAddress: result.contractAddress,
+        transactionHash: result.transactionHash,
+        deployer: address,
+      }),
+    );
+  }
+
+  async function handleTrackAddress() {
+    const candidate = trackAddress.trim();
+    setTrackError("");
+
+    if (!/^0x[0-9a-fA-F]{40}$/.test(candidate)) {
+      setTrackError("Enter a valid 0x contract address.");
+      return;
+    }
+
+    setIsTracking(true);
+    try {
+      const exists = await isContractAddress(candidate);
+      if (!exists) {
+        setTrackError("No contract bytecode at this address on Titan.");
+        return;
+      }
+
+      setDeployedContracts(
+        addDeployedContract({
+          contractName: "Tracked contract",
+          contractAddress: candidate,
+          transactionHash: null,
+          deployer: null,
+        }),
+      );
+      setTrackAddress("");
+    } catch (error) {
+      setTrackError(error instanceof Error ? error.message : "Could not verify contract address.");
+    } finally {
+      setIsTracking(false);
+    }
+  }
+
+  function handleRemoveContract(contractAddress: string) {
+    setDeployedContracts(removeDeployedContract(contractAddress));
+  }
 
   function applyTemplate(nextTemplateId: string) {
     const template = CONTRACT_TEMPLATES.find((t) => t.id === nextTemplateId);
@@ -146,6 +212,7 @@ export function ContractStudio() {
       });
 
       setDeployResult(result);
+      rememberDeployment(result, compiled.contractName);
     } catch (error) {
       setDeployError(parseWalletError(error, "Deployment failed."));
     } finally {
@@ -181,6 +248,96 @@ export function ContractStudio() {
           </Button>
         </div>
       )}
+
+      <section className="rounded-lg border">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/30 px-4 py-3">
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <History className="h-4 w-4" />
+            Deployed contracts
+          </div>
+          <span className="text-xs text-muted-foreground">
+            Saved in this browser · also viewable in Explorer
+          </span>
+        </div>
+
+        <div className="space-y-4 px-4 py-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+            <div className="flex-1 space-y-1.5">
+              <Label htmlFor="track-contract" className="text-xs">
+                Track an existing contract address
+              </Label>
+              <Input
+                id="track-contract"
+                value={trackAddress}
+                onChange={(e) => setTrackAddress(e.target.value)}
+                placeholder="0x…"
+                className="font-mono text-xs"
+              />
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => void handleTrackAddress()}
+              disabled={isTracking || !trackAddress.trim()}
+            >
+              {isTracking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              Add
+            </Button>
+          </div>
+          {trackError && <p className="text-xs text-red-600 break-all">{trackError}</p>}
+
+          {deployedContracts.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No contracts tracked yet. Deploy one below, or paste a contract address above to add it.
+            </p>
+          ) : (
+            <div className="divide-y rounded-md border">
+              {deployedContracts.map((record) => (
+                <div
+                  key={record.id}
+                  className="flex flex-col gap-2 px-3 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{record.contractName}</span>
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {shortAddress(record.contractAddress)}
+                      </span>
+                    </div>
+                    <p className="font-mono text-xs break-all text-muted-foreground">{record.contractAddress}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {new Date(record.deployedAt).toLocaleString()}
+                      {record.deployer ? ` · deployer ${shortAddress(record.deployer)}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <Button asChild size="sm" variant="outline">
+                      <Link href={`/dashboard/activity?q=${encodeURIComponent(record.contractAddress)}`}>
+                        Explorer
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Link>
+                    </Button>
+                    {record.transactionHash && (
+                      <Button asChild size="sm" variant="ghost">
+                        <Link href={`/dashboard/activity?q=${encodeURIComponent(record.transactionHash)}`}>
+                          Deploy tx
+                        </Link>
+                      </Button>
+                    )}
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => handleRemoveContract(record.contractAddress)}
+                      title="Remove from list"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
 
       <div className="grid gap-5 xl:grid-cols-2">
         <section className="flex flex-col gap-3 rounded-lg border">
