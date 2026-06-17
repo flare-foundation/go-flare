@@ -321,60 +321,69 @@ export function ContractStudio() {
         }}
         className="gap-4"
       >
-        <div className="rounded-lg border bg-muted/15 px-4 py-5">
-          <div className="flex items-start justify-center gap-2 overflow-x-auto sm:gap-4">
+        <div className="rounded-lg border bg-muted/15 px-3 py-2.5">
+          <div className="flex w-full items-center gap-1.5 sm:gap-2">
             {STEPS.map((step, index) => {
               const status = stepStatus[step.id];
               const isActive = activeStep === step.id;
               const clickable = canOpenStep(step.id);
 
               return (
-                <div key={step.id} className="flex items-start gap-2 sm:gap-4 shrink-0">
+                <div key={step.id} className="flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2">
                   <button
                     type="button"
                     disabled={!clickable}
                     onClick={() => clickable && setActiveStep(step.id)}
                     className={cn(
-                      "group flex flex-col items-center gap-2 min-w-[4.75rem] transition-opacity",
-                      !clickable && "cursor-not-allowed opacity-45",
+                      "group flex h-8 w-full min-w-0 items-center justify-center gap-1.5 rounded-full border px-2.5 text-xs font-medium transition-all sm:h-9 sm:gap-2 sm:px-3",
+                      isActive && "border-primary bg-primary/10 text-foreground shadow-sm",
+                      !isActive &&
+                        status === "done" &&
+                        clickable &&
+                        "border-emerald-500/40 bg-emerald-500/5 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-500/10",
+                      !isActive &&
+                        status === "error" &&
+                        "border-red-500/40 bg-red-500/5 text-red-600",
+                      !isActive &&
+                        clickable &&
+                        status !== "done" &&
+                        status !== "error" &&
+                        "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                      !clickable && "cursor-not-allowed border-transparent bg-muted/40 text-muted-foreground opacity-60",
                     )}
                   >
                     <span
                       className={cn(
-                        "flex h-11 w-11 items-center justify-center rounded-full border-2 text-sm font-semibold transition-all",
-                        isActive && "border-primary bg-primary text-primary-foreground shadow-sm scale-105",
+                        "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-semibold sm:h-6 sm:w-6 sm:text-[11px]",
+                        isActive && "border-primary bg-primary text-primary-foreground",
                         !isActive &&
                           status === "done" &&
-                          "border-emerald-500/70 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+                          "border-emerald-500/60 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
                         !isActive &&
                           status === "error" &&
-                          "border-red-500/70 bg-red-500/10 text-red-600",
+                          "border-red-500/60 bg-red-500/15 text-red-600",
                         !isActive &&
-                          clickable &&
                           status !== "done" &&
                           status !== "error" &&
-                          "border-muted-foreground/30 bg-background text-muted-foreground group-hover:border-primary/50 group-hover:text-foreground",
-                        !isActive && !clickable && "border-muted-foreground/20 bg-muted/30 text-muted-foreground",
+                          "border-muted-foreground/35 bg-muted/50 text-muted-foreground group-hover:border-primary/50",
                       )}
                     >
                       <RoundStepGlyph status={status} step={step.step} isActive={isActive} />
                     </span>
-                    <span
-                      className={cn(
-                        "text-[11px] font-medium leading-tight text-center",
-                        isActive ? "text-foreground" : "text-muted-foreground",
-                      )}
-                    >
-                      {step.label}
-                    </span>
+                    <span className="truncate">{step.label}</span>
                     {step.id === "deployed" && deployedContracts.length > 0 && (
-                      <Badge variant="secondary" className="h-4 px-1.5 text-[10px] -mt-1">
+                      <Badge variant="secondary" className="h-4 shrink-0 px-1 text-[10px]">
                         {deployedContracts.length}
                       </Badge>
                     )}
                   </button>
                   {index < STEPS.length - 1 && (
-                    <ChevronRight className="mt-3.5 h-4 w-4 shrink-0 text-muted-foreground/40" />
+                    <div
+                      className={cn(
+                        "h-px w-2 shrink-0 rounded-full sm:w-3",
+                        stepStatus[step.id] === "done" ? "bg-emerald-500/40" : "bg-border",
+                      )}
+                    />
                   )}
                 </div>
               );
@@ -752,13 +761,13 @@ function RoundStepGlyph({
   isActive: boolean;
 }) {
   if (status === "done" && !isActive) {
-    return <CheckCircle2 className="h-5 w-5" />;
+    return <CheckCircle2 className="h-3 w-3 sm:h-3.5 sm:w-3.5" />;
   }
   if (status === "error") {
-    return <AlertCircle className="h-5 w-5" />;
+    return <AlertCircle className="h-3 w-3 sm:h-3.5 sm:w-3.5" />;
   }
   if (status === "locked" && !isActive) {
-    return <Circle className="h-4 w-4" />;
+    return <Circle className="h-2.5 w-2.5 sm:h-3 sm:w-3" />;
   }
   return <span>{step}</span>;
 }
