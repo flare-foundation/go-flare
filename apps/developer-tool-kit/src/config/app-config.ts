@@ -13,7 +13,7 @@ export const APP_CONFIG = {
     chainIdHex: "0xbec19",
     rpcUrl: "http://localhost:9650/ext/bc/C/rpc",
     dashboardUrl: "http://localhost:3000/dashboard/default",
-    explorerUrl: "http://localhost:3000/dashboard/default",
+    explorerUrl: "http://localhost:3000/dashboard/activity",
     nativeToken: {
       name: "Titan",
       symbol: "TITAN",
