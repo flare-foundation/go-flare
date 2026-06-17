@@ -1,6 +1,7 @@
 import { encodeDeployData, type Abi } from "viem";
 
 import { getEthereumProvider, switchToTitanNetwork } from "@/lib/titan/ethereum";
+import { parseWalletError } from "@/lib/titan/wallet-errors";
 
 export type DeployContractInput = {
   from: string;
@@ -14,21 +15,41 @@ export type DeployContractResult = {
   contractAddress: string;
 };
 
-function hexToNumber(hex: string): bigint {
+const MIN_GAS_PRICE_WEI = BigInt(25_000_000_000); // 25 gwei fallback for local chains reporting 0
+
+function hexToBigInt(hex: string): bigint {
   return BigInt(hex);
 }
 
-async function waitForReceipt(txHash: string, attempts = 40, delayMs = 1500): Promise<{ contractAddress?: string }> {
+function toHex(value: bigint): string {
+  return `0x${value.toString(16)}`;
+}
+
+async function providerRequest<T>(method: string, params: unknown[]): Promise<T> {
   const provider = getEthereumProvider();
   if (!provider) {
-    throw new Error("MetaMask not found.");
+    throw new Error("MetaMask not found. Install MetaMask and refresh the page.");
   }
 
+  try {
+    return (await provider.request({ method, params })) as T;
+  } catch (error) {
+    throw new Error(parseWalletError(error, `${method} failed.`));
+  }
+}
+
+async function resolveGasPrice(): Promise<bigint> {
+  const gasPriceHex = await providerRequest<string>("eth_gasPrice", []);
+  const gasPrice = hexToBigInt(gasPriceHex);
+  return gasPrice > BigInt(0) ? gasPrice : MIN_GAS_PRICE_WEI;
+}
+
+async function waitForReceipt(txHash: string, attempts = 40, delayMs = 1500): Promise<{ contractAddress?: string }> {
   for (let i = 0; i < attempts; i++) {
-    const receipt = (await provider.request({
-      method: "eth_getTransactionReceipt",
-      params: [txHash],
-    })) as { contractAddress?: string | null; status?: string } | null;
+    const receipt = await providerRequest<{
+      contractAddress?: string | null;
+      status?: string;
+    } | null>("eth_getTransactionReceipt", [txHash]);
 
     if (receipt) {
       if (receipt.status === "0x0") {
@@ -60,28 +81,27 @@ export async function deployContract(input: DeployContractInput): Promise<Deploy
     args: input.constructorArgs as readonly unknown[],
   });
 
-  const gasEstimateHex = (await provider.request({
-    method: "eth_estimateGas",
-    params: [
-      {
-        from: input.from,
-        data: deployData,
-      },
-    ],
-  })) as string;
+  const gasPrice = await resolveGasPrice();
 
-  const gasLimit = hexToNumber(gasEstimateHex) + BigInt(50_000);
+  const gasEstimateHex = await providerRequest<string>("eth_estimateGas", [
+    {
+      from: input.from,
+      data: deployData,
+      value: "0x0",
+    },
+  ]);
 
-  const txHash = (await provider.request({
-    method: "eth_sendTransaction",
-    params: [
-      {
-        from: input.from,
-        data: deployData,
-        gas: `0x${gasLimit.toString(16)}`,
-      },
-    ],
-  })) as string;
+  const gasLimit = hexToBigInt(gasEstimateHex) + BigInt(100_000);
+
+  const txHash = await providerRequest<string>("eth_sendTransaction", [
+    {
+      from: input.from,
+      data: deployData,
+      value: "0x0",
+      gas: toHex(gasLimit),
+      gasPrice: toHex(gasPrice),
+    },
+  ]);
 
   const receipt = await waitForReceipt(txHash);
   if (!receipt.contractAddress) {

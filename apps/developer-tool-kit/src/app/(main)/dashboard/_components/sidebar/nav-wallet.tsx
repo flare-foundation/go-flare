@@ -42,21 +42,17 @@ export function NavWallet() {
       <SidebarMenu>
         <SidebarMenuItem>
           <SidebarMenuButton
-            size="lg"
+            size="default"
             onClick={() => void connect()}
             disabled={isLoading}
             className="cursor-pointer"
             tooltip="Connect MetaMask"
           >
-            <div className="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-              {isLoading ? <Loader2 className="size-4 animate-spin" /> : <Wallet className="size-4" />}
-            </div>
-            <div className="grid flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-medium">Connect MetaMask</span>
-              <span className="truncate text-muted-foreground text-xs">
-                {error || `Sign in to ${APP_CONFIG.titan.networkName}`}
-              </span>
-            </div>
+            {isLoading ? <Loader2 className="animate-spin" /> : <Wallet />}
+            <span className="truncate font-medium group-data-[collapsible=icon]:hidden">Connect MetaMask</span>
+            <span className="truncate text-muted-foreground text-xs group-data-[collapsible=icon]:hidden">
+              {error || `Sign in to ${APP_CONFIG.titan.networkName}`}
+            </span>
           </SidebarMenuButton>
         </SidebarMenuItem>
       </SidebarMenu>
@@ -64,6 +60,7 @@ export function NavWallet() {
   }
 
   const onTitanChain = isOnTitanChain(chainId);
+  const walletTooltip = `${shortAddress(address)} · ${titanBalance} ${APP_CONFIG.titan.nativeToken.symbol}`;
 
   return (
     <SidebarMenu>
@@ -71,28 +68,27 @@ export function NavWallet() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
-              size="lg"
+              size="default"
+              tooltip={walletTooltip}
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
-              <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-600/15 text-emerald-600 dark:text-emerald-400">
-                <Wallet className="size-4" />
-              </div>
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium font-mono">{shortAddress(address)}</span>
-                <span className="truncate text-muted-foreground text-xs">
-                  {isRefreshingBalance ? (
-                    <span className="inline-flex items-center gap-1">
-                      <Loader2 className="size-3 animate-spin" />
-                      Loading balance…
-                    </span>
-                  ) : (
-                    <>
-                      {titanBalance} {APP_CONFIG.titan.nativeToken.symbol}
-                    </>
-                  )}
-                </span>
-              </div>
-              <EllipsisVertical className="ml-auto size-4" />
+              <Wallet className="text-emerald-600 dark:text-emerald-400" />
+              <span className="truncate font-medium font-mono group-data-[collapsible=icon]:hidden">
+                {shortAddress(address)}
+              </span>
+              <span className="truncate text-muted-foreground text-xs group-data-[collapsible=icon]:hidden">
+                {isRefreshingBalance ? (
+                  <span className="inline-flex items-center gap-1">
+                    <Loader2 className="size-3 animate-spin" />
+                    Loading…
+                  </span>
+                ) : (
+                  <>
+                    {titanBalance} {APP_CONFIG.titan.nativeToken.symbol}
+                  </>
+                )}
+              </span>
+              <EllipsisVertical className="ml-auto size-4 group-data-[collapsible=icon]:hidden" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent

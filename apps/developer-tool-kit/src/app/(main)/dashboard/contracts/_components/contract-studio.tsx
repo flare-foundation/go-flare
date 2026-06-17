@@ -40,6 +40,7 @@ import {
   parseConstructorArgValue,
 } from "@/lib/titan/deploy-contract";
 import { shortAddress } from "@/lib/titan/format";
+import { parseWalletError } from "@/lib/titan/wallet-errors";
 import { isOnTitanChain, isWalletConnected, useWalletStore } from "@/stores/wallet/wallet-store";
 
 type DeployResult = {
@@ -146,7 +147,7 @@ export function ContractStudio() {
 
       setDeployResult(result);
     } catch (error) {
-      setDeployError(error instanceof Error ? error.message : "Deployment failed.");
+      setDeployError(parseWalletError(error, "Deployment failed."));
     } finally {
       setIsDeploying(false);
     }
@@ -328,6 +329,12 @@ export function ContractStudio() {
 
               {!onTitanChain && walletReady && (
                 <p className="text-xs text-amber-600">Switch MetaMask to {APP_CONFIG.titan.networkName} before deploying.</p>
+              )}
+
+              {walletReady && (titanBalance === "0" || titanBalance === "—") && (
+                <p className="text-xs text-amber-600">
+                  Your wallet has no TITAN for gas. Import a prefunded genesis account into MetaMask to deploy on local UAT.
+                </p>
               )}
 
               {deployError && <p className="text-xs text-red-600 break-all">{deployError}</p>}
