@@ -1,12 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Activity,
-  ArrowLeft,
   Clock,
-  Copy,
   Hash,
   Loader2,
   RefreshCw,
@@ -17,6 +15,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  AddressDetail,
+  ExplorerDetailDrawer,
+} from "@/app/(main)/dashboard/activity/_components/explorer-detail-drawer";
 
 interface NodeInfo {
   node: string;
@@ -156,8 +158,11 @@ function isBlockNumber(s: string) {
   return false;
 }
 
-export default function ExplorerPage() {
+function ExplorerPageContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const skipUrlSearchRef = useRef(false);
   const [nodes, setNodes] = useState<NodeInfo[]>([]);
   const [nodesLoading, setNodesLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -180,6 +185,28 @@ export default function ExplorerPage() {
   const [searchValue, setSearchValue] = useState("");
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
+  const [addressDetail, setAddressDetail] = useState<AddressDetail | null>(null);
+
+  const syncUrlParam = useCallback(
+    (q: string | null) => {
+      skipUrlSearchRef.current = true;
+      if (q) {
+        router.replace(`${pathname}?q=${encodeURIComponent(q)}`, { scroll: false });
+      } else {
+        router.replace(pathname, { scroll: false });
+      }
+    },
+    [pathname, router],
+  );
+
+  function closeDrawer() {
+    setSelectedBlock(null);
+    setSelectedTxHash(null);
+    setSelectedTx(null);
+    setSelectedReceipt(null);
+    setAddressDetail(null);
+    syncUrlParam(null);
+  }
 
   // Load node overview (reused from old activity)
   async function loadNodes() {
@@ -298,12 +325,10 @@ export default function ExplorerPage() {
   // Select and fully load a block (ensures full tx objects)
   async function selectBlock(b: Block | null) {
     if (!b) {
-      setSelectedBlock(null);
-      setSelectedTxHash(null);
-      setSelectedTx(null);
-      setSelectedReceipt(null);
+      closeDrawer();
       return;
     }
+    setAddressDetail(null);
     // if we already have full txs, use it
     const needsRefetch = !b.transactions || (b.transactions.length > 0 && typeof b.transactions[0] === "string");
     if (needsRefetch) {
@@ -318,15 +343,19 @@ export default function ExplorerPage() {
     setSelectedTxHash(null);
     setSelectedTx(null);
     setSelectedReceipt(null);
+    const blockNum = hexToNumber(b.number);
+    syncUrlParam(blockNum != null ? String(blockNum) : b.hash);
   }
 
   // Fetch a transaction + receipt
   async function loadTx(hash: string) {
+    setAddressDetail(null);
     setTxLoading(true);
     setSelectedTxHash(hash);
     setSelectedTx(null);
     setSelectedReceipt(null);
     setSearchError("");
+    syncUrlParam(hash);
     try {
       const [txRaw, receiptRaw] = await Promise.all([
         rpc("eth_getTransactionByHash", [hash]),
@@ -372,13 +401,15 @@ export default function ExplorerPage() {
 
     try {
       if (isAddress(q)) {
-        // Simple address lookup: show balance
         const balHex = (await rpc("eth_getBalance", [q, "latest"])) as string;
         const titan = formatWeiToTitan(balHex);
-        // For now surface in search error area (or we could open a mini panel)
-        setSearchError(`Address balance: ${titan} TITAN  (${balHex})`);
-        // optionally clear after a bit, but leave it visible
-        setTimeout(() => setSearchError((prev) => (prev.includes("Address balance") ? "" : prev)), 8000);
+        setSelectedBlock(null);
+        setSelectedTxHash(null);
+        setSelectedTx(null);
+        setSelectedReceipt(null);
+        setAddressDetail({ address: q, balanceHex: balHex, balanceTitan: titan });
+        syncUrlParam(q);
+        setSearchValue("");
       } else if (isTxHash(q)) {
         const txRaw = await rpc("eth_getTransactionByHash", [q]);
         if (txRaw) {
@@ -430,7 +461,14 @@ export default function ExplorerPage() {
 
   useEffect(() => {
     const q = searchParams.get("q")?.trim();
-    if (!q) return;
+    if (!q) {
+      skipUrlSearchRef.current = false;
+      return;
+    }
+    if (skipUrlSearchRef.current) {
+      skipUrlSearchRef.current = false;
+      return;
+    }
     setSearchValue(q);
     void performSearch(q);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -490,7 +528,7 @@ export default function ExplorerPage() {
   const highestBlock = blocks[0]?.number ? hexToNumber(blocks[0].number) : null;
   const lowestBlock = blocks[blocks.length - 1]?.number ? hexToNumber(blocks[blocks.length - 1].number) : null;
   const loadedPages = Math.max(1, Math.ceil(blocks.length / BLOCKS_PAGE_SIZE));
-  const currentDetailBlock = selectedBlock;
+  const drawerOpen = Boolean(selectedBlock || selectedTxHash || addressDetail);
 
   return (
     <div className="flex flex-col gap-5">
@@ -509,10 +547,7 @@ export default function ExplorerPage() {
           onClick={() => {
             loadNodes();
             loadRecentBlocks(BLOCKS_PAGE_SIZE);
-            setSelectedBlock(null);
-            setSelectedTx(null);
-            setSelectedTxHash(null);
-            setSelectedReceipt(null);
+            closeDrawer();
           }}
           disabled={blocksLoading || nodesLoading}
         >
@@ -676,192 +711,26 @@ export default function ExplorerPage() {
         </div>
       </section>
 
-      {/* Block detail — full width below feed */}
-      {currentDetailBlock && (
-        <section className="rounded-lg border">
-          <div className="flex items-start justify-between gap-3 border-b bg-muted/30 px-4 py-3">
-            <div>
-              <h2 className="text-base font-semibold">Block #{hexToNumber(currentDetailBlock.number)?.toLocaleString()}</h2>
-              <p className="text-xs text-muted-foreground font-mono mt-0.5 break-all">{currentDetailBlock.hash}</p>
-            </div>
-            <Button size="icon" variant="ghost" onClick={() => selectBlock(null)} title="Close block details">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <div className="px-4 py-4">
-            {selectedBlockLoading ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading block…
-              </div>
-            ) : (
-              <div className="space-y-4 text-sm">
-                <div className="grid grid-cols-1 gap-x-8 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
-                  <DetailRow label="Timestamp" value={formatTimestamp(currentDetailBlock.timestamp).full} />
-                  <DetailRow label="Age" value={formatTimestamp(currentDetailBlock.timestamp).ago} />
-                  <DetailRow
-                    label="Transactions"
-                    value={String(
-                      currentDetailBlock.transactionCount ??
-                        (Array.isArray(currentDetailBlock.transactions) ? currentDetailBlock.transactions.length : 0),
-                    )}
-                  />
-                  <DetailRow
-                    label="Gas Used / Limit"
-                    value={`${hexToNumber(currentDetailBlock.gasUsed)?.toLocaleString() ?? "—"} / ${hexToNumber(currentDetailBlock.gasLimit)?.toLocaleString() ?? "—"}`}
-                  />
-                  {currentDetailBlock.baseFeePerGas && (
-                    <DetailRow label="Base Fee" value={formatGwei(currentDetailBlock.baseFeePerGas)} />
-                  )}
-                  <DetailRow label="Parent Hash" value={shortHash(currentDetailBlock.parentHash)} mono copyValue={currentDetailBlock.parentHash} />
-                </div>
-
-                <div>
-                  <h3 className="mb-2 text-xs font-medium uppercase tracking-widest text-muted-foreground">
-                    Transactions (
-                    {currentDetailBlock.transactionCount ??
-                      (Array.isArray(currentDetailBlock.transactions) ? currentDetailBlock.transactions.length : 0)}
-                    )
-                  </h3>
-
-                  {Array.isArray(currentDetailBlock.transactions) && currentDetailBlock.transactions.length > 0 ? (
-                    <div className="overflow-hidden rounded-md border">
-                      <table className="w-full text-xs">
-                        <thead>
-                          <tr className="bg-muted/60 text-muted-foreground">
-                            <th className="px-3 py-1.5 text-left font-normal">#</th>
-                            <th className="px-3 py-1.5 text-left font-normal">Hash</th>
-                            <th className="px-3 py-1.5 text-left font-normal hidden md:table-cell">From → To</th>
-                            <th className="px-3 py-1.5 text-right font-normal">Value</th>
-                            <th className="px-3 py-1.5 text-right font-normal hidden sm:table-cell">Gas</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y">
-                          {currentDetailBlock.transactions.map((t, idx) => {
-                            const tx = typeof t === "string" ? ({ hash: t } as Tx) : (t as Tx);
-                            const val = formatWeiToTitan(tx.value);
-                            const g = hexToNumber(tx.gas) ?? 0;
-                            return (
-                              <tr
-                                key={tx.hash}
-                                onClick={() => loadTx(tx.hash)}
-                                className={`cursor-pointer hover:bg-muted/50 ${selectedTxHash === tx.hash ? "bg-muted" : ""}`}
-                              >
-                                <td className="px-3 py-1.5 font-mono tabular-nums text-muted-foreground">{idx}</td>
-                                <td className="px-3 py-1.5 font-mono text-primary hover:underline">{shortHash(tx.hash)}</td>
-                                <td className="px-3 py-1.5 text-muted-foreground hidden md:table-cell font-mono text-[10px] truncate max-w-65">
-                                  {shortHash(tx.from, 4, 4)} → {tx.to ? shortHash(tx.to, 4, 4) : "contract"}
-                                </td>
-                                <td className="px-3 py-1.5 text-right font-medium tabular-nums">{val}</td>
-                                <td className="px-3 py-1.5 text-right text-muted-foreground hidden sm:table-cell">{g.toLocaleString()}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground py-2">No transactions in this block.</p>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-
-      {/* Transaction detail — full width below block detail */}
-      {(selectedTxHash || selectedTx) && (
-        <section className="rounded-lg border">
-          <div className="flex items-center justify-between gap-3 border-b bg-muted/30 px-4 py-3">
-            <div>
-              <h2 className="text-base font-semibold">Transaction</h2>
-              <p className="font-mono text-xs text-muted-foreground break-all mt-0.5">{selectedTxHash}</p>
-            </div>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                setSelectedTxHash(null);
-                setSelectedTx(null);
-                setSelectedReceipt(null);
-              }}
-            >
-              Close
-            </Button>
-          </div>
-
-          <div className="px-4 py-4">
-            {txLoading ? (
-              <div className="flex gap-2 text-sm py-4 text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading transaction…
-              </div>
-            ) : !selectedTx ? (
-              <div className="text-sm text-muted-foreground">Transaction not found or still loading.</div>
-            ) : (
-              <div className="space-y-3 text-sm">
-                <div className="grid grid-cols-1 gap-x-8 gap-y-1 md:grid-cols-2 lg:grid-cols-3">
-                  <DetailRow label="From" value={shortHash(selectedTx.from)} mono copyValue={selectedTx.from} />
-                  <DetailRow label="To" value={selectedTx.to ? shortHash(selectedTx.to) : "Contract creation"} mono copyValue={selectedTx.to ?? undefined} />
-                  <DetailRow label="Value" value={`${formatWeiToTitan(selectedTx.value)} TITAN`} />
-                  <DetailRow label="Gas Price" value={selectedTx.gasPrice ? formatGwei(selectedTx.gasPrice) : "—"} />
-                  <DetailRow
-                    label="Gas Limit / Used"
-                    value={`${hexToNumber(selectedTx.gas)?.toLocaleString() ?? "—"} ${selectedReceipt ? ` / ${hexToNumber(selectedReceipt.gasUsed)?.toLocaleString()}` : ""}`}
-                  />
-                  {selectedReceipt && (
-                    <DetailRow
-                      label="Status"
-                      value={
-                        <span
-                          className={
-                            selectedReceipt.status === "0x1" || selectedReceipt.status === "0x01"
-                              ? "text-green-600 font-medium"
-                              : "text-red-600 font-medium"
-                          }
-                        >
-                          {selectedReceipt.status === "0x1" || selectedReceipt.status === "0x01" ? "Success" : "Failed"}
-                        </span>
-                      }
-                    />
-                  )}
-                  <DetailRow label="Nonce" value={String(hexToNumber(selectedTx.nonce) ?? selectedTx.nonce)} />
-                  {selectedReceipt?.effectiveGasPrice && (
-                    <DetailRow label="Effective Gas Price" value={formatGwei(selectedReceipt.effectiveGasPrice)} />
-                  )}
-                </div>
-
-                {selectedReceipt && (
-                  <div>
-                    <div className="uppercase text-[10px] tracking-widest text-muted-foreground mb-1">Logs emitted</div>
-                    <Badge variant="secondary">
-                      {selectedReceipt.logs?.length ?? 0} log{selectedReceipt.logs?.length === 1 ? "" : "s"}
-                    </Badge>
-                  </div>
-                )}
-
-                <div>
-                  <div className="uppercase text-[10px] tracking-widest text-muted-foreground mb-1">Input data</div>
-                  <pre className="text-[10px] bg-muted p-2 rounded overflow-auto max-h-24 font-mono break-all">
-                    {selectedTx.input && selectedTx.input !== "0x" ? selectedTx.input : "(empty)"}
-                  </pre>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(selectedTxHash!)}>
-                    <Copy className="h-3.5 w-3.5 mr-1.5" /> Copy tx hash
-                  </Button>
-                  {selectedTx.blockHash && (
-                    <Button size="sm" variant="outline" onClick={() => selectBlock({ hash: selectedTx.blockHash } as Block)}>
-                      View containing block
-                    </Button>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
+      <ExplorerDetailDrawer
+        open={drawerOpen}
+        onOpenChange={(open) => {
+          if (!open) closeDrawer();
+        }}
+        block={selectedBlock}
+        blockLoading={selectedBlockLoading}
+        onSelectBlock={(b) => void selectBlock(b as Block)}
+        onLoadTx={(hash) => void loadTx(hash)}
+        txHash={selectedTxHash}
+        tx={selectedTx}
+        receipt={selectedReceipt}
+        txLoading={txLoading}
+        addressDetail={addressDetail}
+        shortHash={shortHash}
+        formatTimestamp={formatTimestamp}
+        hexToNumber={hexToNumber}
+        formatWeiToTitan={formatWeiToTitan}
+        formatGwei={formatGwei}
+      />
 
       <p className="text-[10px] text-muted-foreground px-1">
         Data is fetched live from local Titan nodes via C-Chain JSON-RPC. Blocks load in batches of {BLOCKS_PAGE_SIZE}.
@@ -870,38 +739,16 @@ export default function ExplorerPage() {
   );
 }
 
-function DetailRow({
-  label,
-  value,
-  mono,
-  copyValue,
-}: {
-  label: string;
-  value: React.ReactNode;
-  mono?: boolean;
-  copyValue?: string;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  async function doCopy() {
-    if (!copyValue) return;
-    await navigator.clipboard.writeText(copyValue);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1200);
-  }
-
+export default function ExplorerPage() {
   return (
-    <div className="flex justify-between gap-3 py-0.5 border-b border-dashed last:border-none border-border/60">
-      <span className="text-muted-foreground shrink-0">{label}</span>
-      <span className={`${mono ? "font-mono text-xs break-all" : "font-medium break-all"} text-right flex items-center gap-1.5`}>
-        {value}
-        {copyValue && (
-          <button onClick={doCopy} className="text-muted-foreground hover:text-foreground" title="Copy">
-            <Copy className="h-3 w-3" />
-          </button>
-        )}
-        {copied && <span className="text-[10px] text-emerald-600">copied</span>}
-      </span>
-    </div>
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center py-24 text-muted-foreground">
+          <Loader2 className="h-6 w-6 animate-spin" />
+        </div>
+      }
+    >
+      <ExplorerPageContent />
+    </Suspense>
   );
 }
