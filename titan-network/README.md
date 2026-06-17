@@ -44,10 +44,24 @@ The `avaxAddr` values in the example config must be valid X-chain addresses for 
 
 ## Multi-node Docker (node1/node2/node3)
 
-The root scripts now support a 3-node local/UAT test topology:
+Nodes run from the **go-titan** image built from this repo (`Dockerfile`), not `flarefoundation/go-flare`.
+
+Local (builds `go-titan-local` automatically if missing):
 
 1. `pnpm run node:docker:stop:all`
 2. `pnpm run node:docker:start:all`
+
+Force a fresh image build first:
+
+```bash
+pnpm run node:docker:build-and-start:all
+```
+
+Deployed image from CI (`dev/explorer` branch → `ghcr.io/pakeku/go-titan:dev-explorer`):
+
+```bash
+TITAN_NODE_IMAGE=ghcr.io/pakeku/go-titan:dev-explorer pnpm run node:docker:start:all
+```
 
 Ports:
 

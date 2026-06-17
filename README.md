@@ -139,10 +139,11 @@ DB and staking data land in `db-node1/` (gitignored).
 
 | Script | Description |
 |--------|-------------|
-| `node:docker:build` | Build `go-titan-local` image from `Dockerfile` |
+| `node:docker:build` | Build `go-titan-local` image from repo `Dockerfile` |
 | `node:docker:start:node1` | Interactive single-node run (local image) |
 | `node:docker:build-and-start:node1` | Build + run |
-| `node:docker:start:node1:prebuilt` | Run using `flarefoundation/go-flare:latest` |
+| `node:docker:build-and-start:all` | Build image then start 3-node network |
+| `node:docker:start:node1:remote` | Run using CI image `ghcr.io/pakeku/go-titan:dev-explorer` |
 
 ### Node — Docker (3-node network)
 
@@ -153,7 +154,7 @@ DB and staking data land in `db-node1/` (gitignored).
 | `node:docker:start:node1:bg` | Start node1 in background |
 | `node:docker:start:node2:bg` | Start node2 (bootstraps from node1) |
 | `node:docker:start:node3:bg` | Start node3 (bootstraps from node1) |
-| `node:docker:start:all` | Full orchestrated startup |
+| `node:docker:start:all` | Full orchestrated startup (auto-builds `go-titan-local` if needed) |
 | `node:docker:stop:all` | Stop and remove all Titan containers |
 | `node:docker:test:health` | Hit health endpoints on all nodes |
 | `node:docker:test:peers` | Check `info.peers` on all nodes |
