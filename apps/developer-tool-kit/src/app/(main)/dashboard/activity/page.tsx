@@ -141,9 +141,6 @@ function formatTimestamp(tsHex?: string): { full: string; ago: string } {
   return { full, ago };
 }
 
-function isBlockHash(s: string) {
-  return /^0x[0-9a-fA-F]{64}$/.test(s);
-}
 function isTxHash(s: string) {
   return /^0x[0-9a-fA-F]{64}$/.test(s);
 }
@@ -151,7 +148,10 @@ function isAddress(s: string) {
   return /^0x[0-9a-fA-F]{40}$/.test(s);
 }
 function isBlockNumber(s: string) {
-  return /^\d+$/.test(s) || /^0x[0-9a-fA-F]+$/.test(s);
+  if (/^\d+$/.test(s)) return true;
+  // 64-char hex values are block/tx hashes, not block numbers (RPC max is 64 bits).
+  if (/^0x[0-9a-fA-F]{1,16}$/i.test(s)) return true;
+  return false;
 }
 
 export default function ExplorerPage() {
@@ -194,11 +194,12 @@ export default function ExplorerPage() {
   const fetchBlock = useCallback(async (identifier: string | number, isHash = false): Promise<Block | null> => {
     try {
       const param = isHash
-        ? identifier
+        ? String(identifier)
         : typeof identifier === "number"
-          ? "0x" + identifier.toString(16)
-          : identifier; // can be "latest" or hex
-      const raw = await rpc("eth_getBlockByNumber", [param, true]);
+          ? `0x${identifier.toString(16)}`
+          : identifier; // can be "latest" or hex block number
+      const method = isHash ? "eth_getBlockByHash" : "eth_getBlockByNumber";
+      const raw = await rpc(method, [param, true]);
       if (!raw) return null;
       const b = raw as Block;
       // normalize tx count
@@ -351,38 +352,7 @@ export default function ExplorerPage() {
     setSearchError("");
 
     try {
-      if (isBlockNumber(q)) {
-        const num = q.startsWith("0x") ? parseInt(q, 16) : parseInt(q, 10);
-        const b = await fetchBlock(num);
-        if (b) {
-          // put it at top of list if new
-          setBlocks((prev) => {
-            const exists = prev.some((bb) => bb.hash === b.hash);
-            const next = exists ? prev : [b, ...prev];
-            return next.sort((a, bb) => (hexToNumber(bb.number) ?? 0) - (hexToNumber(a.number) ?? 0));
-          });
-          await selectBlock(b);
-          setSearchValue("");
-        } else {
-          setSearchError("Block not found");
-        }
-      } else if (isTxHash(q)) {
-        await loadTx(q);
-        setSearchValue("");
-      } else if (isBlockHash(q)) {
-        const b = await fetchBlock(q, true);
-        if (b) {
-          setBlocks((prev) => {
-            const exists = prev.some((bb) => bb.hash === b.hash);
-            const next = exists ? prev : [b, ...prev];
-            return next.sort((a, bb) => (hexToNumber(bb.number) ?? 0) - (hexToNumber(a.number) ?? 0));
-          });
-          await selectBlock(b);
-          setSearchValue("");
-        } else {
-          setSearchError("Block not found");
-        }
-      } else if (isAddress(q)) {
+      if (isAddress(q)) {
         // Simple address lookup: show balance
         const balHex = (await rpc("eth_getBalance", [q, "latest"])) as string;
         const titan = formatWeiToTitan(balHex);
@@ -390,6 +360,39 @@ export default function ExplorerPage() {
         setSearchError(`Address balance: ${titan} TITAN  (${balHex})`);
         // optionally clear after a bit, but leave it visible
         setTimeout(() => setSearchError((prev) => (prev.includes("Address balance") ? "" : prev)), 8000);
+      } else if (isTxHash(q)) {
+        const txRaw = await rpc("eth_getTransactionByHash", [q]);
+        if (txRaw) {
+          await loadTx(q);
+          setSearchValue("");
+        } else {
+          const b = await fetchBlock(q, true);
+          if (b) {
+            setBlocks((prev) => {
+              const exists = prev.some((bb) => bb.hash === b.hash);
+              const next = exists ? prev : [b, ...prev];
+              return next.sort((a, bb) => (hexToNumber(bb.number) ?? 0) - (hexToNumber(a.number) ?? 0));
+            });
+            await selectBlock(b);
+            setSearchValue("");
+          } else {
+            setSearchError("Transaction or block not found");
+          }
+        }
+      } else if (isBlockNumber(q)) {
+        const num = q.startsWith("0x") ? Number.parseInt(q, 16) : Number.parseInt(q, 10);
+        const b = await fetchBlock(num);
+        if (b) {
+          setBlocks((prev) => {
+            const exists = prev.some((bb) => bb.hash === b.hash);
+            const next = exists ? prev : [b, ...prev];
+            return next.sort((a, bb) => (hexToNumber(bb.number) ?? 0) - (hexToNumber(a.number) ?? 0));
+          });
+          await selectBlock(b);
+          setSearchValue("");
+        } else {
+          setSearchError("Block not found");
+        }
       } else {
         setSearchError("Unrecognized input. Use block number, 0x-block/tx hash, or 0x-address.");
       }
