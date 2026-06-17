@@ -1,0 +1,140 @@
+# Titan Network — Docker Compose
+# Repo: https://github.com/pakeku/go-titan
+#
+# Node 1 (bootstrap): downloads origin.json from GitHub at startup.
+# Node 2+: same origin + bootstraps from node 1 (or explicit BOOTSTRAP_IPS / BOOTSTRAP_IDS).
+#
+# Quick start (all three nodes on one machine):
+#   docker compose up -d node1
+#   docker compose up -d node2 node3
+#
+# Production (one node per server): docker-compose.single-node.yml + .env
+# See DEPLOY-docker.md for remote deploys and production notes.
+
+name: titan-network
+
+x-titan-origin: &titan-origin
+  ORIGIN_URL: ${TITAN_ORIGIN_URL:-https://raw.githubusercontent.com/pakeku/go-titan/dev/explorer/titan-network/origin.json}
+  GENESIS_FILE: /app/titan/origin.json
+  TITAN_NETWORK_ID: "781337"
+
+x-titan-node: &titan-node
+  image: ${TITAN_NODE_IMAGE:-ghcr.io/pakeku/go-titan:dev-explorer}
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD", "curl", "--fail", "http://localhost:9650/ext/health"]
+    interval: 10s
+    timeout: 5s
+    retries: 8
+    start_period: 45s
+  networks:
+    - titan-net
+  environment:
+    <<: *titan-origin
+    AUTOCONFIGURE_PUBLIC_IP: "0"
+    DB_DIR: /app/db
+    NETWORK_ID: "781337"
+    EXTRA_ARGUMENTS: >-
+      --genesis=/app/titan/origin.json
+      --network-id=781337
+      --http-host=0.0.0.0
+      --http-port=9650
+      --staking-port=9651
+      --db-dir=/app/db
+      --log-level=warn
+
+services:
+  node1:
+    <<: *titan-node
+    container_name: titan-node1
+    hostname: titan-node1
+    ports:
+      - "9650:9650"
+      - "9651:9651"
+    environment:
+      <<: *titan-origin
+      AUTOCONFIGURE_PUBLIC_IP: "0"
+      AUTOCONFIGURE_BOOTSTRAP: "0"
+      DB_DIR: /app/db
+      NETWORK_ID: "781337"
+      EXTRA_ARGUMENTS: >-
+        --genesis=/app/titan/origin.json
+        --network-id=781337
+        --http-host=0.0.0.0
+        --http-port=9650
+        --staking-port=9651
+        --db-dir=/app/db
+        --log-level=warn
+    volumes:
+      - titan-db-node1:/app/db
+      - titan-staking-node1:/root/.avalanchego/staking
+
+  node2:
+    <<: *titan-node
+    container_name: titan-node2
+    hostname: titan-node2
+    depends_on:
+      node1:
+        condition: service_healthy
+    ports:
+      - "9652:9650"
+      - "9653:9651"
+    environment:
+      <<: *titan-origin
+      AUTOCONFIGURE_PUBLIC_IP: "0"
+      AUTOCONFIGURE_BOOTSTRAP: "1"
+      AUTOCONFIGURE_BOOTSTRAP_ENDPOINT: http://titan-node1:9650/ext/info
+      DB_DIR: /app/db
+      NETWORK_ID: "781337"
+      EXTRA_ARGUMENTS: >-
+        --genesis=/app/titan/origin.json
+        --network-id=781337
+        --http-host=0.0.0.0
+        --http-port=9650
+        --staking-port=9651
+        --db-dir=/app/db
+        --log-level=warn
+    volumes:
+      - titan-db-node2:/app/db
+      - titan-staking-node2:/root/.avalanchego/staking
+
+  node3:
+    <<: *titan-node
+    container_name: titan-node3
+    hostname: titan-node3
+    depends_on:
+      node1:
+        condition: service_healthy
+    ports:
+      - "9654:9650"
+      - "9655:9651"
+    environment:
+      <<: *titan-origin
+      AUTOCONFIGURE_PUBLIC_IP: "0"
+      AUTOCONFIGURE_BOOTSTRAP: "1"
+      AUTOCONFIGURE_BOOTSTRAP_ENDPOINT: http://titan-node1:9650/ext/info
+      DB_DIR: /app/db
+      NETWORK_ID: "781337"
+      EXTRA_ARGUMENTS: >-
+        --genesis=/app/titan/origin.json
+        --network-id=781337
+        --http-host=0.0.0.0
+        --http-port=9650
+        --staking-port=9651
+        --db-dir=/app/db
+        --log-level=warn
+    volumes:
+      - titan-db-node3:/app/db
+      - titan-staking-node3:/root/.avalanchego/staking
+
+networks:
+  titan-net:
+    name: titan-net
+
+volumes:
+  titan-db-node1:
+  titan-db-node2:
+  titan-db-node3:
+  titan-staking-node1:
+  titan-staking-node2:
+  titan-staking-node3:

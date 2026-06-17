@@ -1,0 +1,3 @@
+[submodule "tools/avalanche-cli"]
+	path = tools/avalanche-cli
+	url = https://github.com/ava-labs/avalanche-cli.git
