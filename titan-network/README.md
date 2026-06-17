@@ -46,6 +46,17 @@ The `avaxAddr` values in the example config must be valid X-chain addresses for 
 
 Nodes run from the **go-titan** image built from this repo (`Dockerfile`), not `flarefoundation/go-flare`.
 
+**Full deployment guide:** [DEPLOY-docker.md](../DEPLOY-docker.md) — node 1 bootstrap, node 2+ join, `docker compose`, remote machines.
+
+**Docker Compose (downloads `origin.json` from GitHub):**
+
+```bash
+docker compose up -d node1    # bootstrap first
+docker compose up -d node2 node3
+```
+
+Browse genesis in Titan Explorer: `/dashboard/origin` or `GET /api/titan/origin?format=raw`.
+
 Local (builds `go-titan-local` automatically if missing):
 
 1. `pnpm run node:docker:stop:all`

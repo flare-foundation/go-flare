@@ -37,15 +37,19 @@ ENV HTTP_HOST=0.0.0.0 \
     AUTOCONFIGURE_BOOTSTRAP_ENDPOINT=https://coston2-bootstrap.flare.network/ext/info \
     EXTRA_ARGUMENTS="" \
     BOOTSTRAP_BEACON_CONNECTION_TIMEOUT="1m" \
-    HTTP_ALLOWED_HOSTS="*"
+    HTTP_ALLOWED_HOSTS="*" \
+    ORIGIN_URL="" \
+    GENESIS_FILE=/app/titan/origin.json \
+    TITAN_NETWORK_ID=781337
 
 RUN apt-get update -y && \
     apt-get install -y curl jq
 
-RUN mkdir -p /app/conf/coston /app/conf/C /app/logs /app/db
+RUN mkdir -p /app/conf/coston /app/conf/C /app/logs /app/db /app/titan
 
 COPY --from=build /app/avalanchego/build /app/build
 COPY entrypoint.sh /app/entrypoint.sh
+RUN sed -i 's/\r$//' /app/entrypoint.sh
 
 EXPOSE ${STAKING_PORT}
 EXPOSE ${HTTP_PORT}

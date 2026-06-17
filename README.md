@@ -86,6 +86,7 @@ The dashboard (`apps/developer-tool-kit`) is the primary UI for local developmen
 | `/dashboard/nodes` | Per-node RPC URLs and status |
 | `/dashboard/activity` | Block explorer — infinite-scroll feed, search, shareable `?q=` URLs, right-hand detail drawer for blocks / transactions / addresses |
 | `/dashboard/contracts` | **Contract Studio** — write Solidity, compile via `/api/titan/compile`, deploy with MetaMask (Paris EVM target) |
+| `/dashboard/origin` | **Network origin** — browse genesis, download URLs for Docker, stakers & prefunded accounts |
 | `/dashboard/logs` | Live Docker log viewer for `titan-node1`–`titan-node3` |
 | `/dashboard/containers` | Container management view |
 
@@ -119,6 +120,7 @@ Import a private key for one of these into MetaMask to deploy contracts or send 
 | `GET/POST /api/titan/rpc` | Proxy to node1–3 JSON-RPC and health |
 | `POST /api/titan/compile` | Solidity compile (`solc`, Paris EVM) |
 | `GET /api/titan/logs` | Stream stamped Docker logs from Titan containers |
+| `GET /api/titan/origin` | Network genesis summary; `?format=raw` downloads `origin.json` for nodes |
 
 ## Root scripts reference
 
@@ -221,6 +223,7 @@ go-titan/
 ## Further reading
 
 - [README-goflare.md](README-goflare.md) — upstream go-flare documentation (validator deploy, observation nodes, CI images)
+- [DEPLOY-docker.md](DEPLOY-docker.md) — **step-by-step Titan node deployment** (node 1 bootstrap, node 2+ join, docker compose)
 - [README-docker.md](README-docker.md) — `flarefoundation/go-flare` container configuration
 - [titan-network/README.md](titan-network/README.md) — Titan genesis, ports, extending the node cluster
 - [apps/developer-tool-kit/README.md](apps/developer-tool-kit/README.md) — dashboard template upstream docs

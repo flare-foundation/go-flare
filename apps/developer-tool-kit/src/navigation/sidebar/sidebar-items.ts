@@ -2,6 +2,7 @@ import {
   Activity,
   Code2,
   Container,
+  FileJson,
   type LucideIcon,
   Network,
   ScrollText,
@@ -47,6 +48,11 @@ export const sidebarItems: NavGroup[] = [
         title: "Nodes",
         url: "/dashboard/nodes",
         icon: Server,
+      },
+      {
+        title: "Origin",
+        url: "/dashboard/origin",
+        icon: FileJson,
       },
       {
         title: "Explorer",

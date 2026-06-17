@@ -2,13 +2,35 @@
 
 set -eo pipefail
 
+GENESIS_FILE="${GENESIS_FILE:-/app/titan/origin.json}"
+
+if [ -n "$ORIGIN_URL" ];
+then
+	mkdir -p "$(dirname "$GENESIS_FILE")"
+	echo "Fetching origin from '${ORIGIN_URL}'"
+	curl -fsSL "$ORIGIN_URL" -o "$GENESIS_FILE"
+	echo "  Saved origin to '${GENESIS_FILE}'"
+fi
+
+if echo "$EXTRA_ARGUMENTS" | grep -q -- '--genesis=';
+then
+	__GENESIS_PATH=$(echo "$EXTRA_ARGUMENTS" | sed -n 's/.*--genesis=\([^[:space:]]*\).*/\1/p')
+	__GENESIS_PATH="${__GENESIS_PATH:-$GENESIS_FILE}"
+	if [ ! -f "$__GENESIS_PATH" ];
+	then
+		echo "Genesis file '${__GENESIS_PATH}' not found."
+		echo "Set ORIGIN_URL, mount titan-network/origin.json, or provide a valid --genesis path."
+		exit 1
+	fi
+fi
+
 if [ "$AUTOCONFIGURE_PUBLIC_IP" = "1" ];
 then
 	if [ -z "$PUBLIC_IP" ];
 	then
 		echo "Autoconfiguring public IP"
 		PUBLIC_IP=$(curl -s -m 10 https://flare.network/cdn-cgi/trace | grep 'ip=' | cut -d'=' -f2)
-		echo "  Got public address '${PUBLIC_IP}'" 
+		echo "  Got public address '${PUBLIC_IP}'"
 	else
 		echo "/!\\ AUTOCONFIGURE_PUBLIC_IP is enabled, but PUBLIC_IP is already set to '$PUBLIC_IP'! Skipping autoconfigure and using current PUBLIC_IP value!"
 	fi
@@ -22,10 +44,9 @@ then
 	for __ENDPOINT in "${__BOOTSTRAP_ENDPOINTS[@]}"; do
 		echo "  Trying endpoint $__ENDPOINT"
 
-		# Capture both status code and response body for better error reporting
 		TEMP_RESPONSE=$(mktemp)
 		RESPONSE_CODE=$(curl -X POST -m 5 -s -w '%{http_code}' -o "$TEMP_RESPONSE" "$__ENDPOINT" -H 'Content-Type: application/json' --data '{ "jsonrpc":"2.0", "id":1, "method":"info.getNodeIP" }' 2>/dev/null || echo "NETWORK_ERROR")
-		
+
 		if [ "$RESPONSE_CODE" = "200" ]; then
 			__BOOTSTRAP_ENDPOINT="$__ENDPOINT"
 			rm -f "$TEMP_RESPONSE"
@@ -35,7 +56,6 @@ then
 			rm -f "$TEMP_RESPONSE"
 			continue
 		else
-			# Read response body for additional context (limit to first 200 chars)
 			RESPONSE_BODY=$(head -c 200 "$TEMP_RESPONSE" 2>/dev/null || echo "")
 			if [ -n "$RESPONSE_BODY" ]; then
 				echo "    Failed! HTTP $RESPONSE_CODE, response body: $RESPONSE_BODY"

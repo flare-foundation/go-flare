@@ -1,0 +1,53 @@
+# Titan Network — single node per server (production)
+# Repo: https://github.com/pakeku/go-titan
+#
+# 1. Copy .env.single-node.example → .env
+# 2. Set TITAN_ROLE=bootstrap on the parent server, or TITAN_ROLE=joiner + PARENT_HOST on others
+# 3. docker compose -f docker-compose.single-node.yml up -d
+#
+# See DEPLOY-docker.md § Option B — Single-node Compose.
+
+name: titan-node
+
+services:
+  node:
+    image: ${TITAN_NODE_IMAGE:-ghcr.io/pakeku/go-titan:dev-explorer}
+    container_name: ${TITAN_CONTAINER_NAME:-titan-node}
+    hostname: ${TITAN_HOSTNAME:-titan-node}
+    restart: unless-stopped
+    ports:
+      - "${API_PORT:-9650}:9650"
+      - "${STAKING_PORT:-9651}:9651"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:9650/ext/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+      start_period: 45s
+    environment:
+      ORIGIN_URL: ${TITAN_ORIGIN_URL:-https://raw.githubusercontent.com/pakeku/go-titan/dev/explorer/titan-network/origin.json}
+      GENESIS_FILE: /app/titan/origin.json
+      TITAN_NETWORK_ID: "781337"
+      NETWORK_ID: "781337"
+      DB_DIR: /app/db
+      AUTOCONFIGURE_PUBLIC_IP: ${AUTOCONFIGURE_PUBLIC_IP:-0}
+      PUBLIC_IP: ${PUBLIC_IP:-}
+      AUTOCONFIGURE_BOOTSTRAP: ${TITAN_AUTOCONFIGURE_BOOTSTRAP:-0}
+      AUTOCONFIGURE_BOOTSTRAP_ENDPOINT: ${TITAN_BOOTSTRAP_ENDPOINT:-}
+      BOOTSTRAP_IPS: ${BOOTSTRAP_IPS:-}
+      BOOTSTRAP_IDS: ${BOOTSTRAP_IDS:-}
+      EXTRA_ARGUMENTS: >-
+        --genesis=/app/titan/origin.json
+        --network-id=781337
+        --http-host=0.0.0.0
+        --http-port=9650
+        --staking-port=9651
+        --db-dir=/app/db
+        --log-level=warn
+    volumes:
+      - titan-db:/app/db
+      - titan-staking:/root/.avalanchego/staking
+
+volumes:
+  titan-db:
+  titan-staking:
