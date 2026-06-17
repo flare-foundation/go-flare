@@ -17,6 +17,7 @@ import { getPreference } from "@/server/server-actions";
 import { LayoutControls } from "./_components/sidebar/layout-controls";
 import { SearchDialog } from "./_components/sidebar/search-dialog";
 import { ThemeSwitcher } from "./_components/sidebar/theme-switcher";
+import { WalletSync } from "@/stores/wallet/wallet-sync";
 
 export default async function Layout({ children }: Readonly<{ children: ReactNode }>) {
   const cookieStore = await cookies();
@@ -27,14 +28,16 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
   ]);
 
   return (
-    <SidebarProvider
-      defaultOpen={defaultOpen}
-      style={
-        {
-          "--sidebar-width": "calc(var(--spacing) * 68)",
-        } as React.CSSProperties
-      }
-    >
+    <>
+      <WalletSync />
+      <SidebarProvider
+        defaultOpen={defaultOpen}
+        style={
+          {
+            "--sidebar-width": "calc(var(--spacing) * 68)",
+          } as React.CSSProperties
+        }
+      >
       <AppSidebar variant={variant} collapsible={collapsible} />
       <SidebarInset
         className={cn(
@@ -86,5 +89,6 @@ export default async function Layout({ children }: Readonly<{ children: ReactNod
         </div>
       </SidebarInset>
     </SidebarProvider>
+    </>
   );
 }

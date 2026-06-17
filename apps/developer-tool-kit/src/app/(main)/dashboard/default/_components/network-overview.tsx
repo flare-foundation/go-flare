@@ -7,14 +7,14 @@ import {
   CheckCircle2,
   Copy,
   Loader2,
-  LogIn,
   RefreshCw,
   ShieldCheck,
   Wallet,
 } from "lucide-react";
 import { APP_CONFIG } from "@/config/app-config";
-import { connectMetaMask, getEthereumProvider, switchToTitanNetwork } from "@/lib/titan/ethereum";
+import { shortAddress } from "@/lib/titan/format";
 import { Badge } from "@/components/ui/badge";
+import { isOnTitanChain, isWalletConnected, useWalletStore } from "@/stores/wallet/wallet-store";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -53,12 +53,13 @@ export function NetworkOverview() {
   const [nodes, setNodes] = useState<NodeHealth[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [walletAddress, setWalletAddress] = useState<string>("");
-  const [walletChainId, setWalletChainId] = useState<string>("");
-  const [walletMessage, setWalletMessage] = useState<string>("");
-  const [isWalletActionLoading, setIsWalletActionLoading] = useState(false);
-  const [walletError, setWalletError] = useState<string>("");
   const [copiedField, setCopiedField] = useState<string>("");
+  const address = useWalletStore((s) => s.address);
+  const walletChainId = useWalletStore((s) => s.chainId);
+  const titanBalance = useWalletStore((s) => s.titanBalance);
+  const signMessage = useWalletStore((s) => s.signMessage);
+  const walletError = useWalletStore((s) => s.error);
+  const isWalletConnectedNow = isWalletConnected({ address });
 
   async function fetchAll() {
     setLoading(true);
@@ -89,55 +90,6 @@ export function NetworkOverview() {
       setTimeout(() => setCopiedField(""), 1500);
     } catch {
       setCopiedField("");
-    }
-  }
-
-  async function connectWallet() {
-    setWalletError("");
-    setIsWalletActionLoading(true);
-    try {
-      const { address, chainId } = await connectMetaMask();
-      setWalletAddress(address);
-      setWalletChainId(chainId);
-    } catch (error) {
-      setWalletError(error instanceof Error ? error.message : "Wallet connection failed.");
-    } finally {
-      setIsWalletActionLoading(false);
-    }
-  }
-
-  async function signInWithWallet() {
-    setWalletError("");
-    const provider = getEthereumProvider();
-    if (!provider) {
-      setWalletError("MetaMask not found. Install MetaMask and refresh the page.");
-      return;
-    }
-
-    setIsWalletActionLoading(true);
-    try {
-      await switchToTitanNetwork(provider);
-      const accounts = (await provider.request({ method: "eth_requestAccounts" })) as string[];
-      const selectedAddress = accounts?.[0];
-
-      if (!selectedAddress) {
-        throw new Error("No wallet account returned by MetaMask.");
-      }
-
-      const message = `Titan Explorer sign-in\\nAddress: ${selectedAddress}\\nTimestamp: ${new Date().toISOString()}\\nOrigin: ${window.location.origin}`;
-      const signature = (await provider.request({
-        method: "personal_sign",
-        params: [message, selectedAddress],
-      })) as string;
-
-      const selectedChain = (await provider.request({ method: "eth_chainId" })) as string;
-      setWalletAddress(selectedAddress);
-      setWalletChainId(selectedChain);
-      setWalletMessage(`Signed in with wallet. Signature: ${signature.slice(0, 14)}...${signature.slice(-10)}`);
-    } catch (error) {
-      setWalletError(error instanceof Error ? error.message : "Wallet sign-in failed.");
-    } finally {
-      setIsWalletActionLoading(false);
     }
   }
 
@@ -192,7 +144,9 @@ export function NetworkOverview() {
             <Badge variant="secondary">MetaMask Ready</Badge>
           </div>
           <p className="text-sm text-muted-foreground">
-            Use these values to add Titan Local UAT to MetaMask and sign in from this dashboard.
+            {isWalletConnectedNow
+              ? "Your wallet is connected. Use these values to configure MetaMask or other Titan tooling."
+              : "Use these values to add Titan Local UAT to MetaMask. Connect your wallet from the sidebar."}
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -238,33 +192,35 @@ export function NetworkOverview() {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={connectWallet} disabled={isWalletActionLoading}>
-              {isWalletActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
-              Connect Wallet
-            </Button>
-            <Button onClick={signInWithWallet} disabled={isWalletActionLoading}>
-              {isWalletActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <LogIn className="h-4 w-4" />}
-              Sign In With Wallet
-            </Button>
-          </div>
-
           {copiedField && <p className="text-xs text-muted-foreground">Copied {copiedField} to clipboard.</p>}
-          {walletAddress && (
-            <p className="text-sm">
-              <span className="text-muted-foreground">Connected wallet:</span>{" "}
-              <span className="font-mono">{walletAddress}</span>
-              {walletChainId && (
-                <span className="text-muted-foreground"> · chain {walletChainId}</span>
+          {isWalletConnectedNow && (
+            <div className="rounded-md border bg-muted/30 p-3 text-sm space-y-1.5">
+              <p className="flex items-center gap-1.5 text-emerald-600 font-medium">
+                <Wallet className="h-4 w-4" />
+                Wallet connected
+              </p>
+              <p>
+                <span className="text-muted-foreground">Address:</span>{" "}
+                <span className="font-mono">{shortAddress(address)}</span>
+              </p>
+              <p>
+                <span className="text-muted-foreground">Balance:</span>{" "}
+                <span className="font-mono">
+                  {titanBalance} {APP_CONFIG.titan.nativeToken.symbol}
+                </span>
+              </p>
+              <p>
+                <span className="text-muted-foreground">Network:</span>{" "}
+                {isOnTitanChain(walletChainId) ? APP_CONFIG.titan.networkName : `Chain ${walletChainId}`}
+              </p>
+              {signMessage && (
+                <p className="text-emerald-600 flex items-center gap-1 pt-1">
+                  <ShieldCheck className="h-4 w-4" /> {signMessage}
+                </p>
               )}
-            </p>
+            </div>
           )}
-          {walletMessage && (
-            <p className="text-sm text-emerald-600 flex items-center gap-1">
-              <ShieldCheck className="h-4 w-4" /> {walletMessage}
-            </p>
-          )}
-          {walletError && <p className="text-sm text-red-500 break-all">{walletError}</p>}
+          {walletError && !isWalletConnectedNow && <p className="text-sm text-red-500 break-all">{walletError}</p>}
         </CardContent>
       </Card>
       {lastUpdated && <p className="text-xs text-muted-foreground flex items-center gap-1"><Activity className="h-3 w-3" /> Last updated {lastUpdated.toLocaleTimeString()} · auto-refreshes every 10 s</p>}
