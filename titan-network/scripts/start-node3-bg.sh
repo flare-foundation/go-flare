@@ -22,5 +22,5 @@ MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' docker run -d \
   -e AUTOCONFIGURE_BOOTSTRAP=1 \
   -e AUTOCONFIGURE_BOOTSTRAP_ENDPOINT=http://titan-node1:9650/ext/info \
   -e DB_DIR=/app/db \
-  -e EXTRA_ARGUMENTS="--genesis=/app/titan/origin.json --network-id=781337 --http-host=0.0.0.0 --http-port=9650 --staking-port=9651 --db-dir=/app/db --log-level=info" \
+  -e EXTRA_ARGUMENTS="--genesis=/app/titan/origin.json --network-id=781337 --http-host=0.0.0.0 --http-port=9650 --staking-port=9651 --db-dir=/app/db --log-level=warn" \
   flarefoundation/go-flare:latest

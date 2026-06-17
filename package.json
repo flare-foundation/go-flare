@@ -25,6 +25,8 @@
     "node:docker:test:health": "bash ./titan-network/scripts/test-health.sh",
     "node:docker:test:peers": "bash ./titan-network/scripts/test-peers.sh",
     "sol:compile": "pnpm --filter titan-solidity run compile",
-    "sol:deploy:local": "pnpm --filter titan-solidity run deploy:local"
+    "sol:deploy:local": "pnpm --filter titan-solidity run deploy:local",
+    "explorer:dev": "pnpm --filter titan-explorer run dev",
+    "explorer:build": "pnpm --filter titan-explorer run build"
   }
 }
