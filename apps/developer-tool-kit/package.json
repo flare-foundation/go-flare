@@ -14,7 +14,9 @@
     "generate:presets": "ts-node -P tsconfig.scripts.json src/scripts/generate-theme-presets.ts"
   },
   "lint-staged": {
-    "*.{js,ts,jsx,tsx}": ["biome check --write --no-errors-on-unmatched"]
+    "*.{js,ts,jsx,tsx}": [
+      "biome check --write --no-errors-on-unmatched"
+    ]
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
@@ -44,11 +46,13 @@
     "recharts": "^3.8.0",
     "shadcn": "^4.11.0",
     "simple-icons": "^16.23.0",
+    "solc": "^0.8.35",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
     "temporal-polyfill": "^0.3.2",
     "topojson-client": "^3.1.0",
     "vaul": "^1.1.2",
+    "viem": "^2.52.2",
     "zod": "^4.4.3",
     "zustand": "^5.0.14"
   },

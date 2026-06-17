@@ -1,5 +1,6 @@
 import {
   Activity,
+  Code2,
   Container,
   type LucideIcon,
   Network,
@@ -58,6 +59,12 @@ export const sidebarItems: NavGroup[] = [
     id: 2,
     label: "Developer",
     items: [
+      {
+        title: "Contract Studio",
+        url: "/dashboard/contracts",
+        icon: Code2,
+        isNew: true,
+      },
       {
         title: "Docker Logs",
         url: "/dashboard/logs",

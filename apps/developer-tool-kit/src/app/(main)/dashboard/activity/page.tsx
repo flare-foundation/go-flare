@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Activity,
   ArrowLeft,
@@ -156,6 +157,7 @@ function isBlockNumber(s: string) {
 }
 
 export default function ExplorerPage() {
+  const searchParams = useSearchParams();
   const [nodes, setNodes] = useState<NodeInfo[]>([]);
   const [nodesLoading, setNodesLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -425,6 +427,14 @@ export default function ExplorerPage() {
       performSearch(searchValue);
     }
   }
+
+  useEffect(() => {
+    const q = searchParams.get("q")?.trim();
+    if (!q) return;
+    setSearchValue(q);
+    void performSearch(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // Auto-refresh nodes + detect new head and refresh blocks
   useEffect(() => {
