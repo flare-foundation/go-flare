@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Titan Network — Ubuntu node installer (Docker + systemd)
 # One-liner:
-#   curl -fsSL https://raw.githubusercontent.com/pakeku/go-titan/dev/explorer/scripts/install-titan-node.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/pakeku/go-titan/main/scripts/install-titan-node.sh | sudo bash
 #
 # Uses the pre-built ghcr.io image — no Go/Java build on the host.
 
 set -euo pipefail
 
 REPO_URL="${TITAN_REPO_URL:-https://github.com/pakeku/go-titan.git}"
-REPO_BRANCH="${TITAN_REPO_BRANCH:-dev/explorer}"
+REPO_BRANCH="${TITAN_REPO_BRANCH:-main}"
 INSTALL_DIR="${TITAN_INSTALL_DIR:-/opt/titan-node}"
 SERVICE_NAME="${TITAN_SERVICE_NAME:-titan-node}"
 COMPOSE_FILE="docker-compose.single-node.yml"

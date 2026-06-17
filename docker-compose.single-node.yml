@@ -11,7 +11,7 @@ name: titan-node
 
 services:
   node:
-    image: ${TITAN_NODE_IMAGE:-ghcr.io/pakeku/go-titan:dev-explorer}
+    image: ${TITAN_NODE_IMAGE:-ghcr.io/pakeku/go-titan:latest}
     container_name: ${TITAN_CONTAINER_NAME:-titan-node}
     hostname: ${TITAN_HOSTNAME:-titan-node}
     restart: unless-stopped
@@ -25,7 +25,7 @@ services:
       retries: 8
       start_period: 45s
     environment:
-      ORIGIN_URL: ${TITAN_ORIGIN_URL:-https://raw.githubusercontent.com/pakeku/go-titan/dev/explorer/titan-network/origin.json}
+      ORIGIN_URL: ${TITAN_ORIGIN_URL:-https://raw.githubusercontent.com/pakeku/go-titan/main/titan-network/origin.json}
       GENESIS_FILE: /app/titan/origin.json
       TITAN_NETWORK_ID: "781337"
       NETWORK_ID: "781337"
