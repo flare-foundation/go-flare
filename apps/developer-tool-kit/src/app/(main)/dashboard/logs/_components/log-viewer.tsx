@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import {
   containerBadgeClass,
   formatLogTime,
+  levelRowClass,
   levelTextClass,
   parseLogLine,
   type ParsedLogLine,
@@ -188,7 +189,12 @@ export function LogViewer() {
 
 function LogRow({ entry }: { entry: ParsedLogLine }) {
   return (
-    <div className="gap-2 px-4 py-2 text-xs hover:bg-muted/30 sm:grid sm:grid-cols-[5.5rem_4.5rem_1fr] sm:gap-3">
+    <div
+      className={cn(
+        "gap-2 px-4 py-2 text-xs hover:bg-muted/30 sm:grid sm:grid-cols-[5.5rem_4.5rem_1fr] sm:gap-3",
+        levelRowClass(entry.level),
+      )}
+    >
       <div className="mb-1 flex items-center gap-2 sm:mb-0 sm:block">
         <span
           className={cn(

@@ -55,11 +55,35 @@ function normalizeContainer(value: string): TitanLogContainer {
 }
 
 function detectLogLevel(message: string): ParsedLogLine["level"] {
+  // AvalancheGo: [MM-DD|HH:MM:SS.mmm] LEVEL <component> …
+  const avalancheMatch = message.match(
+    /^\[[^\]]+\]\s+(VERBO|DEBUG|TRACE|INFO|WARN|WARNING|ERROR|FATAL|CRITICAL)\b/i,
+  );
+  if (avalancheMatch) {
+    return mapLevelToken(avalancheMatch[1]);
+  }
+
+  // Leading bracketed level, e.g. [WARN] or [ERROR]
+  const bracketLevelMatch = message.match(/^\[(WARN(?:ING)?|ERROR|ERR|FATAL|CRITICAL|INFO|DEBUG|TRACE)\]/i);
+  if (bracketLevelMatch) {
+    return mapLevelToken(bracketLevelMatch[1]);
+  }
+
   const upper = message.toUpperCase();
-  if (/\b(ERROR|ERR|FATAL|PANIC|CRITICAL)\b/.test(upper)) return "error";
+  // Check WARN before ERROR — warn lines often mention "error" in the message body.
   if (/\b(WARN|WARNING)\b/.test(upper)) return "warn";
+  if (/\b(ERROR|FATAL|PANIC|CRITICAL)\b/.test(upper)) return "error";
   if (/\b(INFO)\b/.test(upper)) return "info";
-  if (/\b(DEBUG|TRACE)\b/.test(upper)) return "debug";
+  if (/\b(DEBUG|TRACE|VERBO)\b/.test(upper)) return "debug";
+  return "default";
+}
+
+function mapLevelToken(token: string): ParsedLogLine["level"] {
+  const upper = token.toUpperCase();
+  if (upper === "WARN" || upper === "WARNING") return "warn";
+  if (["ERROR", "ERR", "FATAL", "CRITICAL", "PANIC"].includes(upper)) return "error";
+  if (upper === "INFO") return "info";
+  if (["DEBUG", "TRACE", "VERBO"].includes(upper)) return "debug";
   return "default";
 }
 
@@ -114,13 +138,24 @@ export function levelTextClass(level: ParsedLogLine["level"]): string {
     case "error":
       return "text-red-600 dark:text-red-400";
     case "warn":
-      return "text-amber-700 dark:text-amber-300";
+      return "text-orange-600 dark:text-orange-400";
     case "info":
       return "text-foreground";
     case "debug":
       return "text-muted-foreground";
     default:
       return "text-foreground/90";
+  }
+}
+
+export function levelRowClass(level: ParsedLogLine["level"]): string {
+  switch (level) {
+    case "error":
+      return "bg-red-500/5";
+    case "warn":
+      return "bg-orange-500/5";
+    default:
+      return "";
   }
 }
 
