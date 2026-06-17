@@ -1,5 +1,6 @@
 import { encodeDeployData, type Abi } from "viem";
 
+import { estimateGasViaRpc, fetchTitanGasPriceWei, toHex } from "@/lib/titan/gas";
 import { getEthereumProvider, switchToTitanNetwork } from "@/lib/titan/ethereum";
 import { parseWalletError } from "@/lib/titan/wallet-errors";
 
@@ -14,14 +15,6 @@ export type DeployContractResult = {
   transactionHash: string;
   contractAddress: string;
 };
-
-function hexToBigInt(hex: string): bigint {
-  return BigInt(hex);
-}
-
-function toHex(value: bigint): string {
-  return `0x${value.toString(16)}`;
-}
 
 async function providerRequest<T>(method: string, params: unknown[]): Promise<T> {
   const provider = getEthereumProvider();
@@ -73,23 +66,27 @@ export async function deployContract(input: DeployContractInput): Promise<Deploy
     args: input.constructorArgs as readonly unknown[],
   });
 
-  const gasEstimateHex = await providerRequest<string>("eth_estimateGas", [
-    {
-      from: input.from,
-      data: deployData,
-      value: "0x0",
-    },
-  ]);
+  let gasLimit: bigint;
+  try {
+    gasLimit = (await estimateGasViaRpc(input.from, deployData)) + BigInt(100_000);
+  } catch (error) {
+    throw new Error(
+      parseWalletError(
+        error,
+        "Gas estimation failed. Check constructor args, wallet balance, and that Titan nodes are running.",
+      ),
+    );
+  }
 
-  const gasLimit = hexToBigInt(gasEstimateHex) + BigInt(100_000);
+  const gasPrice = await fetchTitanGasPriceWei();
 
-  // Let MetaMask choose EIP-1559 fees; explicit gasPrice breaks on some Titan RPC paths.
   const txHash = await providerRequest<string>("eth_sendTransaction", [
     {
       from: input.from,
       data: deployData,
       value: "0x0",
       gas: toHex(gasLimit),
+      gasPrice: toHex(gasPrice),
     },
   ]);
 

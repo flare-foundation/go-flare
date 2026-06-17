@@ -1,5 +1,6 @@
 import { decodeFunctionResult, encodeFunctionData, type Abi } from "viem";
 
+import { estimateGasViaRpc, fetchTitanGasPriceWei, toHex } from "@/lib/titan/gas";
 import { getEthereumProvider, switchToTitanNetwork } from "@/lib/titan/ethereum";
 import { parseWalletError } from "@/lib/titan/wallet-errors";
 
@@ -64,6 +65,15 @@ export async function writeContractFunction(input: {
     args: input.args ?? [],
   });
 
+  let gasLimit: bigint;
+  try {
+    gasLimit = (await estimateGasViaRpc(input.from, data)) + BigInt(50_000);
+  } catch (error) {
+    throw new Error(parseWalletError(error, "Gas estimation failed."));
+  }
+
+  const gasPrice = await fetchTitanGasPriceWei();
+
   let txHash: string;
   try {
     txHash = (await provider.request({
@@ -74,6 +84,8 @@ export async function writeContractFunction(input: {
           to: input.contractAddress,
           data,
           value: "0x0",
+          gas: toHex(gasLimit),
+          gasPrice: toHex(gasPrice),
         },
       ],
     })) as string;
