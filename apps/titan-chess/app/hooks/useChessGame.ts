@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { Chess } from 'chess.js';
 import type { Square, PieceSymbol, Color } from 'chess.js';
 import type { GameState, MoveHistory } from '@/types/chess';
+import type { OpponentType } from './useWagerSession';
 import { getStockfishEngine } from '@/lib/stockfish';
 import {
   playSelect,
@@ -13,8 +14,6 @@ import {
   playCheckmate,
   resumeAudioContext,
 } from '@/lib/audio';
-
-const INITIAL_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
 function buildGameState(chess: Chess, history: MoveHistory[]): GameState {
   const lastHistoryEntry = history[history.length - 1];
@@ -43,9 +42,14 @@ export function useChessGame() {
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [playerColor, setPlayerColor] = useState<Color>('w');
   const [moveHistory, setMoveHistoryState] = useState<MoveHistory[]>([]);
+  const [opponentType, setOpponentType] = useState<OpponentType | null>(null);
+  const [isMatchActive, setIsMatchActive] = useState(false);
   const engineInitialized = useRef(false);
+  const onMoveSyncRef = useRef<
+    ((fen: string, lastMove: { from: string; to: string } | null) => void) | null
+  >(null);
+  const lastSyncedFenRef = useRef<string>('');
 
-  // Initialize stockfish
   useEffect(() => {
     if (!engineInitialized.current) {
       engineInitialized.current = true;
@@ -60,11 +64,25 @@ export function useChessGame() {
     setMoveHistoryState(history);
   }, []);
 
+  const rebuildHistoryFromChess = useCallback((chess: Chess): MoveHistory[] => {
+    const verbose = chess.history({ verbose: true });
+    return verbose.map((m, i) => ({
+      san: m.san,
+      from: m.from,
+      to: m.to,
+      piece: m.piece,
+      captured: m.captured,
+      color: m.color,
+      moveNumber: Math.ceil(i / 2) + 1,
+    }));
+  }, []);
+
   const triggerAiMove = useCallback(
     (currentHistory: MoveHistory[]) => {
       const chess = chessRef.current;
       if (chess.isGameOver()) return;
       if (chess.turn() === playerColor) return;
+      if (opponentType !== 'stockfish') return;
 
       setIsAiThinking(true);
 
@@ -117,24 +135,44 @@ export function useChessGame() {
         setIsAiThinking(false);
       }
     },
-    [playerColor, stockfishDepth, syncState]
+    [playerColor, stockfishDepth, syncState, opponentType]
+  );
+
+  const applyRemoteFen = useCallback(
+    (fen: string, lastMove: { from: string; to: string } | null) => {
+      if (fen === lastSyncedFenRef.current) return;
+      lastSyncedFenRef.current = fen;
+
+      const chess = new Chess(fen);
+      chessRef.current = chess;
+      const history = rebuildHistoryFromChess(chess);
+      setSelectedSquare(null);
+      setLegalMoves([]);
+      syncState(history);
+
+      if (lastMove) {
+        const captured = chess.get(lastMove.to as Square);
+        if (captured) playCapture();
+        else playMove();
+      }
+      if (chess.isCheckmate()) playCheckmate();
+      else if (chess.isCheck()) playCheck();
+    },
+    [rebuildHistoryFromChess, syncState]
   );
 
   const selectSquare = useCallback(
     (square: Square) => {
+      if (!isMatchActive) return;
       resumeAudioContext();
       const chess = chessRef.current;
       if (chess.isGameOver()) return;
-
-      // If it's not player's turn, do nothing
       if (chess.turn() !== playerColor) return;
 
       const piece = chess.get(square);
 
-      // If clicking on own piece, select it
       if (piece && piece.color === playerColor) {
         if (selectedSquare === square) {
-          // Deselect
           setSelectedSquare(null);
           setLegalMoves([]);
         } else {
@@ -146,12 +184,10 @@ export function useChessGame() {
         return;
       }
 
-      // If a square is selected, try to move
       if (selectedSquare) {
         const targetPiece = chess.get(square);
         const movingPiece = chess.get(selectedSquare);
 
-        // Check promotion
         const isPromotion =
           movingPiece?.type === 'p' &&
           ((movingPiece.color === 'w' && square[1] === '8') ||
@@ -193,10 +229,15 @@ export function useChessGame() {
           setLegalMoves([]);
           syncState(newHistory);
 
-          // Trigger AI response
-          setTimeout(() => triggerAiMove(newHistory), 300);
+          const fen = chess.fen();
+          const lastMove = { from: move.from, to: move.to };
+          lastSyncedFenRef.current = fen;
+          onMoveSyncRef.current?.(fen, lastMove);
+
+          if (opponentType === 'stockfish') {
+            setTimeout(() => triggerAiMove(newHistory), 300);
+          }
         } else {
-          // Invalid move — try selecting the clicked square if it has a piece
           if (piece && piece.color === playerColor) {
             setSelectedSquare(square);
             const moves = chess.moves({ square, verbose: true });
@@ -209,7 +250,15 @@ export function useChessGame() {
         }
       }
     },
-    [selectedSquare, moveHistory, playerColor, syncState, triggerAiMove]
+    [
+      isMatchActive,
+      selectedSquare,
+      moveHistory,
+      playerColor,
+      syncState,
+      triggerAiMove,
+      opponentType,
+    ]
   );
 
   const resetGame = useCallback(() => {
@@ -217,18 +266,43 @@ export function useChessGame() {
     setSelectedSquare(null);
     setLegalMoves([]);
     setIsAiThinking(false);
+    lastSyncedFenRef.current = '';
     const emptyHistory: MoveHistory[] = [];
     syncState(emptyHistory);
   }, [syncState]);
 
-  const updateDifficulty = useCallback(
-    (level: number) => {
-      setStockfishDepth(level);
-      try {
-        getStockfishEngine().setSkillLevel(level);
-      } catch (e) {
-        // Engine not ready yet
-      }
+  const startMatch = useCallback(
+    (type: OpponentType, color: Color) => {
+      resetGame();
+      setOpponentType(type);
+      setPlayerColor(color);
+      setIsMatchActive(true);
+    },
+    [resetGame]
+  );
+
+  const endMatch = useCallback(() => {
+    setIsMatchActive(false);
+    setOpponentType(null);
+    resetGame();
+  }, [resetGame]);
+
+  const updateDifficulty = useCallback((level: number) => {
+    setStockfishDepth(level);
+    try {
+      getStockfishEngine().setSkillLevel(level);
+    } catch {
+      // Engine not ready yet
+    }
+  }, []);
+
+  const setMoveSyncHandler = useCallback(
+    (
+      handler:
+        | ((fen: string, lastMove: { from: string; to: string } | null) => void)
+        | null
+    ) => {
+      onMoveSyncRef.current = handler;
     },
     []
   );
@@ -240,9 +314,15 @@ export function useChessGame() {
     stockfishDepth,
     isAiThinking,
     playerColor,
+    opponentType,
+    isMatchActive,
     selectSquare,
     resetGame,
+    startMatch,
+    endMatch,
     updateDifficulty,
     setPlayerColor,
+    applyRemoteFen,
+    setMoveSyncHandler,
   };
 }

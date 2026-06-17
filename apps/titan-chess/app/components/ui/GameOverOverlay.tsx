@@ -2,17 +2,38 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import type { GameState } from '@/types/chess';
+import type { WagerSession } from '@/hooks/useWagerSession';
+import type { Color } from 'chess.js';
 
 interface GameOverOverlayProps {
   gameState: GameState;
+  playerColor: Color;
+  wagerSession: WagerSession;
   onRematch: () => void;
 }
 
-export function GameOverOverlay({ gameState, onRematch }: GameOverOverlayProps) {
+export function GameOverOverlay({
+  gameState,
+  playerColor,
+  wagerSession,
+  onRematch,
+}: GameOverOverlayProps) {
   const { isCheckmate, isDraw, turn } = gameState;
   const show = isCheckmate || isDraw;
 
+  const youWon =
+    isCheckmate &&
+    ((turn === 'w' && playerColor === 'b') || (turn === 'b' && playerColor === 'w'));
+
   const winner = isCheckmate ? (turn === 'w' ? 'Black' : 'White') : null;
+
+  const payoutText = wagerSession.isPractice
+    ? 'Practice game — no on-chain payout'
+    : youWon
+      ? `You won ${wagerSession.potTitan} TITAN`
+      : isDraw
+        ? `Draw — ${wagerSession.stake} TITAN refunded`
+        : `You lost ${wagerSession.stake} TITAN`;
 
   return (
     <AnimatePresence>
@@ -32,17 +53,15 @@ export function GameOverOverlay({ gameState, onRematch }: GameOverOverlayProps) 
             className="glass rounded-2xl p-8 text-center max-w-xs mx-4"
             style={{ borderColor: 'rgba(201,168,76,0.3)' }}
           >
-            {/* Crown icon */}
             <motion.div
               initial={{ scale: 0, rotate: -180 }}
               animate={{ scale: 1, rotate: 0 }}
               transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
               className="text-5xl mb-4"
             >
-              {isCheckmate ? '♔' : '🤝'}
+              {isCheckmate ? (youWon ? '♔' : '♚') : '🤝'}
             </motion.div>
 
-            {/* Title */}
             <motion.h2
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
@@ -54,27 +73,34 @@ export function GameOverOverlay({ gameState, onRematch }: GameOverOverlayProps) 
                 WebkitTextFillColor: 'transparent',
               }}
             >
-              {isCheckmate ? 'Checkmate!' : 'Draw!'}
+              {isCheckmate ? (youWon ? 'Victory!' : 'Checkmate!') : 'Draw!'}
             </motion.h2>
 
-            {/* Subtitle */}
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.4 }}
-              className="text-sm mb-6"
+              className="text-sm mb-2"
               style={{ color: 'var(--text-secondary)' }}
             >
-              {winner ? `${winner} wins the match` : 'The game ends in a draw'}
+              {winner && !youWon ? `${winner} wins the match` : isDraw ? 'The game ends in a draw' : 'You took the pot'}
             </motion.p>
 
-            {/* Decorative line */}
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.45 }}
+              className="text-xs mb-6"
+              style={{ color: 'var(--gold-secondary)' }}
+            >
+              {payoutText}
+            </motion.p>
+
             <div
               className="w-16 h-px mx-auto mb-6"
               style={{ background: 'linear-gradient(to right, transparent, var(--gold-primary), transparent)' }}
             />
 
-            {/* Rematch button */}
             <motion.button
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
@@ -88,7 +114,7 @@ export function GameOverOverlay({ gameState, onRematch }: GameOverOverlayProps) 
                 color: '#0f0f11',
               }}
             >
-              Play Again
+              New Wagered Game
             </motion.button>
           </motion.div>
         </motion.div>

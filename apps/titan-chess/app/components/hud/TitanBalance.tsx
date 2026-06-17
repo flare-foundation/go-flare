@@ -1,26 +1,28 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { useAccount } from 'wagmi';
-
-// Placeholder — replace with actual contract call when ready:
-// import { useReadContract } from 'wagmi';
-// const { data: balance } = useReadContract({
-//   address: TITAN_TOKEN_ADDRESS,
-//   abi: TITAN_ABI,
-//   functionName: 'balanceOf',
-//   args: [address],
-// });
+import { useAccount, useBalance } from 'wagmi';
+import { formatEther } from 'viem';
+import { titanSubnet } from '@/lib/web3';
 
 function useTitanBalance() {
   const { address, isConnected } = useAccount();
-  // Placeholder balance — replace with on-chain read
-  const mockBalance = isConnected ? '4,200.00' : null;
-  return { balance: mockBalance, isConnected, address };
+  const { data, isLoading, isError } = useBalance({
+    address,
+    chainId: titanSubnet.id,
+    query: { enabled: isConnected && !!address },
+  });
+
+  const balance =
+    data != null
+      ? Number(formatEther(data.value)).toLocaleString('en-US', { maximumFractionDigits: 4 })
+      : null;
+
+  return { balance, isConnected, isLoading, isError };
 }
 
 export function TitanBalance() {
-  const { balance, isConnected } = useTitanBalance();
+  const { balance, isConnected, isLoading, isError } = useTitanBalance();
 
   return (
     <div
@@ -40,7 +42,7 @@ export function TitanBalance() {
         />
       </div>
 
-      {isConnected && balance ? (
+      {isConnected && balance != null ? (
         <motion.div
           initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
@@ -69,14 +71,20 @@ export function TitanBalance() {
                 strokeLinecap="round" strokeLinejoin="round" style={{ color: '#22c55e' }} />
             </svg>
             <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-              Live on Titan L1
+              Live on Titan Local UAT
             </span>
           </div>
         </motion.div>
       ) : (
         <div className="mt-1">
           <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-            {isConnected ? 'Fetching...' : 'Connect wallet to view'}
+            {!isConnected
+              ? 'Connect wallet to view'
+              : isLoading
+                ? 'Fetching...'
+                : isError
+                  ? 'Unable to load balance — is node1 running?'
+                  : 'Fetching...'}
           </span>
         </div>
       )}

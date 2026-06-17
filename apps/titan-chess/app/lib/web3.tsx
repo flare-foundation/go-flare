@@ -3,30 +3,22 @@
 import { RainbowKitProvider, getDefaultConfig, darkTheme } from '@rainbow-me/rainbowkit';
 import '@rainbow-me/rainbowkit/styles.css';
 import { WagmiProvider, http } from 'wagmi';
-import { avalanche, avalancheFuji } from 'wagmi/chains';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Chain } from 'wagmi/chains';
-
-// Titan Chess custom Avalanche L1 Subnet — update RPC_URL when available
-const TITAN_SUBNET_RPC = process.env.NEXT_PUBLIC_TITAN_RPC_URL || 'https://placeholder-rpc.titanchess.io';
-const TITAN_CHAIN_ID = parseInt(process.env.NEXT_PUBLIC_TITAN_CHAIN_ID || '66666');
+import { TITAN_NETWORK } from './titan-config';
 
 export const titanSubnet: Chain = {
-  id: TITAN_CHAIN_ID,
-  name: 'Titan Chess L1',
-  nativeCurrency: {
-    decimals: 18,
-    name: 'TITAN',
-    symbol: 'TITAN',
-  },
+  id: TITAN_NETWORK.chainId,
+  name: TITAN_NETWORK.name,
+  nativeCurrency: TITAN_NETWORK.nativeCurrency,
   rpcUrls: {
-    default: { http: [TITAN_SUBNET_RPC] },
-    public: { http: [TITAN_SUBNET_RPC] },
+    default: { http: [TITAN_NETWORK.rpcUrl] },
+    public: { http: [TITAN_NETWORK.rpcUrl] },
   },
   blockExplorers: {
     default: {
       name: 'Titan Explorer',
-      url: 'https://explorer.titanchess.io',
+      url: TITAN_NETWORK.explorerUrl,
     },
   },
 };
@@ -34,11 +26,9 @@ export const titanSubnet: Chain = {
 const config = getDefaultConfig({
   appName: 'Titan Chess',
   projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'titan-chess-dev',
-  chains: [titanSubnet, avalanche, avalancheFuji],
+  chains: [titanSubnet],
   transports: {
-    [titanSubnet.id]: http(TITAN_SUBNET_RPC),
-    [avalanche.id]: http(),
-    [avalancheFuji.id]: http(),
+    [titanSubnet.id]: http(TITAN_NETWORK.rpcUrl),
   },
   ssr: true,
 });
@@ -57,7 +47,7 @@ export function Web3Provider({ children }: { children: React.ReactNode }) {
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider theme={rainbowKitTheme} coolMode>
+        <RainbowKitProvider theme={rainbowKitTheme} coolMode initialChain={titanSubnet}>
           {children}
         </RainbowKitProvider>
       </QueryClientProvider>

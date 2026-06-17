@@ -26,7 +26,9 @@
     "node:docker:test:peers": "bash ./titan-network/scripts/test-peers.sh",
     "sol:compile": "pnpm --filter titan-solidity run compile",
     "sol:deploy:local": "pnpm --filter titan-solidity run deploy:local",
+    "dev": "pnpm --parallel --filter titan-explorer --filter titan-chess run dev",
     "explorer:dev": "pnpm --filter titan-explorer run dev",
+    "chess:dev": "pnpm --filter titan-chess run dev",
     "explorer:build": "pnpm --filter titan-explorer run build",
     "contracts:sync-chess": "node -e \"const fs=require('fs');const p='apps/titan-chess/contracts/TitanChessEscrow.sol';const o='apps/developer-tool-kit/src/lib/titan/sources/titan-chess-escrow.source.ts';const s=fs.readFileSync(p,'utf8');fs.mkdirSync('apps/developer-tool-kit/src/lib/titan/sources',{recursive:true});fs.writeFileSync(o,'export const TITAN_CHESS_ESCROW_SOURCE = '+JSON.stringify(s)+';\\n');\""
   }
