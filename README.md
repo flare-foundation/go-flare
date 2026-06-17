@@ -26,6 +26,26 @@ Local development monorepo for the **Titan Network** — a private UAT Avalanche
 - **Git Bash** or WSL on Windows — shell scripts under `titan-network/scripts/` use bash
 - **MetaMask** (optional) — connect to Titan in the dashboard sidebar
 
+## Deploy on Ubuntu server (one line)
+
+On a fresh Ubuntu machine, install Docker, clone this repo, edit `.env` in nano, and run the node as a **systemd** service (survives SSH disconnect and reboot):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pakeku/go-titan/dev/explorer/scripts/install-titan-node.sh | sudo bash
+```
+
+- **Parent (first server):** keep `TITAN_ROLE=bootstrap` in `.env`
+- **Joining servers:** set `PARENT_HOST`, `TITAN_AUTOCONFIGURE_BOOTSTRAP=1`, and `TITAN_BOOTSTRAP_ENDPOINT`
+
+After install:
+
+```bash
+sudo systemctl status titan-node
+curl -sf http://localhost:9650/ext/health
+```
+
+Full guide: [DEPLOY-docker.md](DEPLOY-docker.md)
+
 ## Quick start (recommended)
 
 ### 1. Install JavaScript dependencies
