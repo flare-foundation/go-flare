@@ -23,6 +23,28 @@ Download endpoints:
 
 ---
 
+## Quick install — fresh Ubuntu server (one line)
+
+Installs Docker, clones the repo, opens **nano** to edit `.env`, and registers a **systemd** service so the node keeps running after you close SSH and on reboot. No Go/Java on the host — the container uses the pre-built image.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pakeku/go-titan/dev/explorer/scripts/install-titan-node.sh | sudo bash
+```
+
+**Parent server** — leave the bootstrap preset in `.env`.  
+**Joining server** — set `PARENT_HOST`, `TITAN_AUTOCONFIGURE_BOOTSTRAP=1`, and `TITAN_BOOTSTRAP_ENDPOINT`.
+
+After install:
+
+```bash
+sudo systemctl status titan-node
+curl -sf http://localhost:9650/ext/health
+```
+
+Reconfigure later: `sudo nano /opt/titan-node/.env` then `sudo systemctl restart titan-node`.
+
+---
+
 ## Option A — Multi-node Compose (local dev on one machine)
 
 Clone the repo (or download only `docker-compose.yml`):
