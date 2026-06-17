@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
   ArrowLeft,
@@ -15,7 +15,6 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
 interface NodeInfo {
@@ -73,6 +72,8 @@ const NODES = [
   { node: "node2", port: 9652 },
   { node: "node3", port: 9654 },
 ];
+
+const BLOCKS_PAGE_SIZE = 20;
 
 // Small RPC helper via our proxy (targets C-Chain by default)
 async function rpc(method: string, params: unknown[] = [], node = "node1"): Promise<unknown> {
@@ -161,7 +162,10 @@ export default function ExplorerPage() {
 
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [blocksLoading, setBlocksLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMoreBlocks, setHasMoreBlocks] = useState(true);
   const [blocksError, setBlocksError] = useState<string>("");
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const [selectedBlock, setSelectedBlock] = useState<Block | null>(null);
   const [selectedBlockLoading, setSelectedBlockLoading] = useState(false);
@@ -215,13 +219,14 @@ export default function ExplorerPage() {
   }, []);
 
   // Load recent N blocks starting from head
-  const loadRecentBlocks = useCallback(async (count = 20) => {
+  const loadRecentBlocks = useCallback(async (count = BLOCKS_PAGE_SIZE) => {
     setBlocksLoading(true);
     setBlocksError("");
+    setHasMoreBlocks(true);
     try {
       const headHex = (await rpc("eth_blockNumber")) as string | null;
       if (!headHex) throw new Error("Could not read head block");
-      const head = parseInt(headHex, 16);
+      const head = Number.parseInt(headHex, 16);
 
       const toFetch: number[] = [];
       for (let i = 0; i < count; i++) {
@@ -233,48 +238,60 @@ export default function ExplorerPage() {
       const results = await Promise.all(toFetch.map((n) => fetchBlock(n)));
       const valid = results.filter(Boolean) as Block[];
       setBlocks(valid);
-      // auto select latest if nothing selected
-      if (valid.length > 0 && !selectedBlock) {
-        setSelectedBlock(valid[0]);
-        // preload its first tx if any? (optional)
-      }
+      setHasMoreBlocks(head - count > 0);
     } catch (e: unknown) {
       setBlocksError(e instanceof Error ? e.message : "Failed to load blocks");
       setBlocks([]);
+      setHasMoreBlocks(false);
     } finally {
       setBlocksLoading(false);
     }
-  }, [fetchBlock, selectedBlock]);
+  }, [fetchBlock]);
 
-  // Load older blocks (before the current lowest)
-  async function loadOlder(count = 10) {
-    if (blocks.length === 0) {
-      await loadRecentBlocks();
-      return;
-    }
-    const lowestHex = blocks[blocks.length - 1].number;
-    const lowest = hexToNumber(lowestHex) ?? 0;
-    if (lowest <= 0) return;
+  // Load older blocks (paginated batches for infinite scroll)
+  const loadOlder = useCallback(
+    async (count = BLOCKS_PAGE_SIZE) => {
+      if (loadingMore || blocksLoading) return;
 
-    setBlocksLoading(true);
-    try {
-      const toFetch: number[] = [];
-      for (let i = 1; i <= count; i++) {
-        const n = lowest - i;
-        if (n < 0) break;
-        toFetch.push(n);
+      if (blocks.length === 0) {
+        await loadRecentBlocks(count);
+        return;
       }
-      const results = await Promise.all(toFetch.map((n) => fetchBlock(n)));
-      const older = results.filter(Boolean) as Block[];
-      if (older.length) {
-        setBlocks((prev) => [...prev, ...older]);
+
+      const lowest = hexToNumber(blocks[blocks.length - 1].number) ?? 0;
+      if (lowest <= 0) {
+        setHasMoreBlocks(false);
+        return;
       }
-    } catch (e) {
-      // silent for load older
-    } finally {
-      setBlocksLoading(false);
-    }
-  }
+
+      setLoadingMore(true);
+      try {
+        const toFetch: number[] = [];
+        for (let i = 1; i <= count; i++) {
+          const n = lowest - i;
+          if (n < 0) break;
+          toFetch.push(n);
+        }
+
+        if (toFetch.length === 0) {
+          setHasMoreBlocks(false);
+          return;
+        }
+
+        const results = await Promise.all(toFetch.map((n) => fetchBlock(n)));
+        const older = results.filter(Boolean) as Block[];
+        if (older.length) {
+          setBlocks((prev) => [...prev, ...older]);
+        }
+        if (lowest - count <= 0 || older.length < count) {
+          setHasMoreBlocks(false);
+        }
+      } finally {
+        setLoadingMore(false);
+      }
+    },
+    [blocks, blocksLoading, fetchBlock, loadRecentBlocks, loadingMore],
+  );
 
   // Select and fully load a block (ensures full tx objects)
   async function selectBlock(b: Block | null) {
@@ -418,7 +435,7 @@ export default function ExplorerPage() {
 
   // Initial blocks + periodic head check
   useEffect(() => {
-    loadRecentBlocks(18);
+    loadRecentBlocks(BLOCKS_PAGE_SIZE);
 
     const headPoll = setInterval(async () => {
       try {
@@ -428,8 +445,7 @@ export default function ExplorerPage() {
 
         const currentHead = hexToNumber(blocks[0]?.number);
         if (head > (currentHead ?? -1)) {
-          // new blocks! reload recent
-          await loadRecentBlocks(18);
+          await loadRecentBlocks(BLOCKS_PAGE_SIZE);
         }
       } catch {
         /* ignore poll errors */
@@ -440,399 +456,405 @@ export default function ExplorerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // When nodes update, if we have no blocks yet, ensure load
+  // Infinite scroll: load older blocks when sentinel enters view
   useEffect(() => {
-    if (blocks.length === 0 && !blocksLoading) {
-      // already handled by initial
-    }
-  }, [blocks.length, blocksLoading]);
+    const sentinel = loadMoreRef.current;
+    if (!sentinel || !hasMoreBlocks || loadingMore || blocksLoading) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          void loadOlder(BLOCKS_PAGE_SIZE);
+        }
+      },
+      { rootMargin: "240px" },
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [blocks.length, blocksLoading, hasMoreBlocks, loadOlder, loadingMore]);
 
   const headBlock = blocks[0]?.number ? hexToNumber(blocks[0].number)?.toLocaleString() : nodes.find((n) => n.blockNumber)?.blockNumber;
   const chainId = nodes.find((n) => n.chainId)?.chainId ?? "—";
   const gasPrice = nodes.find((n) => n.gasPrice)?.gasPrice ?? "—";
-
+  const highestBlock = blocks[0]?.number ? hexToNumber(blocks[0].number) : null;
+  const lowestBlock = blocks[blocks.length - 1]?.number ? hexToNumber(blocks[blocks.length - 1].number) : null;
+  const loadedPages = Math.max(1, Math.ceil(blocks.length / BLOCKS_PAGE_SIZE));
   const currentDetailBlock = selectedBlock;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-5">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <Hash className="h-6 w-6" /> Explorer
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Browse the Titan C-Chain • live blocks &amp; transactions
-          </p>
+          <p className="text-sm text-muted-foreground">Browse the Titan C-Chain · live blocks &amp; transactions</p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              loadNodes();
-              loadRecentBlocks(18);
-              setSelectedBlock(null);
-              setSelectedTx(null);
-              setSelectedTxHash(null);
-              setSelectedReceipt(null);
-            }}
-            disabled={blocksLoading || nodesLoading}
-          >
-            {blocksLoading || nodesLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
-            Refresh
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => loadRecentBlocks(18)}
-            disabled={blocksLoading}
-          >
-            Latest Blocks
-          </Button>
-        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            loadNodes();
+            loadRecentBlocks(BLOCKS_PAGE_SIZE);
+            setSelectedBlock(null);
+            setSelectedTx(null);
+            setSelectedTxHash(null);
+            setSelectedReceipt(null);
+          }}
+          disabled={blocksLoading || nodesLoading}
+        >
+          {blocksLoading || nodesLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          Refresh
+        </Button>
       </div>
 
-      {/* Live head summary */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-1.5">
-            <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-              <Zap className="h-3.5 w-3.5" /> HEAD BLOCK
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold font-mono tabular-nums">{headBlock ?? "—"}</div>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Latest confirmed on C-Chain</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-1.5">
-            <CardTitle className="text-xs font-medium text-muted-foreground">CHAIN ID</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold font-mono">{chainId}</div>
-            <p className="text-[11px] text-muted-foreground mt-0.5">781337 (local UAT)</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-1.5">
-            <CardTitle className="text-xs font-medium text-muted-foreground">GAS PRICE (SAMPLE)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-semibold font-mono">{gasPrice}</div>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Across healthy nodes</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-1.5">
-            <CardTitle className="text-xs font-medium text-muted-foreground">NODES</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-1.5">
-            {NODES.map(({ node, port }) => {
-              const info = nodes.find((n) => n.node === node);
-              const ok = info?.healthy;
-              return (
-                <Badge key={node} variant={ok ? "default" : "secondary"} className={ok ? "bg-green-600" : ""}>
-                  {node}:{port} {ok ? "●" : "○"}
-                </Badge>
-              );
-            })}
-            {nodesLoading && <Loader2 className="h-3 w-3 animate-spin mt-1" />}
-          </CardContent>
-        </Card>
+      {/* Compact network strip */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border bg-muted/20 px-4 py-3 text-sm">
+        <div className="flex items-center gap-2">
+          <Zap className="h-4 w-4 text-muted-foreground" />
+          <span className="text-muted-foreground">Head</span>
+          <span className="font-mono font-semibold tabular-nums">{headBlock ?? "—"}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">Chain</span>
+          <span className="font-mono font-semibold">{chainId}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">Gas</span>
+          <span className="font-mono text-xs">{gasPrice}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {NODES.map(({ node, port }) => {
+            const info = nodes.find((n) => n.node === node);
+            const ok = info?.healthy;
+            return (
+              <Badge key={node} variant={ok ? "default" : "secondary"} className={ok ? "bg-green-600" : ""}>
+                {node}:{port}
+              </Badge>
+            );
+          })}
+          {nodesLoading && <Loader2 className="h-3 w-3 animate-spin" />}
+        </div>
+        {lastUpdated && (
+          <span className="text-xs text-muted-foreground ml-auto">
+            <Clock className="inline h-3 w-3 mr-1" />
+            {lastUpdated.toLocaleTimeString()}
+          </span>
+        )}
       </div>
 
       {/* Search */}
-      <Card>
-        <CardContent className="pt-4">
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                value={searchValue}
-                onChange={(e) => setSearchValue(e.target.value)}
-                onKeyDown={onSearchKey}
-                placeholder="Search block number (e.g. 3120), block/tx hash (0x...), or address"
-                className="pl-9 font-mono text-sm"
-                disabled={searchLoading}
-              />
-            </div>
-            <Button onClick={() => performSearch(searchValue)} disabled={searchLoading || !searchValue.trim()}>
-              {searchLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-              Search
-            </Button>
+      <div className="rounded-lg border px-4 py-3">
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={searchValue}
+              onChange={(e) => setSearchValue(e.target.value)}
+              onKeyDown={onSearchKey}
+              placeholder="Block number, block/tx hash (0x...), or address"
+              className="pl-9 font-mono text-sm"
+              disabled={searchLoading}
+            />
           </div>
-          {searchError && (
-            <p className="mt-2 text-xs text-amber-600 break-all">{searchError}</p>
-          )}
-          <p className="mt-1 text-[10px] text-muted-foreground">
-            Tip: paste a tx hash to jump straight to it. Numbers are treated as block heights.
-          </p>
-        </CardContent>
-      </Card>
+          <Button onClick={() => performSearch(searchValue)} disabled={searchLoading || !searchValue.trim()}>
+            {searchLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+            Search
+          </Button>
+        </div>
+        {searchError && <p className="mt-2 text-xs text-amber-600 break-all">{searchError}</p>}
+      </div>
 
-      {/* Main content: blocks list + detail */}
-      <div className="grid gap-6 lg:grid-cols-5">
-        {/* Recent blocks */}
-        <div className="lg:col-span-2">
-          <div className="mb-2 flex items-center justify-between">
-            <div className="text-sm font-semibold tracking-tight flex items-center gap-2">
-              <Activity className="h-4 w-4" /> Recent Blocks
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {blocks.length > 0 ? `${hexToNumber(blocks[blocks.length - 1].number)} — ${hexToNumber(blocks[0].number)}` : ""}
-            </div>
+      {/* Blocks feed — single column, infinite scroll */}
+      <section className="rounded-lg border overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/30 px-4 py-3">
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <Activity className="h-4 w-4" />
+            Blocks
           </div>
-
-          <Card className="overflow-hidden">
-            <div className="max-h-140 overflow-auto">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-card text-muted-foreground text-xs uppercase tracking-wider border-b">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-medium">Block</th>
-                    <th className="px-3 py-2 text-left font-medium">Age</th>
-                    <th className="px-3 py-2 text-right font-medium">Txs</th>
-                    <th className="px-3 py-2 text-right font-medium hidden sm:table-cell">Gas Used</th>
-                    <th className="px-3 py-2 text-left font-medium hidden md:table-cell">Hash</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {blocksLoading && blocks.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
-                        <Loader2 className="mx-auto h-4 w-4 animate-spin" />
-                      </td>
-                    </tr>
-                  ) : blocks.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
-                        {blocksError || "No blocks loaded"}
-                      </td>
-                    </tr>
-                  ) : (
-                    blocks.map((b) => {
-                      const num = hexToNumber(b.number);
-                      const { ago } = formatTimestamp(b.timestamp);
-                      const isSel = selectedBlock?.hash === b.hash;
-                      const txCount = b.transactionCount ?? (Array.isArray(b.transactions) ? b.transactions.length : 0);
-                      return (
-                        <tr
-                          key={b.hash}
-                          onClick={() => selectBlock(b)}
-                          className={`cursor-pointer hover:bg-muted/60 transition-colors ${isSel ? "bg-muted/70" : ""}`}
-                        >
-                          <td className="px-3 py-2 font-mono font-semibold tabular-nums">#{num?.toLocaleString()}</td>
-                          <td className="px-3 py-2 text-muted-foreground text-xs">{ago}</td>
-                          <td className="px-3 py-2 text-right font-mono">{txCount}</td>
-                          <td className="px-3 py-2 text-right font-mono text-xs text-muted-foreground hidden sm:table-cell">
-                            {hexToNumber(b.gasUsed)?.toLocaleString() ?? "—"}
-                          </td>
-                          <td className="px-3 py-2 font-mono text-xs text-muted-foreground hidden md:table-cell">
-                            {shortHash(b.hash)}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="border-t p-2 flex items-center justify-between bg-muted/30">
-              <Button variant="ghost" size="sm" onClick={() => loadOlder()} disabled={blocksLoading || blocks.length === 0}>
-                Load older
-              </Button>
-              <div className="text-[10px] text-muted-foreground pr-1">
-                {blocksLoading ? "Loading…" : "Click row to inspect"}
-              </div>
-            </div>
-          </Card>
-
-          {lastUpdated && (
-            <p className="mt-1.5 text-[10px] text-muted-foreground px-1">
-              Nodes updated {lastUpdated.toLocaleTimeString()} · blocks auto-refresh on new head
-            </p>
-          )}
+          <div className="text-xs text-muted-foreground">
+            {blocks.length > 0 && highestBlock != null && lowestBlock != null ? (
+              <>
+                #{highestBlock.toLocaleString()} → #{lowestBlock.toLocaleString()} · {blocks.length} loaded · page {loadedPages}
+              </>
+            ) : (
+              "Loading chain history…"
+            )}
+          </div>
         </div>
 
-        {/* Details panel */}
-        <div className="lg:col-span-3 space-y-4">
-          {/* Block detail */}
-          <Card>
-            <CardHeader className="pb-3 flex flex-row items-start justify-between">
-              <div>
-                <CardTitle className="text-base flex items-center gap-2">
-                  Block {currentDetailBlock ? `#${hexToNumber(currentDetailBlock.number)?.toLocaleString()}` : "—"}
-                </CardTitle>
-                {currentDetailBlock && (
-                  <p className="text-xs text-muted-foreground font-mono mt-0.5">{currentDetailBlock.hash}</p>
-                )}
+        <table className="w-full text-sm">
+          <thead className="bg-muted/40 text-muted-foreground text-xs uppercase tracking-wider border-b">
+            <tr>
+              <th className="px-4 py-2.5 text-left font-medium w-28">Block</th>
+              <th className="px-4 py-2.5 text-left font-medium w-24">Age</th>
+              <th className="px-4 py-2.5 text-right font-medium w-16">Txs</th>
+              <th className="px-4 py-2.5 text-right font-medium hidden sm:table-cell">Gas Used</th>
+              <th className="px-4 py-2.5 text-left font-medium hidden md:table-cell">Hash</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {blocksLoading && blocks.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-12 text-center text-muted-foreground">
+                  <Loader2 className="mx-auto h-5 w-5 animate-spin" />
+                </td>
+              </tr>
+            ) : blocks.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                  {blocksError || "No blocks loaded"}
+                </td>
+              </tr>
+            ) : (
+              blocks.map((b) => {
+                const num = hexToNumber(b.number);
+                const { ago } = formatTimestamp(b.timestamp);
+                const isSel = selectedBlock?.hash === b.hash;
+                const txCount = b.transactionCount ?? (Array.isArray(b.transactions) ? b.transactions.length : 0);
+                return (
+                  <tr
+                    key={b.hash}
+                    onClick={() => selectBlock(b)}
+                    className={`cursor-pointer transition-colors hover:bg-muted/50 ${isSel ? "bg-muted/70" : ""}`}
+                  >
+                    <td className="px-4 py-2.5 font-mono font-semibold tabular-nums">#{num?.toLocaleString()}</td>
+                    <td className="px-4 py-2.5 text-muted-foreground text-xs">{ago}</td>
+                    <td className="px-4 py-2.5 text-right font-mono tabular-nums">{txCount}</td>
+                    <td className="px-4 py-2.5 text-right font-mono text-xs text-muted-foreground hidden sm:table-cell">
+                      {hexToNumber(b.gasUsed)?.toLocaleString() ?? "—"}
+                    </td>
+                    <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground hidden md:table-cell">
+                      {shortHash(b.hash)}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+
+        <div ref={loadMoreRef} className="border-t bg-muted/20 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="text-xs text-muted-foreground">
+            {loadingMore ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Loading {BLOCKS_PAGE_SIZE} older blocks…
+              </span>
+            ) : hasMoreBlocks ? (
+              "Scroll down to load older blocks"
+            ) : (
+              "Reached the earliest loaded block"
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => loadOlder(BLOCKS_PAGE_SIZE)}
+              disabled={!hasMoreBlocks || loadingMore || blocksLoading || blocks.length === 0}
+            >
+              Load {BLOCKS_PAGE_SIZE} more
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => loadRecentBlocks(BLOCKS_PAGE_SIZE)} disabled={blocksLoading}>
+              Back to latest
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* Block detail — full width below feed */}
+      {currentDetailBlock && (
+        <section className="rounded-lg border">
+          <div className="flex items-start justify-between gap-3 border-b bg-muted/30 px-4 py-3">
+            <div>
+              <h2 className="text-base font-semibold">Block #{hexToNumber(currentDetailBlock.number)?.toLocaleString()}</h2>
+              <p className="text-xs text-muted-foreground font-mono mt-0.5 break-all">{currentDetailBlock.hash}</p>
+            </div>
+            <Button size="icon" variant="ghost" onClick={() => selectBlock(null)} title="Close block details">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="px-4 py-4">
+            {selectedBlockLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading block…
               </div>
-              {currentDetailBlock && (
-                <Button size="icon" variant="ghost" onClick={() => selectBlock(null)} title="Clear selection">
-                  <ArrowLeft className="h-4 w-4" />
-                </Button>
-              )}
-            </CardHeader>
-
-            <CardContent>
-              {!currentDetailBlock ? (
-                <div className="text-sm text-muted-foreground py-4">Select a block from the list or search for one.</div>
-              ) : selectedBlockLoading ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground py-6">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading block…
-                </div>
-              ) : (
-                <div className="space-y-4 text-sm">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
-                    <DetailRow label="Timestamp" value={formatTimestamp(currentDetailBlock.timestamp).full} />
-                    <DetailRow label="Age" value={formatTimestamp(currentDetailBlock.timestamp).ago} />
-                    <DetailRow label="Transactions" value={String(currentDetailBlock.transactionCount ?? (Array.isArray(currentDetailBlock.transactions) ? currentDetailBlock.transactions.length : 0))} />
-                    <DetailRow label="Gas Used / Limit" value={`${hexToNumber(currentDetailBlock.gasUsed)?.toLocaleString() ?? "—"} / ${hexToNumber(currentDetailBlock.gasLimit)?.toLocaleString() ?? "—"}`} />
-                    {currentDetailBlock.baseFeePerGas && (
-                      <DetailRow label="Base Fee" value={formatGwei(currentDetailBlock.baseFeePerGas)} />
+            ) : (
+              <div className="space-y-4 text-sm">
+                <div className="grid grid-cols-1 gap-x-8 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
+                  <DetailRow label="Timestamp" value={formatTimestamp(currentDetailBlock.timestamp).full} />
+                  <DetailRow label="Age" value={formatTimestamp(currentDetailBlock.timestamp).ago} />
+                  <DetailRow
+                    label="Transactions"
+                    value={String(
+                      currentDetailBlock.transactionCount ??
+                        (Array.isArray(currentDetailBlock.transactions) ? currentDetailBlock.transactions.length : 0),
                     )}
-                    <DetailRow label="Parent Hash" value={shortHash(currentDetailBlock.parentHash)} mono copyValue={currentDetailBlock.parentHash} />
-                  </div>
+                  />
+                  <DetailRow
+                    label="Gas Used / Limit"
+                    value={`${hexToNumber(currentDetailBlock.gasUsed)?.toLocaleString() ?? "—"} / ${hexToNumber(currentDetailBlock.gasLimit)?.toLocaleString() ?? "—"}`}
+                  />
+                  {currentDetailBlock.baseFeePerGas && (
+                    <DetailRow label="Base Fee" value={formatGwei(currentDetailBlock.baseFeePerGas)} />
+                  )}
+                  <DetailRow label="Parent Hash" value={shortHash(currentDetailBlock.parentHash)} mono copyValue={currentDetailBlock.parentHash} />
+                </div>
 
-                  <div>
-                    <div className="font-medium mb-1.5 flex items-center gap-1 text-xs uppercase tracking-widest text-muted-foreground">
-                      Transactions in block ({currentDetailBlock.transactionCount ?? (Array.isArray(currentDetailBlock.transactions) ? currentDetailBlock.transactions.length : 0)})
+                <div>
+                  <h3 className="mb-2 text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                    Transactions (
+                    {currentDetailBlock.transactionCount ??
+                      (Array.isArray(currentDetailBlock.transactions) ? currentDetailBlock.transactions.length : 0)}
+                    )
+                  </h3>
+
+                  {Array.isArray(currentDetailBlock.transactions) && currentDetailBlock.transactions.length > 0 ? (
+                    <div className="overflow-hidden rounded-md border">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-muted/60 text-muted-foreground">
+                            <th className="px-3 py-1.5 text-left font-normal">#</th>
+                            <th className="px-3 py-1.5 text-left font-normal">Hash</th>
+                            <th className="px-3 py-1.5 text-left font-normal hidden md:table-cell">From → To</th>
+                            <th className="px-3 py-1.5 text-right font-normal">Value</th>
+                            <th className="px-3 py-1.5 text-right font-normal hidden sm:table-cell">Gas</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {currentDetailBlock.transactions.map((t, idx) => {
+                            const tx = typeof t === "string" ? ({ hash: t } as Tx) : (t as Tx);
+                            const val = formatWeiToTitan(tx.value);
+                            const g = hexToNumber(tx.gas) ?? 0;
+                            return (
+                              <tr
+                                key={tx.hash}
+                                onClick={() => loadTx(tx.hash)}
+                                className={`cursor-pointer hover:bg-muted/50 ${selectedTxHash === tx.hash ? "bg-muted" : ""}`}
+                              >
+                                <td className="px-3 py-1.5 font-mono tabular-nums text-muted-foreground">{idx}</td>
+                                <td className="px-3 py-1.5 font-mono text-primary hover:underline">{shortHash(tx.hash)}</td>
+                                <td className="px-3 py-1.5 text-muted-foreground hidden md:table-cell font-mono text-[10px] truncate max-w-65">
+                                  {shortHash(tx.from, 4, 4)} → {tx.to ? shortHash(tx.to, 4, 4) : "contract"}
+                                </td>
+                                <td className="px-3 py-1.5 text-right font-medium tabular-nums">{val}</td>
+                                <td className="px-3 py-1.5 text-right text-muted-foreground hidden sm:table-cell">{g.toLocaleString()}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
-
-                    {Array.isArray(currentDetailBlock.transactions) && currentDetailBlock.transactions.length > 0 ? (
-                      <div className="border rounded-md overflow-hidden">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="bg-muted/60 text-muted-foreground">
-                              <th className="px-2 py-1 text-left font-normal">#</th>
-                              <th className="px-2 py-1 text-left font-normal">Hash</th>
-                              <th className="px-2 py-1 text-left font-normal hidden md:table-cell">From → To</th>
-                              <th className="px-2 py-1 text-right font-normal">Value</th>
-                              <th className="px-2 py-1 text-right font-normal hidden sm:table-cell">Gas</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y">
-                            {currentDetailBlock.transactions.map((t, idx) => {
-                              const tx = typeof t === "string" ? ({ hash: t } as Tx) : (t as Tx);
-                              const val = formatWeiToTitan(tx.value);
-                              const g = hexToNumber(tx.gas) ?? 0;
-                              return (
-                                <tr
-                                  key={tx.hash}
-                                  onClick={() => loadTx(tx.hash)}
-                                  className={`cursor-pointer hover:bg-muted/50 ${selectedTxHash === tx.hash ? "bg-muted" : ""}`}
-                                >
-                                  <td className="px-2 py-1 font-mono tabular-nums text-muted-foreground">{idx}</td>
-                                  <td className="px-2 py-1 font-mono text-primary hover:underline">{shortHash(tx.hash)}</td>
-                                  <td className="px-2 py-1 text-muted-foreground hidden md:table-cell font-mono text-[10px] truncate max-w-65">
-                                    {shortHash(tx.from, 4, 4)} → {tx.to ? shortHash(tx.to, 4, 4) : "contract"}
-                                  </td>
-                                  <td className="px-2 py-1 text-right font-medium tabular-nums">{val}</td>
-                                  <td className="px-2 py-1 text-right text-muted-foreground hidden sm:table-cell">{g.toLocaleString()}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      <div className="text-muted-foreground text-xs py-2">No transactions in this block.</div>
-                    )}
-                    <p className="text-[10px] text-muted-foreground mt-1">Click any transaction row to view full details + receipt.</p>
-                  </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground py-2">No transactions in this block.</p>
+                  )}
                 </div>
-              )}
-            </CardContent>
-          </Card>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
-          {/* Transaction detail */}
-          {(selectedTxHash || selectedTx) && (
-            <Card>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">Transaction</CardTitle>
-                  {selectedTxHash && (
-                    <Button size="sm" variant="ghost" onClick={() => { setSelectedTxHash(null); setSelectedTx(null); setSelectedReceipt(null); }}>
-                      Close
+      {/* Transaction detail — full width below block detail */}
+      {(selectedTxHash || selectedTx) && (
+        <section className="rounded-lg border">
+          <div className="flex items-center justify-between gap-3 border-b bg-muted/30 px-4 py-3">
+            <div>
+              <h2 className="text-base font-semibold">Transaction</h2>
+              <p className="font-mono text-xs text-muted-foreground break-all mt-0.5">{selectedTxHash}</p>
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setSelectedTxHash(null);
+                setSelectedTx(null);
+                setSelectedReceipt(null);
+              }}
+            >
+              Close
+            </Button>
+          </div>
+
+          <div className="px-4 py-4">
+            {txLoading ? (
+              <div className="flex gap-2 text-sm py-4 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading transaction…
+              </div>
+            ) : !selectedTx ? (
+              <div className="text-sm text-muted-foreground">Transaction not found or still loading.</div>
+            ) : (
+              <div className="space-y-3 text-sm">
+                <div className="grid grid-cols-1 gap-x-8 gap-y-1 md:grid-cols-2 lg:grid-cols-3">
+                  <DetailRow label="From" value={shortHash(selectedTx.from)} mono copyValue={selectedTx.from} />
+                  <DetailRow label="To" value={selectedTx.to ? shortHash(selectedTx.to) : "Contract creation"} mono copyValue={selectedTx.to ?? undefined} />
+                  <DetailRow label="Value" value={`${formatWeiToTitan(selectedTx.value)} TITAN`} />
+                  <DetailRow label="Gas Price" value={selectedTx.gasPrice ? formatGwei(selectedTx.gasPrice) : "—"} />
+                  <DetailRow
+                    label="Gas Limit / Used"
+                    value={`${hexToNumber(selectedTx.gas)?.toLocaleString() ?? "—"} ${selectedReceipt ? ` / ${hexToNumber(selectedReceipt.gasUsed)?.toLocaleString()}` : ""}`}
+                  />
+                  {selectedReceipt && (
+                    <DetailRow
+                      label="Status"
+                      value={
+                        <span
+                          className={
+                            selectedReceipt.status === "0x1" || selectedReceipt.status === "0x01"
+                              ? "text-green-600 font-medium"
+                              : "text-red-600 font-medium"
+                          }
+                        >
+                          {selectedReceipt.status === "0x1" || selectedReceipt.status === "0x01" ? "Success" : "Failed"}
+                        </span>
+                      }
+                    />
+                  )}
+                  <DetailRow label="Nonce" value={String(hexToNumber(selectedTx.nonce) ?? selectedTx.nonce)} />
+                  {selectedReceipt?.effectiveGasPrice && (
+                    <DetailRow label="Effective Gas Price" value={formatGwei(selectedReceipt.effectiveGasPrice)} />
+                  )}
+                </div>
+
+                {selectedReceipt && (
+                  <div>
+                    <div className="uppercase text-[10px] tracking-widest text-muted-foreground mb-1">Logs emitted</div>
+                    <Badge variant="secondary">
+                      {selectedReceipt.logs?.length ?? 0} log{selectedReceipt.logs?.length === 1 ? "" : "s"}
+                    </Badge>
+                  </div>
+                )}
+
+                <div>
+                  <div className="uppercase text-[10px] tracking-widest text-muted-foreground mb-1">Input data</div>
+                  <pre className="text-[10px] bg-muted p-2 rounded overflow-auto max-h-24 font-mono break-all">
+                    {selectedTx.input && selectedTx.input !== "0x" ? selectedTx.input : "(empty)"}
+                  </pre>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(selectedTxHash!)}>
+                    <Copy className="h-3.5 w-3.5 mr-1.5" /> Copy tx hash
+                  </Button>
+                  {selectedTx.blockHash && (
+                    <Button size="sm" variant="outline" onClick={() => selectBlock({ hash: selectedTx.blockHash } as Block)}>
+                      View containing block
                     </Button>
                   )}
                 </div>
-                <div className="font-mono text-xs text-muted-foreground break-all">{selectedTxHash}</div>
-              </CardHeader>
-              <CardContent>
-                {txLoading ? (
-                  <div className="flex gap-2 text-sm py-4 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading transaction…</div>
-                ) : !selectedTx ? (
-                  <div className="text-sm text-muted-foreground">Transaction not found or still loading.</div>
-                ) : (
-                  <div className="space-y-3 text-sm">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1">
-                      <DetailRow label="From" value={shortHash(selectedTx.from)} mono copyValue={selectedTx.from} />
-                      <DetailRow label="To" value={selectedTx.to ? shortHash(selectedTx.to) : "Contract creation"} mono copyValue={selectedTx.to ?? undefined} />
-                      <DetailRow label="Value" value={`${formatWeiToTitan(selectedTx.value)} TITAN`} />
-                      <DetailRow label="Gas Price" value={selectedTx.gasPrice ? formatGwei(selectedTx.gasPrice) : "—"} />
-                      <DetailRow label="Gas Limit / Used" value={`${hexToNumber(selectedTx.gas)?.toLocaleString() ?? "—"} ${selectedReceipt ? ` / ${hexToNumber(selectedReceipt.gasUsed)?.toLocaleString()}` : ""}`} />
-                      {selectedReceipt && (
-                        <DetailRow
-                          label="Status"
-                          value={
-                            <span className={selectedReceipt.status === "0x1" || selectedReceipt.status === "0x01" ? "text-green-600 font-medium" : "text-red-600 font-medium"}>
-                              {selectedReceipt.status === "0x1" || selectedReceipt.status === "0x01" ? "Success" : "Failed"}
-                            </span>
-                          }
-                        />
-                      )}
-                      <DetailRow label="Nonce" value={String(hexToNumber(selectedTx.nonce) ?? selectedTx.nonce)} />
-                      {selectedReceipt?.effectiveGasPrice && (
-                        <DetailRow label="Effective Gas Price" value={formatGwei(selectedReceipt.effectiveGasPrice)} />
-                      )}
-                    </div>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
-                    {selectedReceipt && (
-                      <div>
-                        <div className="uppercase text-[10px] tracking-widest text-muted-foreground mb-1">Logs emitted</div>
-                        <Badge variant="secondary">{selectedReceipt.logs?.length ?? 0} log{selectedReceipt.logs?.length === 1 ? "" : "s"}</Badge>
-                      </div>
-                    )}
-
-                    <div>
-                      <div className="uppercase text-[10px] tracking-widest text-muted-foreground mb-1">Input data</div>
-                      <pre className="text-[10px] bg-muted p-2 rounded overflow-auto max-h-24 font-mono break-all">
-                        {selectedTx.input && selectedTx.input !== "0x" ? selectedTx.input : "(empty)"}
-                      </pre>
-                    </div>
-
-                    <div className="pt-1 flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => navigator.clipboard.writeText(selectedTxHash!)}
-                      >
-                        <Copy className="h-3.5 w-3.5 mr-1.5" /> Copy tx hash
-                      </Button>
-                      {selectedTx.blockHash && (
-                        <Button size="sm" variant="outline" onClick={() => selectBlock({ hash: selectedTx.blockHash } as any)}>
-                          View containing block
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
-
-      <p className="text-[10px] text-muted-foreground px-1 -mt-2">
-        Data is fetched live from the local Titan nodes via the C-Chain JSON-RPC. Some fields (baseFee, effective price) are post-London.
+      <p className="text-[10px] text-muted-foreground px-1">
+        Data is fetched live from local Titan nodes via C-Chain JSON-RPC. Blocks load in batches of {BLOCKS_PAGE_SIZE}.
       </p>
     </div>
   );
