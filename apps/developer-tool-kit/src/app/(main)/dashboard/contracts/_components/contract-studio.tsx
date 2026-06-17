@@ -35,7 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { APP_CONFIG } from "@/config/app-config";
 import type { AbiConstructorInput, CompiledContract } from "@/lib/titan/compile-contract";
@@ -321,54 +321,65 @@ export function ContractStudio() {
         }}
         className="gap-4"
       >
-        <div className="rounded-lg border bg-muted/15 p-3 space-y-3">
-          <div className="flex flex-wrap items-center gap-2 overflow-x-auto pb-1">
+        <div className="rounded-lg border bg-muted/15 px-4 py-5">
+          <div className="flex items-start justify-center gap-2 overflow-x-auto sm:gap-4">
             {STEPS.map((step, index) => {
               const status = stepStatus[step.id];
               const isActive = activeStep === step.id;
               const clickable = canOpenStep(step.id);
 
               return (
-                <div key={step.id} className="flex items-center gap-2 shrink-0">
+                <div key={step.id} className="flex items-start gap-2 sm:gap-4 shrink-0">
                   <button
                     type="button"
                     disabled={!clickable}
                     onClick={() => clickable && setActiveStep(step.id)}
                     className={cn(
-                      "inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
-                      isActive && "border-primary bg-primary/10 text-foreground",
-                      !isActive && clickable && "border-border bg-background hover:bg-muted/50",
-                      !clickable && "border-transparent opacity-50 cursor-not-allowed",
+                      "group flex flex-col items-center gap-2 min-w-[4.75rem] transition-opacity",
+                      !clickable && "cursor-not-allowed opacity-45",
                     )}
                   >
-                    <StepIcon status={status} step={step.step} />
-                    <span>
-                      {step.step}. {step.label}
+                    <span
+                      className={cn(
+                        "flex h-11 w-11 items-center justify-center rounded-full border-2 text-sm font-semibold transition-all",
+                        isActive && "border-primary bg-primary text-primary-foreground shadow-sm scale-105",
+                        !isActive &&
+                          status === "done" &&
+                          "border-emerald-500/70 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+                        !isActive &&
+                          status === "error" &&
+                          "border-red-500/70 bg-red-500/10 text-red-600",
+                        !isActive &&
+                          clickable &&
+                          status !== "done" &&
+                          status !== "error" &&
+                          "border-muted-foreground/30 bg-background text-muted-foreground group-hover:border-primary/50 group-hover:text-foreground",
+                        !isActive && !clickable && "border-muted-foreground/20 bg-muted/30 text-muted-foreground",
+                      )}
+                    >
+                      <RoundStepGlyph status={status} step={step.step} isActive={isActive} />
                     </span>
+                    <span
+                      className={cn(
+                        "text-[11px] font-medium leading-tight text-center",
+                        isActive ? "text-foreground" : "text-muted-foreground",
+                      )}
+                    >
+                      {step.label}
+                    </span>
+                    {step.id === "deployed" && deployedContracts.length > 0 && (
+                      <Badge variant="secondary" className="h-4 px-1.5 text-[10px] -mt-1">
+                        {deployedContracts.length}
+                      </Badge>
+                    )}
                   </button>
-                  {index < STEPS.length - 1 && <ChevronRight className="h-4 w-4 text-muted-foreground/60" />}
+                  {index < STEPS.length - 1 && (
+                    <ChevronRight className="mt-3.5 h-4 w-4 shrink-0 text-muted-foreground/40" />
+                  )}
                 </div>
               );
             })}
           </div>
-
-          <TabsList className="w-full justify-start h-auto flex-wrap gap-1 bg-transparent p-0" variant="line">
-            {STEPS.map((step) => (
-              <TabsTrigger
-                key={step.id}
-                value={step.id}
-                disabled={!canOpenStep(step.id)}
-                className="flex-none px-3 py-1.5"
-              >
-                {step.label}
-                {step.id === "deployed" && deployedContracts.length > 0 && (
-                  <Badge variant="secondary" className="ml-1.5 h-4 px-1 text-[10px]">
-                    {deployedContracts.length}
-                  </Badge>
-                )}
-              </TabsTrigger>
-            ))}
-          </TabsList>
         </div>
 
         <TabsContent value="edit" className="mt-0">
@@ -731,27 +742,25 @@ export function ContractStudio() {
   );
 }
 
-function StepIcon({
+function RoundStepGlyph({
   status,
   step,
+  isActive,
 }: {
   status: "locked" | "ready" | "current" | "done" | "error";
   step: number;
+  isActive: boolean;
 }) {
-  if (status === "done") {
-    return <CheckCircle2 className="h-4 w-4 text-emerald-600" />;
+  if (status === "done" && !isActive) {
+    return <CheckCircle2 className="h-5 w-5" />;
   }
   if (status === "error") {
-    return <AlertCircle className="h-4 w-4 text-red-600" />;
+    return <AlertCircle className="h-5 w-5" />;
   }
-  if (status === "current") {
-    return (
-      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-        {step}
-      </span>
-    );
+  if (status === "locked" && !isActive) {
+    return <Circle className="h-4 w-4" />;
   }
-  return <Circle className="h-4 w-4 text-muted-foreground/50" />;
+  return <span>{step}</span>;
 }
 
 function defaultArgValue(input: AbiConstructorInput): string {
