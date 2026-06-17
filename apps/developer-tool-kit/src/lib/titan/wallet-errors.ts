@@ -18,6 +18,10 @@ export function parseWalletError(error: unknown, fallback = "Wallet request fail
       return record.shortMessage;
     }
 
+    if (typeof record.code === "number" && record.code === -32603) {
+      return "RPC node rejected the request. If deploying, recompile the contract and try again.";
+    }
+
     const data = record.data;
     if (typeof data === "object" && data !== null) {
       const dataRecord = data as Record<string, unknown>;

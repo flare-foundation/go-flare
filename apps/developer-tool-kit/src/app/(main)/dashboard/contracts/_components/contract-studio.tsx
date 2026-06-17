@@ -243,10 +243,14 @@ export function ContractStudio() {
                 <div className="space-y-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge>{compiled.contractName}</Badge>
+                    <Badge variant="outline">Paris EVM</Badge>
                     <span className="text-xs text-muted-foreground">
                       Bytecode size: {(compiled.bytecode.length / 2).toLocaleString()} bytes
                     </span>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Compiled for Titan C-Chain (Paris). Recompile after editing before deploy.
+                  </p>
 
                   <div>
                     <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">Constructor</p>

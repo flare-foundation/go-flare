@@ -15,8 +15,6 @@ export type DeployContractResult = {
   contractAddress: string;
 };
 
-const MIN_GAS_PRICE_WEI = BigInt(25_000_000_000); // 25 gwei fallback for local chains reporting 0
-
 function hexToBigInt(hex: string): bigint {
   return BigInt(hex);
 }
@@ -36,12 +34,6 @@ async function providerRequest<T>(method: string, params: unknown[]): Promise<T>
   } catch (error) {
     throw new Error(parseWalletError(error, `${method} failed.`));
   }
-}
-
-async function resolveGasPrice(): Promise<bigint> {
-  const gasPriceHex = await providerRequest<string>("eth_gasPrice", []);
-  const gasPrice = hexToBigInt(gasPriceHex);
-  return gasPrice > BigInt(0) ? gasPrice : MIN_GAS_PRICE_WEI;
 }
 
 async function waitForReceipt(txHash: string, attempts = 40, delayMs = 1500): Promise<{ contractAddress?: string }> {
@@ -81,8 +73,6 @@ export async function deployContract(input: DeployContractInput): Promise<Deploy
     args: input.constructorArgs as readonly unknown[],
   });
 
-  const gasPrice = await resolveGasPrice();
-
   const gasEstimateHex = await providerRequest<string>("eth_estimateGas", [
     {
       from: input.from,
@@ -93,13 +83,13 @@ export async function deployContract(input: DeployContractInput): Promise<Deploy
 
   const gasLimit = hexToBigInt(gasEstimateHex) + BigInt(100_000);
 
+  // Let MetaMask choose EIP-1559 fees; explicit gasPrice breaks on some Titan RPC paths.
   const txHash = await providerRequest<string>("eth_sendTransaction", [
     {
       from: input.from,
       data: deployData,
       value: "0x0",
       gas: toHex(gasLimit),
-      gasPrice: toHex(gasPrice),
     },
   ]);
 

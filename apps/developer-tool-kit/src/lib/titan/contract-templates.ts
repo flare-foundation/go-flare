@@ -11,7 +11,7 @@ export const CONTRACT_TEMPLATES: ContractTemplate[] = [
     name: "Greeter",
     description: "Simple string storage with greet() and setGreeting().",
     source: `// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.19;
 
 contract Greeter {
     string private greeting;
@@ -35,7 +35,7 @@ contract Greeter {
     name: "Counter",
     description: "Minimal counter with increment and decrement.",
     source: `// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.19;
 
 contract Counter {
     uint256 public count;
@@ -60,7 +60,7 @@ contract Counter {
     name: "SimpleStorage",
     description: "Store and retrieve a single uint256 value.",
     source: `// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.19;
 
 contract SimpleStorage {
     uint256 private storedValue;

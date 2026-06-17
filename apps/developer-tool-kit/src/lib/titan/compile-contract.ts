@@ -39,6 +39,8 @@ export function compileSoliditySource(source: string, fileName = "Contract.sol")
     },
     settings: {
       optimizer: { enabled: true, runs: 200 },
+      // Titan C-Chain does not support PUSH0 (Shanghai); target Paris EVM.
+      evmVersion: "paris",
       outputSelection: {
         "*": {
           "*": ["abi", "evm.bytecode"],
