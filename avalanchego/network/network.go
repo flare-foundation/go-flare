@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2025, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package network
@@ -319,14 +319,14 @@ func NewNetwork(
 }
 
 func (n *network) Send(
-	msg message.OutboundMessage,
+	msg *message.OutboundMessage,
 	config common.SendConfig,
 	subnetID ids.ID,
 	allower subnets.Allower,
 ) set.Set[ids.NodeID] {
 	namedPeers := n.getPeers(config.NodeIDs, subnetID, allower)
 	n.peerConfig.Metrics.MultipleSendsFailed(
-		msg.Op(),
+		msg.Op,
 		config.NodeIDs.Len()-len(namedPeers),
 	)
 
@@ -1096,7 +1096,7 @@ func (n *network) upgrade(conn net.Conn, upgrader peer.Upgrader, isIngress bool)
 		_ = tlsConn.Close()
 		n.peerConfig.Log.Verbo(
 			"dropping connection",
-			zap.String("reason", "already connecting to peer"),
+			zap.String("reason", "already connected to peer"),
 			zap.Stringer("nodeID", nodeID),
 		)
 		return nil

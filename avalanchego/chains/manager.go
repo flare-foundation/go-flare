@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2025, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package chains
@@ -213,6 +213,7 @@ type ManagerConfig struct {
 	CriticalChains            set.Set[ids.ID] // Chains that can't exit gracefully
 	TimeoutManager            timeout.Manager // Manages request timeouts when sending messages to other validators
 	Health                    health.Registerer
+	ProposerMinBlockDelay     time.Duration
 	SubnetConfigs             map[ids.ID]subnets.Config // ID -> SubnetConfig
 	ChainConfigs              map[string]ChainConfig    // alias -> ChainConfig
 	// ShutdownNodeFunc allows the chain manager to issue a request to shutdown the node
@@ -750,7 +751,7 @@ func (m *manager) createAvalancheChain(
 	var (
 		// A default subnet configuration will be present if explicit configuration is not provided
 		subnetCfg           = m.SubnetConfigs[ctx.SubnetID]
-		minBlockDelay       = subnetCfg.ProposerMinBlockDelay
+		minBlockDelay       = m.ProposerMinBlockDelay // X-chain uses this value
 		numHistoricalBlocks = subnetCfg.ProposerNumHistoricalBlocks
 	)
 	m.Log.Info("creating proposervm wrapper",
@@ -832,7 +833,15 @@ func (m *manager) createAvalancheChain(
 
 	bootstrapWeight := vdrs.TotalWeight(ctx.SubnetID)
 
-	consensusParams := sb.Config().ConsensusParameters
+	// sanity check
+	if sb.Config().SnowParameters == nil {
+		msg := "snowball parameters not specified for subnet %s"
+		if sb.Config().SimplexParameters != nil {
+			msg += ", this chain is configured with simplex"
+		}
+		return nil, fmt.Errorf(msg, ctx.SubnetID)
+	}
+	consensusParams := *sb.Config().SnowParameters
 	sampleK := consensusParams.K
 
 	if big.NewInt(int64(sampleK)).Cmp(bootstrapWeight) > 0 {
@@ -1117,7 +1126,7 @@ func (m *manager) createSnowmanChain(
 
 		// Wrap the validator state with a cached state so that P-chain lookups
 		// are cached.
-		valState = validators.NewCachedState(valState, m.Upgrades.GraniteTime)
+		valState = validators.NewCachedState(valState)
 
 		if m.TracingEnabled {
 			valState = validators.Trace(valState, "platformvm", m.Tracer)
@@ -1136,7 +1145,7 @@ func (m *manager) createSnowmanChain(
 
 		// Wrap the validator state with a cached state so that the P-chain lock
 		// isn't grabbed when lookups are cached.
-		valState = validators.NewCachedState(valState, m.Upgrades.GraniteTime)
+		valState = validators.NewCachedState(valState)
 
 		if !m.ManagerConfig.SybilProtectionEnabled {
 			valState = validators.NewNoValidatorsState(valState)
@@ -1162,9 +1171,12 @@ func (m *manager) createSnowmanChain(
 	var (
 		// A default subnet configuration will be present if explicit configuration is not provided
 		subnetCfg           = m.SubnetConfigs[ctx.SubnetID]
-		minBlockDelay       = subnetCfg.ProposerMinBlockDelay
+		minBlockDelay       time.Duration // Most chains default to 0
 		numHistoricalBlocks = subnetCfg.ProposerNumHistoricalBlocks
 	)
+	if ctx.ChainID == constants.PlatformChainID {
+		minBlockDelay = m.ProposerMinBlockDelay
+	}
 	m.Log.Info("creating proposervm wrapper",
 		zap.Time("activationTime", m.Upgrades.ApricotPhase4Time),
 		zap.Uint64("minPChainHeight", m.Upgrades.ApricotPhase4MinPChainHeight),
@@ -1232,7 +1244,16 @@ func (m *manager) createSnowmanChain(
 	}
 
 	bootstrapWeight := beacons.TotalWeight(ctx.SubnetID)
-	consensusParams := sb.Config().ConsensusParameters
+
+	// sanity check
+	if sb.Config().SnowParameters == nil {
+		msg := "snowball parameters not specified for subnet %s"
+		if sb.Config().SimplexParameters != nil {
+			msg += ", this chain is configured with simplex"
+		}
+		return nil, fmt.Errorf(msg, ctx.SubnetID)
+	}
+	consensusParams := *sb.Config().SnowParameters
 	sampleK := consensusParams.K
 
 	if big.NewInt(int64(sampleK)).Cmp(bootstrapWeight) > 0 {

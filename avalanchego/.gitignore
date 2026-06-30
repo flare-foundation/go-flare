@@ -1,3 +1,6 @@
+# Bazel symlinks
+/bazel-*
+
 *.log
 *~
 .DS_Store
@@ -45,6 +48,7 @@ tmp/
 
 bin/
 build/
+!.bazel/patches/build_files/**/build/
 
 keys/staker.*
 
@@ -67,3 +71,7 @@ vendor
 
 # debug files
 __debug_*
+
+# polyrepo
+polyrepo.log
+/firewood/

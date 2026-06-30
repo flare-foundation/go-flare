@@ -467,17 +467,12 @@ Example usage:
 ```yaml
 - name: Run e2e tests
 
-  # A qualified path is required for use outside of avalanchego
-  # e.g. `ava-labs/avalanchego/.github/actions/run-monitored-tmpnet-cmd@[sha or tag]`
-  uses: ./.github/actions/run-monitored-tmpnet-cmd #
+  uses: ./.github/actions/run-monitored-tmpnet-cmd
 
   with:
-    # This needs to be the path to a bash script
-    run: ./scripts/tests.e2e.sh
-
-    # Env vars for the script need to be provided via run_env as a space-separated string
-    # e.g. `MY_VAR1=foo MY_VAR2=bar`
-    run_env: E2E_SERIAL=1
+    # This should be a task invocation, not a script. The task should internalize arguments and env
+    # vars to ensure that the job can be reproduced locally with minimal expertise.
+    run: ./scripts/run_task.sh test-e2e-ci
 
     # Sets the prefix of the artifact containing the tmpnet network dir for this job.
     # Only required if a workflow uses this action more than once so that each artifact
@@ -501,7 +496,7 @@ Example usage:
 [Top](#table-of-contents)
 
 When a network is started with tmpnet, a link to the [default grafana
-instance](https://grafana-poc.avax-dev.network) will be
+instance](https://avalabs.grafana.net) will be
 emitted. The dashboards will only be populated if prometheus and
 promtail are running locally (as per previous sections) to collect
 metrics and logs.

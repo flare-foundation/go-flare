@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2025, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package gvalidators
@@ -274,54 +274,26 @@ func TestGetWarpValidatorSets(t *testing.T) {
 	})
 }
 
-func TestGetWarpValidatorSet(t *testing.T) {
-	const height uint64 = 1337
-	t.Run("error", func(t *testing.T) {
-		state := &validatorstest.State{
-			CantGetWarpValidatorSets: true,
-		}
-		c := newClient(t, state)
+// TestGetWarpValidatorSetsNilTotalWeight is Flare-specific: WarpSet total
+// weights are *big.Int, so a WarpSet with nil TotalWeight must not panic the
+// server. The wire encoding treats nil as zero bytes and the client decodes
+// to a zero-valued *big.Int.
+func TestGetWarpValidatorSetsNilTotalWeight(t *testing.T) {
+	require := require.New(t)
 
-		_, err := c.GetWarpValidatorSet(t.Context(), height, ids.GenerateTestID())
-		require.Error(t, err) //nolint:forbidigo // returns grpc error
-	})
+	subnetID := ids.GenerateTestID()
+	state := &validatorstest.State{
+		GetWarpValidatorSetsF: func(context.Context, uint64) (map[ids.ID]validators.WarpSet, error) {
+			return map[ids.ID]validators.WarpSet{
+				subnetID: {},
+			}, nil
+		},
+	}
+	c := newClient(t, state)
 
-	t.Run("valid", func(t *testing.T) {
-		require := require.New(t)
-
-		subnetID := ids.GenerateTestID()
-		expectedVdrSet := validatorstest.NewWarpSet(t, 3)
-		state := &validatorstest.State{
-			GetWarpValidatorSetF: func(_ context.Context, h uint64, s ids.ID) (validators.WarpSet, error) {
-				require.Equal(height, h)
-				require.Equal(subnetID, s)
-				return expectedVdrSet, nil
-			},
-		}
-		c := newClient(t, state)
-
-		vdrSet, err := c.GetWarpValidatorSet(t.Context(), height, subnetID)
-		require.NoError(err)
-		require.Equal(expectedVdrSet, vdrSet)
-	})
-
-	t.Run("nil_total_weight", func(t *testing.T) {
-		// A WarpSet with nil TotalWeight must not panic the server; the wire
-		// encoding treats nil as zero bytes and the client decodes to a
-		// zero-valued *big.Int.
-		require := require.New(t)
-
-		subnetID := ids.GenerateTestID()
-		state := &validatorstest.State{
-			GetWarpValidatorSetF: func(_ context.Context, _ uint64, _ ids.ID) (validators.WarpSet, error) {
-				return validators.WarpSet{}, nil
-			},
-		}
-		c := newClient(t, state)
-
-		vdrSet, err := c.GetWarpValidatorSet(t.Context(), height, subnetID)
-		require.NoError(err)
-		require.NotNil(vdrSet.TotalWeight)
-		require.Equal(0, vdrSet.TotalWeight.Sign())
-	})
+	vdrSets, err := c.GetWarpValidatorSets(t.Context(), 1337)
+	require.NoError(err)
+	require.Contains(vdrSets, subnetID)
+	require.NotNil(vdrSets[subnetID].TotalWeight)
+	require.Equal(0, vdrSets[subnetID].TotalWeight.Sign())
 }
