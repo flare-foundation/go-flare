@@ -1,14 +1,10 @@
-FROM golang:1.24.13-trixie@sha256:5835f052b784aa39f2fe9070def3568605c8bc3fcd810f10402066348b61e716 AS build
-
-RUN apt-get update -y && \
-    apt-get install -y rsync
+FROM golang:1.25.8-trixie@sha256:feb29f1d571353e52350efceeabc6a3f6769c249a97d53cbeececc2ec3f7c202 AS build
 
 WORKDIR /app/
 
 COPY ./.git /app/.git
 COPY ./avalanchego /app/avalanchego
 COPY ./config /app/config
-COPY ./coreth /app/coreth
 
 WORKDIR /app/avalanchego/
 
