@@ -1,12 +1,12 @@
 # go-flare
 
-go-flare is a modified version of [avalanchego@v1.14.0](https://github.com/ava-labs/avalanchego/releases/tag/v1.14.0) and [coreth@v0.16.0 rc0](https://github.com/ava-labs/coreth/releases/tag/v0.16.0-rc.0), incorporating specific features for Flare and Songbird networks. These features include prioritized contract handling and the invocation of the daemon contract.
+go-flare is a modified version of [avalanchego@v1.14.2](https://github.com/ava-labs/avalanchego/releases/tag/v1.14.2) incorporating specific features for Flare and Songbird networks. These features include prioritized contract handling and the invocation of the daemon contract.
 
 See [release notes](./RELEASES-flare.md) for more info.
 
 ## System Requirements
 
-- go version 1.24
+- go version 1.25.8
 - gcc, g++ and jq
 - CPU: Equivalent of 8 AWS vCPU
 - RAM: 16 GiB

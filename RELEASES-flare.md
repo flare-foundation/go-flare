@@ -1,6 +1,10 @@
 # Release Notes: Flare and Songbird networks
 
-Here are listed specific changes to the code for the Flare and Songbird networks. For a comprehensive list of general changes, see [here](./avalanchego/RELEASES.md) for the AvalancheGo project and [here](./coreth/RELEASES.md) for the Coreth project.
+Here are listed specific changes to the code for the Flare and Songbird networks. For a comprehensive list of general changes, see [here](./avalanchego/RELEASES.md) for the AvalancheGo project — which, since v1.14.x, also contains Coreth (grafted in at `avalanchego/graft/coreth`).
+
+## v1.14.2
+
+This release updates the Flare and Songbird codebase to AvalancheGo v1.14.2.
 
 ## v1.14.0
 
