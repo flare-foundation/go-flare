@@ -19,6 +19,7 @@ Nodes should be updated to this version before these times.
  * The minimum C-chain gas price (base fee floor) is raised to 500 GWei.
  * For the Flare network, the maximum validator stake amount is increased from 200 million to 300 million FLR.
  * For the Flare and Coston2 networks, the minimum delegation fee for validators is set to 20% (previously 0%).
+ * The deprecated top-level `rewardOwner` field has been removed from validator entries returned by `platform.getCurrentValidators`. It previously duplicated `validationRewardOwner`.
 
 ## v1.13.0
 
