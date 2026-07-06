@@ -3,7 +3,7 @@
 Fork of [ava-labs/avalanchego](https://github.com/ava-labs/avalanchego) with Flare and Songbird network support.
 Module: `github.com/ava-labs/avalanchego` | Go 1.25.8 (see `go.mod` toolchain).
 
-**Upstream version:** Pinned to avalanchego **v1.14.2** (branch `flare-merge-1_14_2`) — this is **not** the latest upstream release. Newer upstream tags exist; do not assume features/APIs from later versions are present here.
+**Upstream version:** Pinned to avalanchego **v1.14.3-rc.2** (branch `flare-merge-1_14_3`) — this is **not** the latest upstream release. Newer upstream tags exist; do not assume features/APIs from later versions are present here.
 
 **Coreth is grafted into this repo.** Since v1.14.x upstream, coreth lives at `graft/coreth` (module `github.com/ava-labs/avalanchego/graft/coreth`), alongside `graft/evm` (shared EVM/sync code) and `graft/subnet-evm`. All are wired via `replace` directives in the root `go.mod` plus the `go.work` workspace, and are compiled directly into the `avalanchego` binary. There is no separate `evm` plugin binary and the build no longer copies anything into `GOPATH`.
 
@@ -30,7 +30,7 @@ GOWORK=off go mod tidy                          # repo root
 go work sync
 ```
 
-**libevm pinning:** the root `go.mod` and all graft modules must require the **same** `github.com/ava-labs/libevm` version (currently `v1.13.14-0.4.0.rc.2`). The workspace selects the highest requirement; a newer pseudo-version in any module silently downgrades/upgrades everyone and breaks the ava-labs ABI helpers (`PackOutput`, `UnpackInputIntoInterface`, `PackEvent`).
+**libevm pinning:** the root `go.mod` and all graft modules must require the **same** `github.com/ava-labs/libevm` version (currently `v1.13.15-0.20260430210457-c891ff86e981`). The workspace selects the highest requirement; a newer pseudo-version in any module silently downgrades/upgrades everyone and breaks the ava-labs ABI helpers (`PackOutput`, `UnpackInputIntoInterface`, `PackEvent`).
 
 **Protobuf:** generated code lives in `proto/pb`. Regenerate with `scripts/protobuf_codegen.sh` (pins buf 1.59.0, protoc-gen-go v1.36.10, protoc-gen-go-grpc 1.5.1), or `buf generate --path <dir>` from `proto/` with matching plugin versions.
 
@@ -113,7 +113,7 @@ Coreth implements the C-Chain EVM for Flare/Songbird (module `github.com/ava-lab
 
 This documents merging newer **ava-labs/avalanchego** upstream releases into this fork. The merge is performed in this avalanchego tree; since v1.14.x coreth is part of the avalanchego repository (`graft/coreth`), a single upstream merge brings the avalanchego **and** coreth changes — there is no longer a separate coreth merge.
 
-### Architecture Overview (as of v1.14.2; coreth grafted at `graft/coreth`)
+### Architecture Overview (as of v1.14.3-rc.2; coreth grafted at `graft/coreth`)
 
 Coreth (`graft/coreth`), the shared EVM/sync code (`graft/evm`), and `graft/subnet-evm` are in-tree Go modules wired to the root avalanchego module via `replace` directives in `go.mod` and the `go.work` workspace. They compile directly into the single `avalanchego` binary (no separate `evm` plugin binary, no GOPATH copy).
 

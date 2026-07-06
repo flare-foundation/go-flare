@@ -7,9 +7,10 @@ avalanchego monorepo.
 
 The `bazel` command is provided by [bazelisk](https://github.com/bazelbuild/bazelisk),
 which automatically downloads the correct Bazel version from `.bazelversion`. All
-Taskfile targets use `./scripts/run_bazel.sh`, which runs bazelisk directly if
-available or via `nix run` if not. In the nix dev shell (`nix develop`), `bazel`
-and `bazelisk` are both on PATH directly.
+Taskfile targets use `./scripts/nix_run.sh bazelisk ...`, which runs in the repo's
+nix dev shell when needed and avoids nesting `nix develop` when already inside it.
+In the nix dev shell (`nix develop`), `bazel` and `bazelisk` are both on PATH directly.
+For Nix installation and repo dev shell setup, see [CONTRIBUTING.md](../CONTRIBUTING.md#nix).
 
 ## Quick Start
 
@@ -476,8 +477,38 @@ This is especially useful for pull requests tested against a moving base
 branch, where the metadata included in the PR may be stale relative to
 the current merge target.
 
+The GitHub Actions Bazel workflow also defines a single aggregate job,
+`bazel-required`, that depends on the other jobs in the workflow via
+`needs`.  Branch protection can require that one workflow-level job
+instead of tracking each underlying Bazel job separately. This reduces
+required-check maintenance to the workflow level.
+
 If `check-metadata` fails in CI, rebase or merge the target branch, run
 `task bazel-generate-metadata`, commit the resulting changes, and rerun CI.
+
+### Apple CommandLineTools
+
+On macOS, `.bazelrc` defaults to using the Apple CommandLineTools
+installed under `/Library/Developer/CommandLineTools`. This is the
+default location for the tools installed without Xcode, and the
+location used by GitHub Actions runners.
+
+For most usage, these defaults should be sufficient. If a machine uses
+Xcode or a non-default Apple developer toolchain location, the
+defaults can be overridden via `.bazelrc.local` which is optionally
+imported by `.bazelrc`. `.bazelrc.local` is intended to be generated
+via `task bazel-configure-local`, which runs
+`./scripts/generate_bazelrc_local.sh` under the repo's standard task
+entrypoint. The script uses `xcode-select -p` and `xcrun --sdk macosx
+--show-sdk-path` to determine the host's active Apple developer
+directory and macOS SDK and writes those values to `.bazelrc.local`.
+The script can also be run directly and is invoked automatically by
+direnv.
+
+When invoked by direnv, generation is best-effort: failures are shown
+as warnings during shell entry but do not prevent entering the repo.
+When run directly, the script exits non-zero on discovery failures so
+manual setup problems remain actionable.
 
 ## Adding a New Go Module
 
@@ -632,7 +663,7 @@ internal patch parser is strict about (unlike `git apply`).
 
 1. Edit the BUILD file in `.bazel/patches/build_files/<module>/`
 2. Run `task bazel-generate-patches` to regenerate `.patch` files
-3. Verify: `./scripts/run_bazel.sh build @<module>//<target>`
+3. Verify: `./scripts/nix_run.sh bazelisk build @<module>//<target>`
 4. Commit both the BUILD file and the generated `.patch` file
 
 Patches that modify existing files (e.g., gnark-crypto's `no-sandbox`

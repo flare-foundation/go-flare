@@ -328,7 +328,7 @@ type Node struct {
 	msgCreator message.Creator
 
 	// Manages network timeouts
-	timeoutManager timeout.Manager
+	timeoutManager *timeout.Manager
 
 	// Manages creation of blockchains and routing messages to them
 	chainManager chains.Manager
@@ -385,7 +385,7 @@ type Node struct {
 	MeterDBMetricsGatherer metrics.MultiGatherer
 
 	VMAliaser ids.Aliaser
-	VMManager vms.Manager
+	VMManager *vms.Manager
 
 	// VM endpoint registry
 	VMRegistry registry.VMRegistry
@@ -570,7 +570,7 @@ func (n *Node) initNetworking(reg prometheus.Registerer) error {
 
 	n.uptimeCalculator = uptime.NewLockedCalculator()
 
-	consensusRouter := n.chainRouter
+	var consensusRouter router.ExternalHandler = n.chainRouter
 	if !n.Config.SybilProtectionEnabled {
 		// Sybil protection is disabled so we don't have a txID that added us as
 		// a validator. Because each validator needs a txID associated with it,
@@ -590,10 +590,10 @@ func (n *Node) initNetworking(reg prometheus.Registerer) error {
 		}
 
 		consensusRouter = &insecureValidatorManager{
-			log:    n.Log,
-			Router: consensusRouter,
-			vdrs:   n.vdrs,
-			weight: n.Config.SybilProtectionDisabledWeight,
+			log:             n.Log,
+			ExternalHandler: consensusRouter,
+			vdrs:            n.vdrs,
+			weight:          n.Config.SybilProtectionDisabledWeight,
 		}
 	}
 
@@ -603,7 +603,7 @@ func (n *Node) initNetworking(reg prometheus.Registerer) error {
 
 	if requiredConns > 0 {
 		consensusRouter = &beaconManager{
-			Router:                  consensusRouter,
+			ExternalHandler:         consensusRouter,
 			beacons:                 n.bootstrappers,
 			requiredConns:           int64(requiredConns),
 			onSufficientlyConnected: n.onSufficientlyConnected,

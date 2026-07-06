@@ -188,7 +188,7 @@ func TestBootstrapperSingleFrontier(t *testing.T) {
 		case vtxID2:
 			return vtx2, nil
 		default:
-			require.FailNow(errUnknownVertex.Error())
+			t.Fatal(errUnknownVertex)
 			return nil, errUnknownVertex
 		}
 	}
@@ -202,7 +202,7 @@ func TestBootstrapperSingleFrontier(t *testing.T) {
 		case bytes.Equal(vtxBytes, vtxBytes2):
 			return vtx2, nil
 		default:
-			require.FailNow(errParsedUnknownVertex.Error())
+			t.Fatal(errParsedUnknownVertex)
 			return nil, errParsedUnknownVertex
 		}
 	}
@@ -293,7 +293,7 @@ func TestBootstrapperByzantineResponses(t *testing.T) {
 		case vtxID0:
 			return nil, errUnknownVertex
 		default:
-			require.FailNow(errUnknownVertex.Error())
+			t.Fatal(errUnknownVertex)
 			return nil, errUnknownVertex
 		}
 	}
@@ -320,7 +320,7 @@ func TestBootstrapperByzantineResponses(t *testing.T) {
 			vtx2.StatusV = choices.Processing
 			return vtx2, nil
 		default:
-			require.FailNow(errParsedUnknownVertex.Error())
+			t.Fatal(errParsedUnknownVertex)
 			return nil, errParsedUnknownVertex
 		}
 	}
@@ -341,7 +341,7 @@ func TestBootstrapperByzantineResponses(t *testing.T) {
 		case vtxID0:
 			return vtx0, nil
 		default:
-			require.FailNow(errUnknownVertex.Error())
+			t.Fatal(errUnknownVertex)
 			return nil, errUnknownVertex
 		}
 	}
@@ -460,7 +460,7 @@ func TestBootstrapperTxDependencies(t *testing.T) {
 		case bytes.Equal(vtxBytes, vtxBytes0):
 			return vtx0, nil
 		default:
-			require.FailNow(errParsedUnknownVertex.Error())
+			t.Fatal(errParsedUnknownVertex)
 			return nil, errParsedUnknownVertex
 		}
 	}
@@ -471,7 +471,7 @@ func TestBootstrapperTxDependencies(t *testing.T) {
 		case vtxID0:
 			return nil, errUnknownVertex
 		default:
-			require.FailNow(errUnknownVertex.Error())
+			t.Fatal(errUnknownVertex)
 			return nil, errUnknownVertex
 		}
 	}
@@ -495,7 +495,7 @@ func TestBootstrapperTxDependencies(t *testing.T) {
 			vtx0.StatusV = choices.Processing
 			return vtx0, nil
 		default:
-			require.FailNow(errParsedUnknownVertex.Error())
+			t.Fatal(errParsedUnknownVertex)
 			return nil, errParsedUnknownVertex
 		}
 	}
@@ -586,7 +586,7 @@ func TestBootstrapperIncompleteAncestors(t *testing.T) {
 		case vtxID2:
 			return vtx2, nil
 		default:
-			require.FailNow(errUnknownVertex.Error())
+			t.Fatal(errUnknownVertex)
 			return nil, errUnknownVertex
 		}
 	}
@@ -601,7 +601,7 @@ func TestBootstrapperIncompleteAncestors(t *testing.T) {
 		case bytes.Equal(vtxBytes, vtxBytes2):
 			return vtx2, nil
 		default:
-			require.FailNow(errParsedUnknownVertex.Error())
+			t.Fatal(errParsedUnknownVertex)
 			return nil, errParsedUnknownVertex
 		}
 	}

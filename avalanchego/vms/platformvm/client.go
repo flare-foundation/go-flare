@@ -587,13 +587,7 @@ func (c *Client) GetValidatorFeeState(ctx context.Context, options ...rpc.Option
 	return res.Excess, res.Price, res.Time, err
 }
 
-func AwaitTxAccepted(
-	c *Client,
-	ctx context.Context,
-	txID ids.ID,
-	freq time.Duration,
-	options ...rpc.Option,
-) error {
+func (c *Client) AwaitTxAccepted(ctx context.Context, txID ids.ID, freq time.Duration, options ...rpc.Option) error {
 	ticker := time.NewTicker(freq)
 	defer ticker.Stop()
 
@@ -617,11 +611,7 @@ func AwaitTxAccepted(
 }
 
 // GetSubnetOwners returns a map of subnet ID to current subnet's owner
-func GetSubnetOwners(
-	c *Client,
-	ctx context.Context,
-	subnetIDs ...ids.ID,
-) (map[ids.ID]fx.Owner, error) {
+func (c *Client) GetSubnetOwners(ctx context.Context, subnetIDs ...ids.ID) (map[ids.ID]fx.Owner, error) {
 	subnetOwners := make(map[ids.ID]fx.Owner, len(subnetIDs))
 	for _, subnetID := range subnetIDs {
 		subnetInfo, err := c.GetSubnet(ctx, subnetID)
@@ -638,11 +628,7 @@ func GetSubnetOwners(
 }
 
 // GetDeactivationOwners returns a map of validation ID to deactivation owners
-func GetDeactivationOwners(
-	c *Client,
-	ctx context.Context,
-	validationIDs ...ids.ID,
-) (map[ids.ID]fx.Owner, error) {
+func (c *Client) GetDeactivationOwners(ctx context.Context, validationIDs ...ids.ID) (map[ids.ID]fx.Owner, error) {
 	deactivationOwners := make(map[ids.ID]fx.Owner, len(validationIDs))
 	for _, validationID := range validationIDs {
 		l1Validator, _, err := c.GetL1Validator(ctx, validationID)
@@ -655,17 +641,12 @@ func GetDeactivationOwners(
 }
 
 // GetOwners returns the union of GetSubnetOwners and GetDeactivationOwners.
-func GetOwners(
-	c *Client,
-	ctx context.Context,
-	subnetIDs []ids.ID,
-	validationIDs []ids.ID,
-) (map[ids.ID]fx.Owner, error) {
-	subnetOwners, err := GetSubnetOwners(c, ctx, subnetIDs...)
+func (c *Client) GetOwners(ctx context.Context, subnetIDs []ids.ID, validationIDs []ids.ID) (map[ids.ID]fx.Owner, error) {
+	subnetOwners, err := c.GetSubnetOwners(ctx, subnetIDs...)
 	if err != nil {
 		return nil, err
 	}
-	deactivationOwners, err := GetDeactivationOwners(c, ctx, validationIDs...)
+	deactivationOwners, err := c.GetDeactivationOwners(ctx, validationIDs...)
 	if err != nil {
 		return nil, err
 	}
