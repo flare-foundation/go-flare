@@ -536,19 +536,20 @@ func (vm *VM) initializeChain(lastAcceptedHash common.Hash) error {
 		return err
 	}
 
+	// On Flare-family chains the Granite ACP-176 parameter set is used
+	// (independent of activation timing): all Flare-family networks have
+	// activated Granite.
+	acp176Params := acp176.DefaultParams
+	if vm.chainConfigExtra().IsFlareFamilyCode() {
+		acp176Params = granite.DefaultParams
+	}
+
 	// If the gas target is specified, calculate the desired target excess and
-	// use it during block creation. On Flare-family chains the Granite
-	// parameter set is used (independent of activation timing) since a
-	// Flare-family operator setting GasTarget expects the Granite-era
-	// target/excess relationship.
+	// use it during block creation.
 	var desiredTargetExcess *gas.Gas
 	if vm.config.GasTarget != nil {
-		params := acp176.DefaultParams
-		if vm.chainConfigExtra().IsFlareFamilyCode() {
-			params = granite.DefaultParams
-		}
 		desiredTargetExcess = new(gas.Gas)
-		*desiredTargetExcess = acp176.DesiredTargetExcessWith(params, *vm.config.GasTarget)
+		*desiredTargetExcess = acp176.DesiredTargetExcessWith(acp176Params, *vm.config.GasTarget)
 	}
 
 	var desiredDelayExcess *acp226.DelayExcess
@@ -581,14 +582,12 @@ func (vm *VM) initializeChain(lastAcceptedHash common.Hash) error {
 	vm.miner = vm.eth.Miner()
 
 	// Set the gas parameters for the tx pool to the minimum gas price for the
-	// fork that is active at the last accepted block. The floor is re-evaluated
-	// on every block Accept so it tracks fork activations at runtime.
-	lastAccepted := vm.blockChain.LastAcceptedBlock()
+	// latest upgrade (the Granite 500 GWei floor on Flare-family chains).
 	vm.txPool.SetGasTip(big.NewInt(0))
-	vm.txPool.SetMinFee(vm.minTxPoolFee(lastAccepted.Time()))
+	vm.txPool.SetMinFee(new(big.Int).SetUint64(uint64(acp176Params.MinGasPrice)))
 
 	vm.eth.Start()
-	return vm.initChainState(lastAccepted)
+	return vm.initChainState(vm.blockChain.LastAcceptedBlock())
 }
 
 // initializeStateSync initializes the vm for performing state sync and responding to peer requests.
@@ -1101,15 +1100,6 @@ func (*VM) NewHTTPHandler(context.Context) (http.Handler, error) {
 
 func (vm *VM) chainConfigExtra() *extras.ChainConfig {
 	return params.GetExtra(vm.chainConfig)
-}
-
-// minTxPoolFee returns the txpool minimum-fee floor that applies at the given
-// block timestamp, derived from the per-fork ACP-176 params. Post-Granite on
-// Flare-family networks this is 500 GWei; otherwise it is the avalanchego
-// default (1 Wei).
-func (vm *VM) minTxPoolFee(timestamp uint64) *big.Int {
-	p := vm.chainConfigExtra().ACP176Params(timestamp)
-	return new(big.Int).SetUint64(uint64(p.MinGasPrice))
 }
 
 func (vm *VM) rules(number *big.Int, time uint64) extras.Rules {

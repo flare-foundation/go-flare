@@ -115,12 +115,6 @@ func (b *wrappedBlock) Accept(context.Context) error {
 		return fmt.Errorf("chain could not accept %s: %w", blkID, err)
 	}
 
-	// Re-evaluate the txpool minimum-fee floor against the accepted block's
-	// timestamp so that crossing a fork boundary (notably Granite, which raises
-	// the floor to 500 GWei on Flare-family networks) updates the mempool's
-	// accept/gossip threshold.
-	vm.txPool.SetMinFee(vm.minTxPoolFee(b.ethBlock.Time()))
-
 	if err := vm.PutLastAcceptedID(blkID); err != nil {
 		return fmt.Errorf("failed to put %s as the last accepted block: %w", blkID, err)
 	}
