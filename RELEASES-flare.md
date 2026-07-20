@@ -6,6 +6,13 @@ Here are listed specific changes to the code for the Flare and Songbird networks
 
 This release updates the Flare and Songbird codebase to AvalancheGo v1.14.2.
 
+The upgrade is optional but encouraged. It is backwards compatible with v1.14.0 (the minimum compatible version remains v1.14.0) and does not schedule any new fork times.
+
+### Note:
+
+ * Coreth and Subnet-EVM are now grafted into the AvalancheGo tree — there is no separate `coreth` module anymore. Go import paths change from `github.com/ava-labs/coreth/...` to `github.com/ava-labs/avalanchego/graft/coreth/...`, which affects downstream tools that import Coreth packages.
+ * Building from source now requires Go 1.25.8 or later.
+
 ## v1.14.0
 
 This release updates the Flare and Songbird codebase to AvalancheGo v1.14.0 (Granite upgrade).
