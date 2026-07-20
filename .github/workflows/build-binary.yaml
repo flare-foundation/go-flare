@@ -11,7 +11,7 @@ jobs:
     name: Build go-flare with SLSA
     uses: ./.github/workflows/build-go-slsa3.yaml
     with:
-      go_version: "1.23.12"
+      go_version: "1.25.11"
       ubuntu_version: "24.04"
       build_artifact_name: "avalanchego"
 
@@ -20,7 +20,7 @@ jobs:
     name: Go Verification Build
     uses: ./.github/workflows/build-go-verification.yaml
     with:
-      go_version: "1.23.12"
+      go_version: "1.25.11"
       ubuntu_version: "24.04"
       build_artifact_name: "avalanchego-verification"
 
