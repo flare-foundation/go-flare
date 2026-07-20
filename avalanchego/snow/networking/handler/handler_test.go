@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2025, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package handler
@@ -62,7 +62,7 @@ func TestHandlerDropsTimedOutMessages(t *testing.T) {
 		"",
 		prometheus.NewRegistry(),
 		nil,
-		version.CurrentApp,
+		version.Current,
 	)
 	require.NoError(err)
 
@@ -172,7 +172,7 @@ func TestHandlerClosesOnError(t *testing.T) {
 		"",
 		prometheus.NewRegistry(),
 		nil,
-		version.CurrentApp,
+		version.Current,
 	)
 	require.NoError(err)
 
@@ -281,7 +281,7 @@ func TestHandlerDropsGossipDuringBootstrapping(t *testing.T) {
 		"",
 		prometheus.NewRegistry(),
 		nil,
-		version.CurrentApp,
+		version.Current,
 	)
 	require.NoError(err)
 
@@ -374,7 +374,7 @@ func TestHandlerDispatchInternal(t *testing.T) {
 		"",
 		prometheus.NewRegistry(),
 		nil,
-		version.CurrentApp,
+		version.Current,
 	)
 	require.NoError(err)
 
@@ -562,7 +562,7 @@ func TestDynamicEngineTypeDispatch(t *testing.T) {
 				"",
 				prometheus.NewRegistry(),
 				nil,
-				version.CurrentApp,
+				version.Current,
 			)
 			require.NoError(err)
 
@@ -648,7 +648,7 @@ func TestHandlerStartError(t *testing.T) {
 		"",
 		prometheus.NewRegistry(),
 		nil,
-		version.CurrentApp,
+		version.Current,
 	)
 	require.NoError(err)
 

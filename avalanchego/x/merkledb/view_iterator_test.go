@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2025, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package merkledb
@@ -198,7 +198,7 @@ func Test_View_Iterator_Random(t *testing.T) {
 	require := require.New(t)
 	now := time.Now().UnixNano()
 	t.Logf("seed: %d", now)
-	rand := rand.New(rand.NewSource(now)) // #nosec G404
+	rand := rand.New(rand.NewSource(now))
 
 	var (
 		numKeyChanges = 5_000

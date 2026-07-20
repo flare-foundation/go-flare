@@ -7,7 +7,7 @@ go test $(go list ./... | grep -v /tests/) #avalanchego unit tests
 ```
 
 ```sh
-cd ../coreth && go test ./... #coreth unit tests
+cd graft/coreth && go test ./... #coreth unit tests
 ```
 
 ## Run a Local Network with Flare Genesis

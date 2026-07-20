@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2025, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package executor
@@ -17,8 +17,8 @@ import (
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs/executor"
 	"github.com/ava-labs/avalanchego/vms/platformvm/txs/fee"
+	"github.com/ava-labs/avalanchego/vms/platformvm/txs/mempool"
 	"github.com/ava-labs/avalanchego/vms/platformvm/validators"
-	"github.com/ava-labs/avalanchego/vms/txs/mempool"
 
 	snowmanblock "github.com/ava-labs/avalanchego/snow/engine/snowman/block"
 )
@@ -53,11 +53,11 @@ type Manager interface {
 }
 
 func NewManager(
-	mempool mempool.Mempool[*txs.Tx],
+	mempool *mempool.Mempool,
 	metrics metrics.Metrics,
-	s state.State,
+	s *state.State,
 	txExecutorBackend *executor.Backend,
-	validatorManager validators.Manager,
+	validatorManager *validators.Manager,
 ) Manager {
 	lastAccepted := s.GetLastAccepted()
 	backend := &backend{
@@ -159,7 +159,10 @@ func (m *manager) VerifyTx(tx *txs.Tx) error {
 		return fmt.Errorf("failed verifying warp messages: %w", err)
 	}
 
-	stateDiff, err := state.NewDiff(m.preferred, m)
+	isAddingStakerAfterDeletionAllowed := state.StakerAdditionAfterDeletionLegality(
+		m.txExecutorBackend.Config.UpgradeConfig.IsHeliconActivated(m.txExecutorBackend.Clk.Time()),
+	)
+	stateDiff, err := state.NewDiff(m.preferred, m, isAddingStakerAfterDeletionAllowed)
 	if err != nil {
 		return fmt.Errorf("failed creating state diff: %w", err)
 	}

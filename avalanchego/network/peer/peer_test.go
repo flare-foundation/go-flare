@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2025, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package peer
@@ -36,13 +36,13 @@ import (
 
 type testPeer struct {
 	Peer
-	inboundMsgChan <-chan message.InboundMessage
+	inboundMsgChan <-chan *message.InboundMessage
 }
 
 type rawTestPeer struct {
 	config         *Config
 	cert           *staking.Certificate
-	inboundMsgChan <-chan message.InboundMessage
+	inboundMsgChan <-chan *message.InboundMessage
 }
 
 func newMessageCreator(t *testing.T) message.Creator {
@@ -116,8 +116,8 @@ func newRawTestPeer(t *testing.T, config *Config) *rawTestPeer {
 
 	config.IPSigner = NewIPSigner(ip, tls, bls)
 
-	inboundMsgChan := make(chan message.InboundMessage)
-	config.Router = router.InboundHandlerFunc(func(_ context.Context, msg message.InboundMessage) {
+	inboundMsgChan := make(chan *message.InboundMessage)
+	config.Router = router.InboundHandlerFunc(func(_ context.Context, msg *message.InboundMessage) {
 		inboundMsgChan <- msg
 	})
 
@@ -211,7 +211,7 @@ func TestSend(t *testing.T) {
 	require.True(peer0.Send(t.Context(), outboundGetMsg))
 
 	inboundGetMsg := <-peer1.inboundMsgChan
-	require.Equal(message.GetOp, inboundGetMsg.Op())
+	require.Equal(message.GetOp, inboundGetMsg.Op)
 
 	peer1.StartClose()
 	require.NoError(peer0.AwaitClosed(t.Context()))
@@ -356,6 +356,34 @@ func TestInvalidBLSKeyDisconnects(t *testing.T) {
 	require.NoError(peer1.AwaitClosed(t.Context()))
 }
 
+// Test that the upgrade time is exchanged and exposed correctly after the
+// handshake finishes.
+func TestUpgradeTime(t *testing.T) {
+	require := require.New(t)
+
+	sharedConfig0 := newConfig(t)
+	sharedConfig0.VersionCompatibility.UpgradeTime = time.Unix(123, 0)
+
+	sharedConfig1 := newConfig(t)
+	sharedConfig1.VersionCompatibility.UpgradeTime = time.Unix(1234, 0)
+
+	peer0, peer1 := startTestPeers(
+		newRawTestPeer(t, sharedConfig0),
+		newRawTestPeer(t, sharedConfig1),
+	)
+	require.NoError(peer0.AwaitReady(t.Context()))
+	require.NoError(peer1.AwaitReady(t.Context()))
+
+	require.Equal(uint64(sharedConfig1.VersionCompatibility.UpgradeTime.Unix()), peer0.Info().UpgradeTime)
+	require.Equal(uint64(sharedConfig0.VersionCompatibility.UpgradeTime.Unix()), peer1.Info().UpgradeTime)
+
+	peer0.StartClose()
+	peer1.StartClose()
+
+	require.NoError(peer0.AwaitClosed(t.Context()))
+	require.NoError(peer1.AwaitClosed(t.Context()))
+}
+
 func TestShouldDisconnect(t *testing.T) {
 	peerID := ids.GenerateTestNodeID()
 	txID := ids.GenerateTestID()
@@ -405,7 +433,7 @@ func TestShouldDisconnect(t *testing.T) {
 					VersionCompatibility: version.GetCompatibility(constants.FlareID, upgrade.InitiallyActiveTime),
 					Validators:           validators.NewManager(),
 				},
-				version: version.CurrentApp,
+				version: version.Current,
 			},
 			expectedPeer: &peer{
 				Config: &Config{
@@ -413,7 +441,7 @@ func TestShouldDisconnect(t *testing.T) {
 					VersionCompatibility: version.GetCompatibility(constants.FlareID, upgrade.InitiallyActiveTime),
 					Validators:           validators.NewManager(),
 				},
-				version: version.CurrentApp,
+				version: version.Current,
 			},
 			expectedShouldDisconnect: false,
 		},
@@ -436,7 +464,7 @@ func TestShouldDisconnect(t *testing.T) {
 					}(),
 				},
 				id:      peerID,
-				version: version.CurrentApp,
+				version: version.Current,
 			},
 			expectedPeer: &peer{
 				Config: &Config{
@@ -455,7 +483,7 @@ func TestShouldDisconnect(t *testing.T) {
 					}(),
 				},
 				id:      peerID,
-				version: version.CurrentApp,
+				version: version.Current,
 			},
 			expectedShouldDisconnect: false,
 		},
@@ -478,7 +506,7 @@ func TestShouldDisconnect(t *testing.T) {
 					}(),
 				},
 				id:                   peerID,
-				version:              version.CurrentApp,
+				version:              version.Current,
 				txIDOfVerifiedBLSKey: txID,
 			},
 			expectedPeer: &peer{
@@ -498,7 +526,7 @@ func TestShouldDisconnect(t *testing.T) {
 					}(),
 				},
 				id:                   peerID,
-				version:              version.CurrentApp,
+				version:              version.Current,
 				txIDOfVerifiedBLSKey: txID,
 			},
 			expectedShouldDisconnect: false,
@@ -522,7 +550,7 @@ func TestShouldDisconnect(t *testing.T) {
 					}(),
 				},
 				id:      peerID,
-				version: version.CurrentApp,
+				version: version.Current,
 				ip:      &SignedIP{},
 			},
 			expectedPeer: &peer{
@@ -542,7 +570,7 @@ func TestShouldDisconnect(t *testing.T) {
 					}(),
 				},
 				id:      peerID,
-				version: version.CurrentApp,
+				version: version.Current,
 				ip:      &SignedIP{},
 			},
 			expectedShouldDisconnect: true,
@@ -566,7 +594,7 @@ func TestShouldDisconnect(t *testing.T) {
 					}(),
 				},
 				id:      peerID,
-				version: version.CurrentApp,
+				version: version.Current,
 				ip: &SignedIP{
 					BLSSignature: must(blsKey.SignProofOfPossession([]byte("wrong message"))),
 				},
@@ -588,7 +616,7 @@ func TestShouldDisconnect(t *testing.T) {
 					}(),
 				},
 				id:      peerID,
-				version: version.CurrentApp,
+				version: version.Current,
 				ip: &SignedIP{
 					BLSSignature: must(blsKey.SignProofOfPossession([]byte("wrong message"))),
 				},
@@ -614,7 +642,7 @@ func TestShouldDisconnect(t *testing.T) {
 					}(),
 				},
 				id:      peerID,
-				version: version.CurrentApp,
+				version: version.Current,
 				ip: &SignedIP{
 					BLSSignature: must(blsKey.SignProofOfPossession((&UnsignedIP{}).bytes())),
 				},
@@ -636,7 +664,7 @@ func TestShouldDisconnect(t *testing.T) {
 					}(),
 				},
 				id:      peerID,
-				version: version.CurrentApp,
+				version: version.Current,
 				ip: &SignedIP{
 					BLSSignature: must(blsKey.SignProofOfPossession((&UnsignedIP{}).bytes())),
 				},
@@ -667,5 +695,5 @@ func sendAndFlush(t *testing.T, sender *testPeer, receiver *testPeer) {
 	require.NoError(t, err)
 	require.True(t, sender.Send(t.Context(), outboundGetMsg))
 	inboundGetMsg := <-receiver.inboundMsgChan
-	require.Equal(t, message.GetOp, inboundGetMsg.Op())
+	require.Equal(t, message.GetOp, inboundGetMsg.Op)
 }

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2025, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package blockdb
@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -34,6 +35,38 @@ func TestInterface(t *testing.T) {
 				return db
 			})
 		})
+	}
+}
+
+func TestSyncPersistence(t *testing.T) {
+	config := DefaultConfig().WithMaxDataFileSize(250).WithSyncToDisk(false)
+	db := newDatabase(t, config)
+	db.compressor = compression.NewNoCompressor()
+	tempDir := db.config.DataDir
+
+	// Write 4 blocks spanning 2 data files
+	blocks := make(map[uint64][]byte)
+	for h := range uint64(4) {
+		blocks[h] = fixedSizeBlock(t, 100, h)
+		require.NoError(t, db.Put(h, blocks[h]))
+	}
+
+	require.NoError(t, db.Sync(0, 3))
+	require.NoError(t, db.Close())
+
+	// Reopen and verify all data persisted across files
+	hdb, err := New(config.WithDir(tempDir).WithBlockCacheSize(0), logging.NoLog{})
+	require.NoError(t, err)
+	reopenedDB := hdb.(*Database)
+	reopenedDB.compressor = compression.NewNoCompressor()
+	t.Cleanup(func() {
+		require.NoError(t, reopenedDB.Close())
+	})
+
+	for h, expected := range blocks {
+		data, err := reopenedDB.Get(h)
+		require.NoError(t, err)
+		require.Equal(t, expected, data)
 	}
 }
 
@@ -90,7 +123,7 @@ func TestNew_Params(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db, err := New(tt.config, nil)
+			hdb, err := New(tt.config, nil)
 
 			if tt.wantErr != nil {
 				require.Equal(t, tt.wantErr.Error(), err.Error())
@@ -98,14 +131,17 @@ func TestNew_Params(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			require.NotNil(t, db)
+			require.NotNil(t, hdb)
+			db, ok := hdb.(*cacheDB)
+			require.True(t, ok)
+			config := db.db.config
 
 			// Verify the database was created with correct configuration
-			require.Equal(t, tt.config.MinimumHeight, db.config.MinimumHeight)
-			require.Equal(t, tt.config.MaxDataFileSize, db.config.MaxDataFileSize)
-			require.Equal(t, tt.config.MaxDataFiles, db.config.MaxDataFiles)
-			require.Equal(t, tt.config.CheckpointInterval, db.config.CheckpointInterval)
-			require.Equal(t, tt.config.SyncToDisk, db.config.SyncToDisk)
+			require.Equal(t, tt.config.MinimumHeight, config.MinimumHeight)
+			require.Equal(t, tt.config.MaxDataFileSize, config.MaxDataFileSize)
+			require.Equal(t, tt.config.MaxDataFiles, config.MaxDataFiles)
+			require.Equal(t, tt.config.CheckpointInterval, config.CheckpointInterval)
+			require.Equal(t, tt.config.SyncToDisk, config.SyncToDisk)
 			indexPath := filepath.Join(tt.config.IndexDir, indexFileName)
 			require.FileExists(t, indexPath)
 
@@ -263,9 +299,8 @@ func TestFileCache_Eviction(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			store, cleanup := newTestDatabase(t, tt.config.WithMaxDataFileSize(1024*1.5))
+			store := newDatabase(t, tt.config.WithMaxDataFileSize(1024*1.5))
 			store.compressor = compression.NewNoCompressor()
-			defer cleanup()
 
 			// Override the file cache with specified size
 			evictionCount := atomic.Int32{}
@@ -319,10 +354,12 @@ func TestFileCache_Eviction(t *testing.T) {
 			// Build error message if there were errors
 			var errorMsg string
 			if writeErrors.Load() > 0 {
-				errorMsg = fmt.Sprintf("concurrent writes had %d errors:\n", writeErrors.Load())
+				var b strings.Builder
+				fmt.Fprintf(&b, "concurrent writes had %d errors:\n", writeErrors.Load())
 				for _, msg := range errorMessages {
-					errorMsg += fmt.Sprintf("  %s\n", msg)
+					fmt.Fprintf(&b, "  %s\n", msg)
 				}
+				errorMsg = b.String()
 			}
 
 			// Verify no write errors and we have evictions
@@ -346,8 +383,7 @@ func TestMaxDataFiles_CacheLimit(t *testing.T) {
 		WithMaxDataFiles(2).      // Only allow 2 files in cache
 		WithMaxDataFileSize(1024) // Small file size to force multiple files
 
-	store, cleanup := newTestDatabase(t, config)
-	defer cleanup()
+	db := newDatabase(t, config)
 
 	// Create blocks that will span multiple data files
 	// Each block is ~512 bytes, so 2 blocks per file
@@ -355,12 +391,12 @@ func TestMaxDataFiles_CacheLimit(t *testing.T) {
 	// Write blocks to force multiple data files
 	for i := range numBlocks {
 		block := fixedSizeBlock(t, 512, uint64(i))
-		require.NoError(t, store.Put(uint64(i), block))
+		require.NoError(t, db.Put(uint64(i), block))
 	}
 
 	// Verify all blocks are still readable despite evictions
 	for i := range numBlocks {
-		block, err := store.Get(uint64(i))
+		block, err := db.Get(uint64(i))
 		require.NoError(t, err, "failed to read block at height %d after eviction", i)
 		require.Len(t, block, 512, "block size mismatch at height %d", i)
 	}

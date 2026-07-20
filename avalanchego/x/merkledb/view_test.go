@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2025, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package merkledb
@@ -112,7 +112,7 @@ func BenchmarkView_NewIteratorWithStartAndPrefix(b *testing.B) {
 		numKeys   = uint64(1_000_000)
 	)
 
-	rand := rand.New(rand.NewSource(time.Now().Unix())) // #nosec G404
+	rand := rand.New(rand.NewSource(time.Now().Unix()))
 
 	db, err := getBasicDB()
 	require.NoError(b, err)

@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2025, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package blockdb
@@ -197,7 +197,7 @@ type Database struct {
 // Parameters:
 //   - config: Configuration parameters
 //   - log: Logger instance for structured logging
-func New(config DatabaseConfig, log logging.Logger) (*Database, error) {
+func New(config DatabaseConfig, log logging.Logger) (database.HeightIndex, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
@@ -231,6 +231,7 @@ func New(config DatabaseConfig, log logging.Logger) (*Database, error) {
 		zap.String("dataDir", config.DataDir),
 		zap.Uint64("maxDataFileSize", config.MaxDataFileSize),
 		zap.Int("maxDataFiles", config.MaxDataFiles),
+		zap.Uint16("blockCacheSize", config.BlockCacheSize),
 	)
 
 	if err := s.openAndInitializeIndex(); err != nil {
@@ -256,6 +257,9 @@ func New(config DatabaseConfig, log logging.Logger) (*Database, error) {
 		zap.Uint64("maxBlockHeight", maxHeight),
 	)
 
+	if config.BlockCacheSize > 0 {
+		return newCacheDB(s, config.BlockCacheSize), nil
+	}
 	return s, nil
 }
 
@@ -286,9 +290,7 @@ func (s *Database) Put(height BlockHeight, block BlockData) error {
 	defer s.closeMu.RUnlock()
 
 	if s.closed {
-		s.log.Error("Failed to write block: database is closed",
-			zap.Uint64("height", height),
-		)
+		s.log.Error("Failed Put: database closed", zap.Uint64("height", height))
 		return database.ErrClosed
 	}
 
@@ -385,12 +387,6 @@ func (s *Database) Put(height BlockHeight, block BlockData) error {
 // It returns database.ErrNotFound if the block does not exist.
 func (s *Database) readBlockIndex(height BlockHeight) (indexEntry, error) {
 	var entry indexEntry
-	if s.closed {
-		s.log.Error("Failed to read block index: database is closed",
-			zap.Uint64("height", height),
-		)
-		return entry, database.ErrClosed
-	}
 
 	// Skip the index entry read if we know the block is past the max height.
 	maxHeight := s.maxBlockHeight.Load()
@@ -435,6 +431,11 @@ func (s *Database) readBlockIndex(height BlockHeight) (indexEntry, error) {
 func (s *Database) Get(height BlockHeight) (BlockData, error) {
 	s.closeMu.RLock()
 	defer s.closeMu.RUnlock()
+
+	if s.closed {
+		s.log.Error("Failed Get: database closed", zap.Uint64("height", height))
+		return nil, database.ErrClosed
+	}
 
 	indexEntry, err := s.readBlockIndex(height)
 	if err != nil {
@@ -494,6 +495,15 @@ func (s *Database) Has(height BlockHeight) (bool, error) {
 	s.closeMu.RLock()
 	defer s.closeMu.RUnlock()
 
+	if s.closed {
+		s.log.Error("Failed Has: database closed", zap.Uint64("height", height))
+		return false, database.ErrClosed
+	}
+
+	return s.hasWithoutLock(height)
+}
+
+func (s *Database) hasWithoutLock(height BlockHeight) (bool, error) {
 	_, err := s.readBlockIndex(height)
 	if err != nil {
 		if errors.Is(err, database.ErrNotFound) || errors.Is(err, ErrInvalidBlockHeight) {
@@ -506,6 +516,61 @@ func (s *Database) Has(height BlockHeight) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func (s *Database) getDataFileIndexForHeight(height BlockHeight) (int, error) {
+	entry, err := s.readBlockIndex(height)
+	if err != nil {
+		return 0, err
+	}
+	_, _, idx, err := s.getDataFileAndOffset(entry.Offset)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get data file index for height %d: %w", height, err)
+	}
+	return idx, nil
+}
+
+// Sync calls sync on all data files in the range [start, end],
+// assuming data are written in-order. If no data exists at start or end,
+// nothing is synced.
+func (s *Database) Sync(start, end uint64) error {
+	s.closeMu.RLock()
+	defer s.closeMu.RUnlock()
+
+	if s.closed {
+		s.log.Error("Failed Sync: database closed",
+			zap.Uint64("start", start),
+			zap.Uint64("end", end),
+		)
+		return database.ErrClosed
+	}
+
+	firstIdx, err := s.getDataFileIndexForHeight(start)
+	if err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+	lastIdx, err := s.getDataFileIndexForHeight(end)
+	if err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+
+	for idx := firstIdx; idx <= lastIdx; idx++ {
+		f, err := s.getOrOpenDataFile(idx)
+		if err != nil {
+			return fmt.Errorf("failed to open data file %d: %w", idx, err)
+		}
+		if err := f.Sync(); err != nil {
+			return fmt.Errorf("failed to sync data file %d: %w", idx, err)
+		}
+	}
+
+	return nil
 }
 
 func (s *Database) indexEntryOffset(height BlockHeight) (uint64, error) {

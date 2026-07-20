@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2025, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package bootstrap
@@ -75,7 +75,7 @@ func newConfig(t *testing.T) (Config, ids.NodeID, *enginetest.Sender, *blocktest
 	startupTracker := tracker.NewStartup(tracker.NewPeers(), startupWeight)
 	vdrs.RegisterSetCallbackListener(ctx.SubnetID, startupTracker)
 
-	require.NoError(startupTracker.Connected(t.Context(), peer, version.CurrentApp))
+	require.NoError(startupTracker.Connected(t.Context(), peer, version.Current))
 
 	snowGetHandler, err := getter.New(vm, sender, ctx.Log, time.Second, 2000, ctx.Registerer)
 	require.NoError(err)
@@ -89,7 +89,7 @@ func newConfig(t *testing.T) (Config, ids.NodeID, *enginetest.Sender, *blocktest
 	)
 	require.NoError(err)
 
-	peerTracker.Connected(peer, version.CurrentApp)
+	peerTracker.Connected(peer, version.Current)
 
 	var halter common.Halter
 
@@ -199,8 +199,8 @@ func TestBootstrapperStartsOnlyIfEnoughStakeIsConnected(t *testing.T) {
 	vdr0 := ids.GenerateTestNodeID()
 	require.NoError(peers.AddStaker(ctx.SubnetID, vdr0, nil, ids.Empty, startupAlpha/2))
 
-	peerTracker.Connected(vdr0, version.CurrentApp)
-	require.NoError(bs.Connected(t.Context(), vdr0, version.CurrentApp))
+	peerTracker.Connected(vdr0, version.Current)
+	require.NoError(bs.Connected(t.Context(), vdr0, version.Current))
 
 	require.NoError(bs.Start(t.Context(), 0))
 	require.False(frontierRequested)
@@ -209,8 +209,8 @@ func TestBootstrapperStartsOnlyIfEnoughStakeIsConnected(t *testing.T) {
 	vdr := ids.GenerateTestNodeID()
 	require.NoError(peers.AddStaker(ctx.SubnetID, vdr, nil, ids.Empty, startupAlpha))
 
-	peerTracker.Connected(vdr, version.CurrentApp)
-	require.NoError(bs.Connected(t.Context(), vdr, version.CurrentApp))
+	peerTracker.Connected(vdr, version.Current)
+	require.NoError(bs.Connected(t.Context(), vdr, version.Current))
 	require.True(frontierRequested)
 }
 
@@ -379,7 +379,7 @@ func TestBootstrapperEmptyResponse(t *testing.T) {
 
 	// Add another peer to allow a new node to be selected. A new node should be
 	// sampled if the prior response was empty.
-	bs.PeerTracker.Connected(ids.GenerateTestNodeID(), version.CurrentApp)
+	bs.PeerTracker.Connected(ids.GenerateTestNodeID(), version.Current)
 
 	require.NoError(bs.Ancestors(t.Context(), requestedNodeID, requestID, nil)) // respond with empty
 	require.NotEqual(requestedNodeID, peerID)
@@ -654,7 +654,7 @@ func TestBootstrapNoParseOnNew(t *testing.T) {
 	startupWeight := new(big.Int).Add(new(big.Int).Div(totalWeight, big.NewInt(2)), big.NewInt(1))
 	startupTracker := tracker.NewStartup(tracker.NewPeers(), startupWeight)
 	peers.RegisterSetCallbackListener(ctx.SubnetID, startupTracker)
-	require.NoError(startupTracker.Connected(t.Context(), peer, version.CurrentApp))
+	require.NoError(startupTracker.Connected(t.Context(), peer, version.Current))
 
 	snowGetHandler, err := getter.New(vm, sender, ctx.Log, time.Second, 2000, ctx.Registerer)
 	require.NoError(err)
@@ -683,7 +683,7 @@ func TestBootstrapNoParseOnNew(t *testing.T) {
 	)
 	require.NoError(err)
 
-	peerTracker.Connected(peer, version.CurrentApp)
+	peerTracker.Connected(peer, version.Current)
 
 	config := Config{
 		Haltable:                       &common.Halter{},

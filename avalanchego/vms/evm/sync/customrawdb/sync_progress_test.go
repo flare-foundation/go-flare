@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2025, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package customrawdb
@@ -185,7 +185,7 @@ func TestSyncPerformedAndLatest(t *testing.T) {
 	require.NoError(t, WriteSyncPerformed(db, 15))
 
 	// Iterator yields all
-	vals := mapIterator(t, NewSyncPerformedIterator(db), parseSyncPerformedKey)
+	vals := mapIterator(t, newSyncPerformedIterator(db), parseSyncPerformedKey)
 
 	require.Equal(t, []uint64{10, 15, 20}, vals)
 

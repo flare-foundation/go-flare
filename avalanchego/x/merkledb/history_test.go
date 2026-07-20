@@ -1,4 +1,4 @@
-// Copyright (C) 2019-2025, Ava Labs, Inc. All rights reserved.
+// Copyright (C) 2019, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
 package merkledb
@@ -12,9 +12,9 @@ import (
 
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/database/memdb"
+	"github.com/ava-labs/avalanchego/database/merkle/sync"
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/maybe"
-	"github.com/ava-labs/avalanchego/x/sync"
 )
 
 func Test_History_Simple(t *testing.T) {
@@ -102,7 +102,7 @@ func Test_History_Large(t *testing.T) {
 
 		now := time.Now().UnixNano()
 		t.Logf("seed for iter %d: %d", i, now)
-		r := rand.New(rand.NewSource(now)) // #nosec G404
+		r := rand.New(rand.NewSource(now))
 		// make sure they stay in sync
 		for x := 0; x < numIters; x++ {
 			batch := db.NewBatch()
