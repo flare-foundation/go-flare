@@ -1,4 +1,4 @@
-FROM golang:1.25.8-trixie@sha256:feb29f1d571353e52350efceeabc6a3f6769c249a97d53cbeececc2ec3f7c202 AS build
+FROM golang:1.25.11-trixie@sha256:56a4d6ead4365cd569ca388003bdce672e7ca7286513f96b44b03d3b5e79d26f AS build
 
 WORKDIR /app/
 

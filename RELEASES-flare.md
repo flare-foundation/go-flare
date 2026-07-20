@@ -11,7 +11,7 @@ The upgrade is optional but encouraged. It is backwards compatible with v1.14.0 
 ### Note:
 
  * Coreth and Subnet-EVM are now grafted into the AvalancheGo tree — there is no separate `coreth` module anymore. Go import paths change from `github.com/ava-labs/coreth/...` to `github.com/ava-labs/avalanchego/graft/coreth/...`, which affects downstream tools that import Coreth packages.
- * Building from source now requires Go 1.25.8 or later.
+ * Building from source now requires Go 1.25.11 or later.
 
 ## v1.14.0
 
