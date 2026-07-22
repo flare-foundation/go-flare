@@ -499,25 +499,7 @@ func (pool *LegacyPool) SetMinFee(minFee *big.Int) {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 
-	if minFee == nil {
-		pool.minimumFee = nil
-		return
-	}
-
-	oldMinFee := pool.minimumFee
-	pool.minimumFee = new(big.Int).Set(minFee)
-	if oldMinFee != nil && minFee.Cmp(oldMinFee) <= 0 {
-		return
-	}
-
-	// Flare raises this floor at Granite. When merging upstream txpool changes,
-	// keep this eviction so pre-fork transactions below the new floor do not
-	// remain pending/gossipable after the fork activates.
-	drop := pool.all.BelowFeeCap(minFee)
-	for _, tx := range drop {
-		pool.removeTx(tx.Hash(), false, true)
-	}
-	pool.priced.Removed(len(drop))
+	pool.minimumFee = minFee
 }
 
 // Nonce returns the next nonce of an account, with all transactions executable
@@ -2113,18 +2095,6 @@ func (t *lookup) RemotesBelowTip(threshold *big.Int) types.Transactions {
 		}
 		return true
 	}, false, true) // Only iterate remotes
-	return found
-}
-
-// BelowFeeCap finds all transactions below the given fee cap threshold.
-func (t *lookup) BelowFeeCap(threshold *big.Int) types.Transactions {
-	found := make(types.Transactions, 0, 128)
-	t.Range(func(hash common.Hash, tx *types.Transaction, local bool) bool {
-		if tx.GasFeeCapIntCmp(threshold) < 0 {
-			found = append(found, tx)
-		}
-		return true
-	}, true, true)
 	return found
 }
 

@@ -2,9 +2,10 @@
 // See the file LICENSE for licensing terms.
 
 // Package granite defines the ACP-176 parameter set used on Flare-family
-// chains after the Granite upgrade. Values not yet finalized may be tuned
-// based on simulation; the constants here are the per-fork knobs and should
-// be the only place that ACP-176 parameters are tweaked for Granite.
+// chains after the Granite upgrade. These values are live consensus
+// parameters on all Flare-family networks; changing them requires a
+// coordinated network upgrade. This is the only place that ACP-176
+// parameters are defined for Granite.
 package granite
 
 import (

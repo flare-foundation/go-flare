@@ -20,6 +20,7 @@ import (
 	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
 	"github.com/ava-labs/avalanchego/utils/logging"
+	"github.com/ava-labs/avalanchego/utils/logging/loggingtest"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 	"github.com/ava-labs/avalanchego/vms/avm/fxs"
 	"github.com/ava-labs/avalanchego/vms/avm/state"
@@ -38,7 +39,7 @@ func TestSemanticVerifierBaseTx(t *testing.T) {
 	parser, err := txs.NewCustomParser(
 		typeToFxIndex,
 		new(mockable.Clock),
-		logging.NoWarn{},
+		loggingtest.New(t, logging.Warn),
 		[]fxs.Fx{
 			secpFx,
 		},
@@ -397,7 +398,7 @@ func TestSemanticVerifierExportTx(t *testing.T) {
 	parser, err := txs.NewCustomParser(
 		typeToFxIndex,
 		new(mockable.Clock),
-		logging.NoWarn{},
+		loggingtest.New(t, logging.Warn),
 		[]fxs.Fx{
 			secpFx,
 		},
@@ -767,7 +768,7 @@ func TestSemanticVerifierExportTxDifferentSubnet(t *testing.T) {
 	parser, err := txs.NewCustomParser(
 		typeToFxIndex,
 		new(mockable.Clock),
-		logging.NoWarn{},
+		loggingtest.New(t, logging.Warn),
 		[]fxs.Fx{
 			secpFx,
 		},
@@ -883,7 +884,7 @@ func TestSemanticVerifierImportTx(t *testing.T) {
 	parser, err := txs.NewCustomParser(
 		typeToFxIndex,
 		new(mockable.Clock),
-		logging.NoWarn{},
+		loggingtest.New(t, logging.Warn),
 		[]fxs.Fx{
 			fx,
 		},

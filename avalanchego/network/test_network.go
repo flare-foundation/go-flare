@@ -175,7 +175,7 @@ func NewTestNetworkConfig(
 		TrackedSubnets:               trackedSubnets,
 		Beacons:                      validators.NewManager(),
 		Validators:                   currentValidators,
-		UptimeCalculator:             uptime.NoOpCalculator,
+		UptimeCalculator:             uptime.TestCalculator{},
 		UptimeMetricFreq:             constants.DefaultUptimeMetricFreq,
 		RequireValidatorToConnect:    constants.DefaultNetworkRequireValidatorToConnect,
 		MaximumInboundMessageTimeout: constants.DefaultNetworkMaximumInboundTimeout,
@@ -222,7 +222,7 @@ func NewTestNetwork(
 
 	return NewNetwork(
 		cfg,
-		upgrade.GetConfig(cfg.NetworkID).GraniteTime, // Must be updated for each network upgrade
+		upgrade.GetConfig(cfg.NetworkID).HeliconTime, // Must be updated for each network upgrade
 		msgCreator,
 		metrics,
 		log,

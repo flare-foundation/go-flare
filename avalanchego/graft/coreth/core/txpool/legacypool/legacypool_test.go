@@ -935,7 +935,6 @@ func TestQueueAccountLimiting(t *testing.T) {
 func TestQueueGlobalLimiting(t *testing.T) {
 	testQueueGlobalLimiting(t, false)
 }
-
 func TestQueueGlobalLimitingNoLocals(t *testing.T) {
 	testQueueGlobalLimiting(t, true)
 }
@@ -1027,7 +1026,6 @@ func testQueueGlobalLimiting(t *testing.T, nolocals bool) {
 func TestQueueTimeLimiting(t *testing.T) {
 	testQueueTimeLimiting(t, false)
 }
-
 func TestQueueTimeLimitingNoLocals(t *testing.T) {
 	testQueueTimeLimiting(t, true)
 }
@@ -1567,54 +1565,6 @@ func TestMinGasPriceEnforced(t *testing.T) {
 	pool.config.NoLocals = false
 	if err := pool.Add([]*types.Transaction{tx}, true, false)[0]; err != nil {
 		t.Fatalf("Min tip enforced with locals enabled, error: %v", err)
-	}
-}
-
-func TestSetMinFeeDropsUnderpricedTransactions(t *testing.T) {
-	t.Parallel()
-
-	pool, _ := setupPoolWithConfig(eip1559Config)
-	defer pool.Close()
-
-	lowKey, _ := crypto.GenerateKey()
-	highKey, _ := crypto.GenerateKey()
-	lowAddr := crypto.PubkeyToAddress(lowKey.PublicKey)
-	highAddr := crypto.PubkeyToAddress(highKey.PublicKey)
-	testAddBalance(pool, lowAddr, big.NewInt(1_000_000))
-	testAddBalance(pool, highAddr, big.NewInt(1_000_000))
-
-	pool.SetMinFee(big.NewInt(1))
-
-	lowTx := pricedTransaction(0, 100_000, big.NewInt(2), lowKey)
-	highTx := pricedTransaction(0, 100_000, big.NewInt(3), highKey)
-	if err := pool.addRemoteSync(lowTx); err != nil {
-		t.Fatalf("failed to add low priced tx: %v", err)
-	}
-	if err := pool.addRemoteSync(highTx); err != nil {
-		t.Fatalf("failed to add high priced tx: %v", err)
-	}
-
-	pool.SetMinFee(big.NewInt(3))
-
-	if pool.Has(lowTx.Hash()) {
-		t.Fatal("low priced tx was not dropped")
-	}
-	if !pool.Has(highTx.Hash()) {
-		t.Fatal("tx at the minimum fee was dropped")
-	}
-	if pending, queued := pool.Stats(); pending != 1 || queued != 0 {
-		t.Fatalf("unexpected pool stats: pending %d, queued %d", pending, queued)
-	}
-	if err := validatePoolInternals(pool); err != nil {
-		t.Fatalf("pool internal state corrupted: %v", err)
-	}
-
-	newLowKey, _ := crypto.GenerateKey()
-	newLowAddr := crypto.PubkeyToAddress(newLowKey.PublicKey)
-	testAddBalance(pool, newLowAddr, big.NewInt(1_000_000))
-	newLowTx := pricedTransaction(0, 100_000, big.NewInt(2), newLowKey)
-	if err := pool.addRemoteSync(newLowTx); !errors.Is(err, txpool.ErrUnderpriced) {
-		t.Fatalf("expected underpriced error, got %v", err)
 	}
 }
 

@@ -155,6 +155,7 @@ In avalanchego:
 - `upgrade/upgrade.go` - Flare-specific fork times
 - `vms/evm/acp176/acp176.go` - Keep the extended `Params` struct (with `TimeToFillCapacity`, `TargetToMax`, `TargetToPriceUpdateConversion`) and the `*With` methods reading from `p.*` instead of package constants
 - `scripts/git_commit.sh` - Flare patch: derives the build commit via `git -C "${AVALANCHE_PATH}"` discovery instead of upstream's hardcoded `--git-dir="${AVALANCHE_PATH}/.git"`. avalanchego is nested in the go-flare repo (the `.git` is at the repo root; there is no `avalanchego/.git`), so the upstream form makes `build.sh` fail with "not a git repository".
+- `vms/saevm/cchain/` - SAE VM (new upstream in 1.15.0) Flare adaptations: Fuji→Costwo substitutions (`vm.go` `extDataHashes`, `genesis_test.go`, `vm_test.go`; `config_test.go` uses `FlareID` for the production-network commit-interval check), `warp/warptest` big.Int `TotalWeight`, and `genesis_test.go` — Costwo/local `want` configs + pinned genesis hashes (the Coston2 hash `0xc47d9c5d…` matches the live network) and an inlined upstream local-genesis fixture (`upstreamLocalGenesisJSON`) for the fork-dependent tests, because the Flare local genesis timestamp is 0 and predates every upgradetest schedule
 - Any file with "Flare", "Songbird", "Coston" specific code
 
 In coreth (`graft/coreth/`):
@@ -175,7 +176,7 @@ In coreth (`graft/coreth/`):
 - `graft/coreth/plugin/evm/upgrade/granite/params.go` - Flare-family ACP-176 parameter set; keep all seven fields in `DefaultParams`
 - `graft/coreth/plugin/evm/customheader/gas_limit.go` - Songbird gas-limit schedule between AP1 and Cortina; `MinimumBuildableGasCapacity`
 - `graft/coreth/miner/worker.go` - Keep the `w.config.WaitForGasCapacityRefill &&` guard in front of the `IsFortuna` capacity-wait block. The flag defaults to `true` following AvalancheGo upstream, and operators can set it `false` to build regardless of bucket state. The wait threshold is computed by `customheader.MinimumBuildableGasCapacity` (`min(4*target, 12M)`), not inline, so `worker.go` no longer imports `acp176`/`cortina`
-- `graft/evm/sync/client/client.go` - `StateSyncVersionSgb` minimum version for Songbird state sync (lives in the `graft/evm` module)
+- `graft/evm/sync/client/client.go` - (Reverted to upstream) `StateSyncVersionSgb` was removed with the v1.15.0 merge: upstream dropped version-gated state-sync peer selection entirely (`p2p.PeerTracker` is constructed with a nil minimum version, `SendSyncedAppRequestAny` no longer takes one), so no peer is excluded and the Songbird override is moot. Do not re-apply on merge.
 
 ### Common Import Path Changes
 

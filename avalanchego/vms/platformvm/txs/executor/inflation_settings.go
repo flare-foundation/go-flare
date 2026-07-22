@@ -251,13 +251,20 @@ func getLocalInflationSettings(currentTimestamp time.Time, config *config.Intern
 	}
 }
 
-func getDefaultInflationSettings(_ time.Time, config *config.Internal) InflationSettings {
+func getDefaultInflationSettings(currentTimestamp time.Time, config *config.Internal) InflationSettings {
+	// Post-Helicon, upstream lowers the primary network validator minimum
+	// stake duration to [config.HeliconMinStakeDuration]. Delegators keep
+	// [config.MinStakeDuration].
+	minStakeDuration := config.MinStakeDuration
+	if config.UpgradeConfig.IsHeliconActivated(currentTimestamp) {
+		minStakeDuration = config.HeliconMinStakeDuration
+	}
 	return InflationSettings{
 		MinValidatorStake:        config.MinValidatorStake,
 		MaxValidatorStake:        config.MaxValidatorStake,
 		MinDelegatorStake:        config.MinDelegatorStake,
 		MinDelegationFee:         config.MinDelegationFee,
-		MinStakeDuration:         config.MinStakeDuration,
+		MinStakeDuration:         minStakeDuration,
 		MinDelegateDuration:      config.MinStakeDuration,
 		MaxStakeDuration:         config.MaxStakeDuration,
 		MinFutureStartTimeOffset: MaxFutureStartTime,

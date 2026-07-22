@@ -66,6 +66,7 @@ var (
 	//  FortunaTime :              UnscheduledActivationTime,
 	// 	GraniteTime:               time.Date(2025, time.October, 29, 15, 0, 0, 0, time.UTC),
 	// 	GraniteEpochDuration:      5 * time.Minute,
+	//  HeliconTime:               time.Date(2026, time.July, 28, 15, 0, 0, 0, time.UTC),
 	// }
 	Flare = Config{
 		ApricotPhase1Time:     ZeroTime,
