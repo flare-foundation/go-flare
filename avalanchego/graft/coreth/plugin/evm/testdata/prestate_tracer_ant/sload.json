@@ -56,12 +56,18 @@
   },
   "result": {
     "post": {
+      "0xd049bfd667cb46aa3ef5df0da3e57db3be39e511": {
+        "balance": "0x231b6c08a01600"
+      },
       "0xe296f389f90f3cf5edefb63690eb7a6257b69203": {
         "balance": "0xcf3bd7819714fea00",
         "nonce": 1
       }
     },
     "pre": {
+      "0xd049bfd667cb46aa3ef5df0da3e57db3be39e511": {
+        "balance": "0x0"
+      },
       "0xe296f389f90f3cf5edefb63690eb7a6257b69203": {
         "balance": "0xcf3e0938579f00000"
       }

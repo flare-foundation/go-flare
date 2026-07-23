@@ -16,9 +16,12 @@ var (
 		AddValues([]*big.Int{params.SongbirdChainID, params.CostonChainID, params.LocalChainID}, stateTransitionParamsSongbird)
 )
 
-// Used in tests
+// Chain IDs outside the Flare/Songbird families occur only in tests. Fees are
+// credited to the coinbase, matching upstream coreth exactly, so that
+// upstream-generated chain fixtures (e.g. plugin/evm/upgradechaintest) and
+// replaying VMs reproduce the same state.
 func nonFlareChain(st *StateTransition) (common.Address, uint64, bool, bool, error) {
-	return common.HexToAddress("0x000000000000000000000000000000000000dEaD"),
+	return st.evm.Context.Coinbase,
 		uint64(ap4.MinBaseFee),
 		false,
 		false,

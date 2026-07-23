@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/ava-labs/libevm/libevm/options"
 	"github.com/stretchr/testify/require"
 
 	// Imported for [snowtest.Context] comment resolution.
@@ -33,32 +34,64 @@ type Validators struct {
 	signers    map[string]bls.Signer // pk bytes -> signer
 }
 
-// NewValidators creates n validators, each with weight 1, a fresh NodeID, and
-// a freshly generated BLS key.
-func NewValidators(tb testing.TB, n int) *Validators {
-	tb.Helper()
+// Option configures the validator set built by [NewValidators].
+type Option = options.Option[config]
 
-	nodeIDs := make([]ids.NodeID, n)
-	for i := range nodeIDs {
-		nodeIDs[i] = ids.GenerateTestNodeID()
-	}
-	return NewValidatorsWithNodeIDs(tb, nodeIDs...)
+type config struct {
+	n       int
+	nodeIDs []ids.NodeID
+	signers []bls.Signer
 }
 
-// NewValidatorsWithNodeIDs creates one validator per nodeID, each with weight
-// 1 and a freshly generated BLS key.
-func NewValidatorsWithNodeIDs(tb testing.TB, nodeIDs ...ids.NodeID) *Validators {
+// WithCount sets a lower bound on the number of validators. The set grows
+// beyond n when more NodeIDs or signers are supplied.
+func WithCount(n int) Option {
+	return options.Func[config](func(c *config) {
+		c.n = n
+	})
+}
+
+// WithNodeIDs assigns nodeIDs to the validators. Validators without an assigned
+// NodeID get a freshly generated one.
+func WithNodeIDs(nodeIDs ...ids.NodeID) Option {
+	return options.Func[config](func(c *config) {
+		c.nodeIDs = nodeIDs
+	})
+}
+
+// WithSigners assigns BLS signers to the validators. Validators without an
+// assigned signer get a freshly generated key.
+func WithSigners(signers ...bls.Signer) Option {
+	return options.Func[config](func(c *config) {
+		c.signers = signers
+	})
+}
+
+// NewValidators creates a BLS warp validator set, each validator with weight 1.
+// The number of validators is the largest of the count set by [WithCount], the
+// number of NodeIDs, and the number of signers. Any unspecified NodeIDs and
+// signers are freshly generated.
+func NewValidators(tb testing.TB, opts ...Option) *Validators {
 	tb.Helper()
 
-	var (
-		vdrs    = make([]*validators.Warp, len(nodeIDs))
-		signers = make(map[string]bls.Signer, len(nodeIDs))
-	)
-	for i, nodeID := range nodeIDs {
+	c := options.As[config](opts...)
+	n := max(c.n, len(c.nodeIDs), len(c.signers))
+	for len(c.nodeIDs) < n {
+		c.nodeIDs = append(c.nodeIDs, ids.GenerateTestNodeID())
+	}
+	for len(c.signers) < n {
 		sk, err := localsigner.New()
 		require.NoError(tb, err, "localsigner.New()")
+		c.signers = append(c.signers, sk)
+	}
 
-		pk := sk.PublicKey()
+	var (
+		vdrs    = make([]*validators.Warp, n)
+		signers = make(map[string]bls.Signer, n)
+	)
+	for i, nodeID := range c.nodeIDs {
+		signer := c.signers[i]
+		pk := signer.PublicKey()
 		pkBytes := bls.PublicKeyToUncompressedBytes(pk)
 		vdrs[i] = &validators.Warp{
 			PublicKey:      pk,
@@ -66,12 +99,25 @@ func NewValidatorsWithNodeIDs(tb testing.TB, nodeIDs ...ids.NodeID) *Validators 
 			Weight:         1,
 			NodeIDs:        []ids.NodeID{nodeID},
 		}
-		signers[string(pkBytes)] = sk
+		signers[string(pkBytes)] = signer
 	}
 	utils.Sort(vdrs)
 	return &Validators{
 		validators: vdrs,
 		signers:    signers,
+	}
+}
+
+// WarpSet returns the set as a [validators.WarpSet] whose TotalWeight is the
+// sum of every validator's weight.
+func (v *Validators) WarpSet() validators.WarpSet {
+	totalWeight := big.NewInt(0)
+	for _, vdr := range v.validators {
+		totalWeight.Add(totalWeight, new(big.Int).SetUint64(vdr.Weight))
+	}
+	return validators.WarpSet{
+		Validators:  v.validators,
+		TotalWeight: totalWeight,
 	}
 }
 

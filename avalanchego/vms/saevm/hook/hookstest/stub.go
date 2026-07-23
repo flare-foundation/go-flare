@@ -37,6 +37,7 @@ type Stub struct {
 	Ops                     []Op
 	ExecutionResultsDBFn    func(string) (saetypes.ExecutionResults, error)
 	CanExecuteTransactionFn func(common.Address, *common.Address, libevm.StateReader) error
+	BeforeExecutingBlockFn  func(params.Rules, *state.StateDB, *types.Header, *types.Block) error
 	GasPriceConfig          gastime.GasPriceConfig
 }
 
@@ -241,13 +242,12 @@ func (s *Stub) CanExecuteTransaction(from common.Address, to *common.Address, sr
 	return nil
 }
 
-// BeforeExecutingBlock is a no-op that always returns nil.
-func (*Stub) BeforeExecutingBlock(params.Rules, *state.StateDB, *types.Header, *types.Block) error {
-	return nil
-}
-
-// AfterExecutingTransaction is a no-op that always returns nil.
-func (*Stub) AfterExecutingTransaction(*state.StateDB, uint256.Int, *types.Receipt) error {
+// BeforeExecutingBlock proxies to [Stub.BeforeExecutingBlockFn] if non-nil,
+// otherwise it is a no-op.
+func (s *Stub) BeforeExecutingBlock(rules params.Rules, sdb *state.StateDB, parent *types.Header, b *types.Block) error {
+	if fn := s.BeforeExecutingBlockFn; fn != nil {
+		return fn(rules, sdb, parent, b)
+	}
 	return nil
 }
 

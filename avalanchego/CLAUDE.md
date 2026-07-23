@@ -1,9 +1,9 @@
 # Avalanchego (Flare Fork)
 
 Fork of [ava-labs/avalanchego](https://github.com/ava-labs/avalanchego) with Flare and Songbird network support.
-Module: `github.com/ava-labs/avalanchego` | Go 1.25.8 (see `go.mod` toolchain).
+Module: `github.com/ava-labs/avalanchego` | Go 1.25.10 (see `go.mod` toolchain).
 
-**Upstream version:** Pinned to avalanchego **v1.14.3-rc.2** (branch `flare-merge-1_14_3`) — this is **not** the latest upstream release. Newer upstream tags exist; do not assume features/APIs from later versions are present here.
+**Upstream version:** Pinned to avalanchego **v1.15.0-fuji** (branch `flare-merge-1_15_0`) — this is **not** necessarily the latest upstream release. Newer upstream tags may exist; do not assume features/APIs from later versions are present here.
 
 **Coreth is grafted into this repo.** Since v1.14.x upstream, coreth lives at `graft/coreth` (module `github.com/ava-labs/avalanchego/graft/coreth`), alongside `graft/evm` (shared EVM/sync code) and `graft/subnet-evm`. All are wired via `replace` directives in the root `go.mod` plus the `go.work` workspace, and are compiled directly into the `avalanchego` binary. There is no separate `evm` plugin binary and the build no longer copies anything into `GOPATH`.
 
@@ -30,7 +30,7 @@ GOWORK=off go mod tidy                          # repo root
 go work sync
 ```
 
-**libevm pinning:** the root `go.mod` and all graft modules must require the **same** `github.com/ava-labs/libevm` version (currently `v1.13.15-0.20260430210457-c891ff86e981`). The workspace selects the highest requirement; a newer pseudo-version in any module silently downgrades/upgrades everyone and breaks the ava-labs ABI helpers (`PackOutput`, `UnpackInputIntoInterface`, `PackEvent`).
+**libevm pinning:** the root `go.mod` and all graft modules must require the **same** `github.com/ava-labs/libevm` version (currently `v1.13.15-0.20260721184559-5557c68d296b`). The workspace selects the highest requirement; a newer pseudo-version in any module silently downgrades/upgrades everyone and breaks the ava-labs ABI helpers (`PackOutput`, `UnpackInputIntoInterface`, `PackEvent`).
 
 **Protobuf:** generated code lives in `proto/pb`. Regenerate with `scripts/protobuf_codegen.sh` (pins buf 1.59.0, protoc-gen-go v1.36.10, protoc-gen-go-grpc 1.5.1), or `buf generate --path <dir>` from `proto/` with matching plugin versions.
 
@@ -100,6 +100,7 @@ Coreth implements the C-Chain EVM for Flare/Songbird (module `github.com/ava-lab
 - **Prioritized contracts (fee refund)** — the FTSO contract `0x1000000000000000000000000000000000000003` and the submitter contract get gas fees refunded to the caller. Gas cap: 3,000,000 on Flare/Costwo/LocalFlare; unlimited on Songbird/Coston/Local. Activation times and data prefixes are network-specific (see `graft/coreth/core/daemon.go`).
 - **State Connector** (`graft/coreth/core/state_connector.go`) — Merkle attestation protocol; per-network contract addresses, activated at per-chain timestamps.
 - **Governance** (`graft/coreth/core/governance_settings.go`) — updates the governance address/timelock and the airdrop/distribution contracts on Flare and Costwo, using the coinbase value as a signal.
+- **Fee burn variants** (`graft/coreth/core/state_transition_params.go`) — `stateTransitionVariants` maps the chain ID to (burn address, nominal gas price, isFlare, isSongbird): Flare-family chains burn tx fees to `0x…dEaD`; Songbird-family chains credit the coinbase, which must be `0x0100…00`. The **default** variant (any other chain ID — tests only; every production network's chain ID is registered) credits fees to the **coinbase, matching upstream coreth exactly**. This keeps upstream-generated test fixtures reproducible: `plugin/evm/upgradechaintest`'s fixture regenerates byte-identical to upstream except the extra `upgrades.songbirdTransitionTime` field, and `internal/ethapi` + `plugin/evm/testdata/prestate_tracer_ant` testdata are verbatim upstream. **Do not change the default variant back to a dEaD burn** — it desynchronizes the fixture from the SAE VM's pre-SAE replay (upstream semantics), breaking `TestPreSAEIntermediateRootsRPC` and friends.
 
 **Accessing extras in coreth code:** `rulesExtra := params.GetRulesExtra(rules)` (Avalanche/Flare rules) and `configExtra := params.GetExtra(chainConfig)` (chain-config extras). `RulesExtra.IsSongbirdCode` / `extras.IsFlareFamilyCode` branch on network.
 
@@ -115,7 +116,7 @@ Coreth implements the C-Chain EVM for Flare/Songbird (module `github.com/ava-lab
 
 This documents merging newer **ava-labs/avalanchego** upstream releases into this fork. The merge is performed in this avalanchego tree; since v1.14.x coreth is part of the avalanchego repository (`graft/coreth`), a single upstream merge brings the avalanchego **and** coreth changes — there is no longer a separate coreth merge.
 
-### Architecture Overview (as of v1.14.3-rc.2; coreth grafted at `graft/coreth`)
+### Architecture Overview (as of v1.15.0-fuji; coreth grafted at `graft/coreth`)
 
 Coreth (`graft/coreth`), the shared EVM/sync code (`graft/evm`), and `graft/subnet-evm` are in-tree Go modules wired to the root avalanchego module via `replace` directives in `go.mod` and the `go.work` workspace. They compile directly into the single `avalanchego` binary (no separate `evm` plugin binary, no GOPATH copy).
 
@@ -158,6 +159,7 @@ In avalanchego:
 - `vms/evm/acp176/acp176.go` - Keep the extended `Params` struct (with `TimeToFillCapacity`, `TargetToMax`, `TargetToPriceUpdateConversion`) and the `*With` methods reading from `p.*` instead of package constants
 - `scripts/git_commit.sh` - Flare patch: derives the build commit via `git -C "${AVALANCHE_PATH}"` discovery instead of upstream's hardcoded `--git-dir="${AVALANCHE_PATH}/.git"`. avalanchego is nested in the go-flare repo (the `.git` is at the repo root; there is no `avalanchego/.git`), so the upstream form makes `build.sh` fail with "not a git repository".
 - `vms/saevm/cchain/` - SAE VM (new upstream in 1.15.0) Flare adaptations: Fuji→Costwo substitutions (`vm.go` `extDataHashes`, `genesis_test.go`, `vm_test.go`; `config_test.go` uses `FlareID` for the production-network commit-interval check), `warp/warptest` big.Int `TotalWeight`, and `genesis_test.go` — Costwo/local `want` configs + pinned genesis hashes (the Coston2 hash `0xc47d9c5d…` matches the live network) and an inlined upstream local-genesis fixture (`upstreamLocalGenesisJSON`) for the fork-dependent tests, because the Flare local genesis timestamp is 0 and predates every upgradetest schedule
+- **Known gap:** the SAE VM's pre-SAE replay path (tracing/`debug_intermediateRoots` over historical synchronous blocks) reproduces **upstream** coreth semantics only. Flare-specific execution — dEaD fee burn on Flare-family chain IDs, daemon minting, prioritized-contract fee refunds, state connector — is **not** replayed. Before the SAE VM can serve real Flare/Songbird C-Chain history (Helicon), the replay needs a deliberate Flare adaptation.
 - Any file with "Flare", "Songbird", "Coston" specific code
 
 In coreth (`graft/coreth/`):
@@ -165,6 +167,7 @@ In coreth (`graft/coreth/`):
 - `graft/coreth/core/daemon_call.go` - `DaemonCall` helper (snapshot + tracer-disabled `evm.Call`); replaces the method formerly added in the Flare libevm fork
 - `graft/coreth/core/daemon_test.go` - Tests for daemon logic
 - `graft/coreth/core/state_transition.go` - Integrates daemon/governance/state-connector; fee refunds for prioritized contracts
+- `graft/coreth/core/state_transition_params.go` - Chain-ID→fee-variant map (see "Fee burn variants" above). The default (non-Flare chain IDs) must keep crediting the coinbase like upstream
 - `graft/coreth/core/governance_settings.go` - Governance address/timelock, airdrop and distribution contract management
 - `graft/coreth/core/state_connector.go` - State Connector attestation protocol
 - `graft/coreth/params/config.go` - Flare/Songbird chain IDs, `TestFlareChainConfig`
@@ -218,3 +221,5 @@ In coreth (`graft/coreth/`):
 - **Network binding tests:** Tests requiring `listen tcp 127.0.0.1:0` will fail in sandboxed environments. This is not a code issue.
 
 - **`TestCheckCompatible`:** May fail due to error message changes. Update test expectations if the logic is correct.
+
+- **`TestFixtureUpToDate` flake:** `graft/coreth/plugin/evm/upgradechaintest` can fail with `transaction type not supported: type 1 rejected, pool not yet in Berlin` when the whole suite runs under heavy CPU contention — the txpool's head reset is asynchronous and can lag the generator (upstream design, not a Flare issue). It passes reliably in isolation (`go test ./plugin/evm/upgradechaintest -count=3`).

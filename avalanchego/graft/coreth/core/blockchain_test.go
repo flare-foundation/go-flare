@@ -1400,7 +1400,7 @@ func TestEIP3651(t *testing.T) {
 	// Note this differs from go-ethereum where the miner receives the gasUsed * block baseFee,
 	// as our handling of the coinbase payment is different.
 	// Note we use block.GasUsed() here as there is only one tx.
-	actual := state.GetBalance(common.HexToAddress("0x000000000000000000000000000000000000dEaD")).ToBig()
+	actual := state.GetBalance(block.Coinbase()).ToBig()
 	tx := block.Transactions()[0]
 	gasPrice := new(big.Int).Add(block.BaseFee(), tx.EffectiveGasTipValue(block.BaseFee()))
 	expected := new(big.Int).SetUint64(block.GasUsed() * gasPrice.Uint64())
