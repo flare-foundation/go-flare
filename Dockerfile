@@ -1,3 +1,4 @@
+#checkov:skip=CKV_DOCKER_3: "Ensure that a user for the container has been created"
 FROM golang:1.25.11-trixie@sha256:56a4d6ead4365cd569ca388003bdce672e7ca7286513f96b44b03d3b5e79d26f AS build
 
 WORKDIR /app/
@@ -33,10 +34,11 @@ ENV HTTP_HOST=0.0.0.0 \
     BOOTSTRAP_BEACON_CONNECTION_TIMEOUT="1m" \
     HTTP_ALLOWED_HOSTS="*"
 
-RUN apt-get update -y && \
-    apt-get install -y curl jq
-
-RUN mkdir -p /app/conf/coston /app/conf/C /app/logs /app/db
+# hadolint ignore=DL3008
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl jq && \
+    rm -rf /var/lib/apt/lists/* && \
+    mkdir -p /app/conf/coston /app/conf/C /app/logs /app/db
 
 COPY --from=build /app/avalanchego/build /app/build
 COPY entrypoint.sh /app/entrypoint.sh

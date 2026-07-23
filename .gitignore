@@ -3,3 +3,4 @@
 local-scripts/
 plans/
 audits/
+.pnpm-store

@@ -22,29 +22,33 @@ Check that the nodes are running by visiting `http://localhost:9650/ext/health` 
 Then, in a separate terminal, run the test scripts in this (`test-scripts`) directory:
 
 ```bash
-yarn
-yarn run p-chain-import
-yarn run p-chain-export
-yarn run p-chain-transfer
-yarn run add-validator
-yarn run add-delegator
-yarn run x-chain-import
-yarn run x-chain-export
+nvm use
+corepack enable
+pnpm install
+pnpm run p-chain-import
+pnpm run p-chain-export
+pnpm run p-chain-transfer
+pnpm run add-validator
+pnpm run add-delegator
+pnpm run x-chain-import
+pnpm run x-chain-export
 ```
 
 or if Etna has already started, use:
 
 ```bash
-yarn
-yarn run etna-p-chain-import
-yarn run etna-p-chain-export
-yarn run etna-x-chain-import
-yarn run etna-x-chain-export
-yarn run etna-add-validator
-yarn run etna-add-delegator
+nvm use
+corepack enable
+pnpm install
+pnpm run etna-p-chain-import
+pnpm run etna-p-chain-export
+pnpm run etna-x-chain-import
+pnpm run etna-x-chain-export
+pnpm run etna-add-validator
+pnpm run etna-add-delegator
 ```
 
 Note:
 
-- Nodejs version >=20 is required to run the scripts, also make sure you have the `yarn` package manager installed.
+- Nodejs version >=24 is required to run the scripts, also make sure you have the `pnpm` package manager installed.
 - The scripts assume that the localflare network is running and accessible at the default ports.

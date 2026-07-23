@@ -15,10 +15,13 @@
   "license": "ISC",
   "description": "Test scripts for Flare's P-Chain operations",
   "devDependencies": {
+    "@types/node": "^22.0.0",
+    "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   },
   "dependencies": {
     "@flarenetwork/flarejs": "^5.1.0-rc.0",
     "ethers": "^6.15.0"
-  }
+  },
+  "packageManager": "pnpm@11.15.1+sha512.81350b07e53c9538a02f1f2303b4290fa2d7be04e56e2a970c4cc4b417dc761de196edabd49d55c7dc9580db81007c44143e4e3d7e462b3000d23c255122d065"
 }
