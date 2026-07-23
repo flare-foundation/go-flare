@@ -17,10 +17,6 @@ runs:
       with:
         go-version: ${{ inputs.go_version }}
 
-    - name: Install dependencies
-      shell: bash
-      run: sudo apt-get update -y && sudo apt-get install -y rsync
-
     - name: Build
       working-directory: ${{ inputs.working_directory }}
       shell: bash

@@ -6,7 +6,7 @@ This repository implements a Flare (and Songbird) node — a fork of [ava-labs/a
 
 - `avalanchego/` — the node itself (Go module `github.com/ava-labs/avalanchego`). Build with `cd avalanchego && ./scripts/build.sh` (binary at `avalanchego/build/avalanchego`).
 - `avalanchego/graft/coreth/`, `avalanchego/graft/evm/`, `avalanchego/graft/subnet-evm/` — in-tree graft modules (coreth C-Chain EVM + shared EVM/sync code), wired via `replace` directives + the `go.work` workspace and compiled into the single `avalanchego` binary.
-- `Dockerfile`, `Dockerfile.dless` — container builds (build context = repo root; they `COPY ./avalanchego` + `./config`). `README.md`, `README-docker.md`, `RELEASES-flare.md` — docs and release notes.
+- `Dockerfile`, `Dockerfile.dless` — container builds (build context = repo root; they `COPY ./.git` + `./avalanchego` + `./config` — `.git` is needed by `scripts/git_commit.sh` to stamp the build commit). `README.md`, `README-docker.md`, `RELEASES-flare.md` — docs and release notes.
 
 ## Documentation
 

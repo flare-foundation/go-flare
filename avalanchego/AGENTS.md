@@ -1,7 +1,7 @@
 # Avalanchego (Flare Fork)
 
 Fork of [ava-labs/avalanchego](https://github.com/ava-labs/avalanchego) with Flare and Songbird network support.
-Module: `github.com/ava-labs/avalanchego` | Go 1.25.8 (see `go.mod` toolchain).
+Module: `github.com/ava-labs/avalanchego` | Go 1.25.11 (see `go.mod` toolchain).
 
 **Upstream version:** Pinned to avalanchego **v1.14.3-rc.2** (branch `flare-merge-1_14_3`) — this is **not** the latest upstream release. Newer upstream tags exist; do not assume features/APIs from later versions are present here.
 
@@ -155,6 +155,7 @@ In avalanchego:
 - `upgrade/upgrade.go` - Flare-specific fork times
 - `vms/evm/acp176/acp176.go` - Keep the extended `Params` struct (with `TimeToFillCapacity`, `TargetToMax`, `TargetToPriceUpdateConversion`) and the `*With` methods reading from `p.*` instead of package constants
 - `scripts/git_commit.sh` - Flare patch: derives the build commit via `git -C "${AVALANCHE_PATH}"` discovery instead of upstream's hardcoded `--git-dir="${AVALANCHE_PATH}/.git"`. avalanchego is nested in the go-flare repo (the `.git` is at the repo root; there is no `avalanchego/.git`), so the upstream form makes `build.sh` fail with "not a git repository".
+- `scripts/build.sh` - Flare patch: keep `-trimpath -buildvcs=false` on the `go build` invocation (upstream's version omits them). The release CI (repo-root `.github/workflows/build-binary.yaml`) builds the binary twice — once via the SLSA trusted builder (checkout under a `__TOOL_CHECKOUT_DIR__` subdirectory) and once as a plain verification build — and fails the release when the sha256 hashes differ; without `-trimpath` the differing checkout paths get embedded in the binary and the two builds can never match.
 - `vms/saevm/cchain/` - SAE VM (new upstream in 1.15.0) Flare adaptations: Fuji→Costwo substitutions (`vm.go` `extDataHashes`, `genesis_test.go`, `vm_test.go`; `config_test.go` uses `FlareID` for the production-network commit-interval check), `warp/warptest` big.Int `TotalWeight`, and `genesis_test.go` — Costwo/local `want` configs + pinned genesis hashes (the Coston2 hash `0xc47d9c5d…` matches the live network) and an inlined upstream local-genesis fixture (`upstreamLocalGenesisJSON`) for the fork-dependent tests, because the Flare local genesis timestamp is 0 and predates every upgradetest schedule
 - Any file with "Flare", "Songbird", "Coston" specific code
 

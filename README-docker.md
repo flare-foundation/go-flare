@@ -74,9 +74,8 @@ The external API configuration is set to only respond to API calls so it offload
 
 ```sh
 {
-  "snowman-api-enabled": false,
-  "coreth-admin-api-enabled": false,
-  "coreth-admin-api-dir": "",
+  "admin-api-enabled": false,
+  "admin-api-dir": "",
   "eth-apis": [
     "eth",
     "eth-filter",
@@ -85,7 +84,7 @@ The external API configuration is set to only respond to API calls so it offload
     "internal-eth",
     "internal-blockchain",
     "internal-transaction"
-  ],
+  ]
 }
 ```
 
@@ -95,9 +94,8 @@ Similarly to the external API configuration, this one also responds to API calls
 
 ```sh
 {
-  "snowman-api-enabled": false,
-  "coreth-admin-api-enabled": false,
-  "coreth-admin-api-dir": "",
+  "admin-api-enabled": false,
+  "admin-api-dir": "",
   "eth-apis": [
     "eth",
     "eth-filter",
@@ -113,7 +111,7 @@ Similarly to the external API configuration, this one also responds to API calls
     "internal-debug",
     "internal-account",
     "internal-personal"
-  ],
+  ]
 }
 ```
 
@@ -123,12 +121,11 @@ The bootstrap configuration is meant for nodes that will accept and help provisi
 
 ```sh
 {
-  "snowman-api-enabled": false,
-  "coreth-admin-api-enabled": false,
-  "coreth-admin-api-dir": "",
+  "admin-api-enabled": false,
+  "admin-api-dir": "",
   "eth-apis": [
     "web3"
-  ],
+  ]
 }
 ```
 

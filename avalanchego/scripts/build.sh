@@ -32,6 +32,11 @@ source "${REPO_ROOT}"/scripts/constants.sh
 source "${REPO_ROOT}"/scripts/git_commit.sh
 
 echo "Building AvalancheGo with [$(go version)]..."
+# Flare: -trimpath and -buildvcs=false keep the build reproducible regardless of
+# the checkout path; the release CI (build-binary.yaml) builds the binary twice
+# in different directories and fails the release if the hashes differ.
 go build ${race} -o "${avalanchego_path}" \
+   -trimpath \
+   -buildvcs=false \
    -ldflags "-X github.com/ava-labs/avalanchego/version.GitCommit=$git_commit $static_ld_flags" \
    "${REPO_ROOT}"/main
