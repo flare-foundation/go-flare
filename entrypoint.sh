@@ -16,7 +16,14 @@ fi
 
 if [ "$AUTOCONFIGURE_BOOTSTRAP" = "1" ];
 then
-	__BOOTSTRAP_ENDPOINTS=("${AUTOCONFIGURE_BOOTSTRAP_ENDPOINT}" ${AUTOCONFIGURE_FALLBACK_ENDPOINTS//,/ })
+	__BOOTSTRAP_ENDPOINTS=()
+	if [ -n "$AUTOCONFIGURE_BOOTSTRAP_ENDPOINT" ]; then
+		__BOOTSTRAP_ENDPOINTS+=("$AUTOCONFIGURE_BOOTSTRAP_ENDPOINT")
+	fi
+	if [ -n "$AUTOCONFIGURE_FALLBACK_ENDPOINTS" ]; then
+		IFS=',' read -r -a __FALLBACKS <<< "$AUTOCONFIGURE_FALLBACK_ENDPOINTS"
+		__BOOTSTRAP_ENDPOINTS+=("${__FALLBACKS[@]}")
+	fi
 
 	echo "Trying provided bootstrap endpoints"
 	for __ENDPOINT in "${__BOOTSTRAP_ENDPOINTS[@]}"; do
@@ -61,6 +68,7 @@ then
 	echo "  Got bootstrap ids: '${BOOTSTRAP_IDS}'"
 fi
 
+# shellcheck disable=SC2086
 exec /app/build/avalanchego \
 	--http-host="$HTTP_HOST" \
 	--http-port="$HTTP_PORT" \
