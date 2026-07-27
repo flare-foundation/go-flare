@@ -13,6 +13,7 @@ jobs:
       contents: read
       packages: write
       id-token: write
+      attestations: write
     env:
       USE_DOCKER_HUB: true
     steps:
@@ -27,6 +28,14 @@ jobs:
 
     - run: echo "IMAGE_TAG=${GITHUB_REF##*/}" >> $GITHUB_ENV
       if: startsWith(github.ref, 'refs/tags/v')
+
+    - name: Detect stable release
+      if: startsWith(github.ref, 'refs/tags/v')
+      run: |
+        RELEASE_TAG_REGEX='^([a-zA-Z0-9_-]+/)?v?(0|([1-9][0-9]*))\.(0|([1-9][0-9]*))\.(0|([1-9][0-9]*))$'
+        if [[ "${GITHUB_REF##*/}" =~ $RELEASE_TAG_REGEX ]]; then
+          echo "IS_STABLE=true" >> $GITHUB_ENV
+        fi
 
     - name: Login to ghcr.io
       uses: docker/login-action@v3
@@ -51,9 +60,19 @@ jobs:
         if [ "${USE_DOCKER_HUB}" = "true" ]; then
           TAGS="$TAGS --tag ${{ secrets.DOCKER_HUB_REPO }}:${{ env.IMAGE_TAG }}"
         fi
+      
+        # Add latest tag if this is a stable release
+        if [ "${IS_STABLE}" = "true" ]; then
+          TAGS="$TAGS --tag ghcr.io/${{ github.repository }}:latest"
+          if [ "${USE_DOCKER_HUB}" = "true" ]; then
+            TAGS="$TAGS --tag ${{ secrets.DOCKER_HUB_REPO }}:latest"
+          fi
+        fi
 
         docker buildx build \
           --platform linux/amd64,linux/arm64 \
+          --provenance=mode=max \
+          --sbom=true \
           $TAGS \
           --file ./Dockerfile \
           --output type=image,push=true \
@@ -70,13 +89,23 @@ jobs:
         USE_DOCKER_HUB: ${{ env.USE_DOCKER_HUB }}
       run: |
         TAGS="--tag ghcr.io/${{ github.repository }}:${{ env.IMAGE_TAG }}-dless"
-    
+
         if [ "${USE_DOCKER_HUB}" = "true" ]; then
           TAGS="$TAGS --tag ${{ secrets.DOCKER_HUB_REPO }}:${{ env.IMAGE_TAG }}-dless"
+        fi
+      
+        # Add latest tag if this is a stable release
+        if [ "${IS_STABLE}" = "true" ]; then
+          TAGS="$TAGS --tag ghcr.io/${{ github.repository }}:latest-dless"
+          if [ "${USE_DOCKER_HUB}" = "true" ]; then
+            TAGS="$TAGS --tag ${{ secrets.DOCKER_HUB_REPO }}:latest-dless"
+          fi
         fi
 
         docker buildx build \
           --platform linux/amd64,linux/arm64 \
+          --provenance=mode=max \
+          --sbom=true \
           $TAGS \
           --file ./Dockerfile.dless \
           --output type=image,push=true \
@@ -137,4 +166,46 @@ jobs:
         cosign verify \
           --certificate-identity=https://github.com/${{ github.repository }}/.github/workflows/build-container.yml@${{ github.ref }} \
           --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
-          "${{ secrets.DOCKER_HUB_REPO }}@${{ env.DLESS_IMAGE_DIGEST }}"       
+          "${{ secrets.DOCKER_HUB_REPO }}@${{ env.DLESS_IMAGE_DIGEST }}"
+
+    - name: Attest standard image
+      uses: actions/attest-build-provenance@v4
+      with:
+        subject-name: ghcr.io/${{ github.repository }}
+        subject-digest: ${{ env.IMAGE_DIGEST }}
+        push-to-registry: true
+
+    - name: Attest distroless image
+      uses: actions/attest-build-provenance@v4
+      with:
+        subject-name: ghcr.io/${{ github.repository }}
+        subject-digest: ${{ env.DLESS_IMAGE_DIGEST }}
+        push-to-registry: true
+
+    - name: Extract standard image SBOM
+      run: |
+        docker buildx imagetools inspect \
+          ghcr.io/${{ github.repository }}@${{ env.IMAGE_DIGEST }} \
+          --format '{{ json (index .SBOM "linux/amd64").SPDX }}' > std-sbom.spdx.json
+
+    - name: Attest standard image SBOM
+      uses: actions/attest-sbom@v4
+      with:
+        subject-name: ghcr.io/${{ github.repository }}
+        subject-digest: ${{ env.IMAGE_DIGEST }}
+        sbom-path: std-sbom.spdx.json
+        push-to-registry: true
+
+    - name: Extract distroless image SBOM
+      run: |
+        docker buildx imagetools inspect \
+          ghcr.io/${{ github.repository }}@${{ env.DLESS_IMAGE_DIGEST }} \
+          --format '{{ json (index .SBOM "linux/amd64").SPDX }}' > dless-sbom.spdx.json
+
+    - name: Attest distroless image SBOM
+      uses: actions/attest-sbom@v4
+      with:
+        subject-name: ghcr.io/${{ github.repository }}
+        subject-digest: ${{ env.DLESS_IMAGE_DIGEST }}
+        sbom-path: dless-sbom.spdx.json
+        push-to-registry: true

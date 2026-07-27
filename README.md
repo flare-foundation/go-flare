@@ -47,12 +47,14 @@ See `tests/README.md` for testing details
 
 ## Container image
 
-Public container images are hosted on [Docker HUB](https://hub.docker.com/r/flarefoundation/go-flare) and [Github Packages](https://github.com/orgs/flare-foundation/packages?repo_name=go-flare);
+Public container images are hosted on [Docker Hub](https://hub.docker.com/r/flarefoundation/go-flare) and [GitHub Packages](https://github.com/orgs/flare-foundation/packages?repo_name=go-flare):
 
 ```
 docker.io/flarefoundation/go-flare
 ghcr.io/flare-foundation/go-flare
 ```
+
+### Verify the cosign signature
 
 Images are signed using [Cosign](https://github.com/sigstore/cosign) with the GitHub OIDC provider. To verify the image, run this command:
 
@@ -68,9 +70,36 @@ cosign verify \
   docker.io/flarefoundation/go-flare:<TAG>
 ```
 
+### Inspect provenance + SBOM
+
+Both are attached to the image and inspectable with `docker buildx imagetools`:
+
+```bash
+# provenance — build origin, source repo, commit, workflow
+docker buildx imagetools inspect ghcr.io/flare-foundation/go-flare:<TAG> \
+  --format '{{ json (index .Provenance "linux/amd64") }}' | jq
+
+# SBOM — list of packages
+docker buildx imagetools inspect ghcr.io/flare-foundation/go-flare:<TAG> \
+  --format '{{ json (index .SBOM "linux/amd64").SPDX.packages }}' | jq
+```
+
+### Verify GitHub artifact attestations
+
+Browse all attestations for this repository: <https://github.com/flare-foundation/go-flare/attestations>
+
+Requires [GitHub CLI](https://cli.github.com/) 2.49 or later:
+
+```bash
+gh attestation verify oci://ghcr.io/flare-foundation/go-flare:<TAG> --owner flare-foundation
+```
+
 ### Container builds in CI
 
-CI builds on each:
+Builds run on:
 
-- push on `main` branch, pushes image tagged as "dev"
-- creation of a tag, pushes images tagged as the tag itself
+- Push to `main` branch → pushes image tagged `dev` + `dev-dless`
+- Push of a pre-release tag (`v*-rc.*`, `v*-alpha.*`, etc.) → pushes tagged image + `-dless` variant
+- Push of a stable tag (e.g. `v1.13.0`) → pushes tagged image + `-dless` variant AND updates `latest` + `latest-dless`
+
+The `latest` tag **only advances on stable releases**. Pre-releases do not update it.
