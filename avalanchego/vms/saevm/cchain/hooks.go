@@ -142,9 +142,12 @@ func (h *hooks) ExecutionResultsDB(dataDir string) (saetypes.ExecutionResults, e
 
 // priceExponent returns h's ACP-283 price exponent, defaulting to
 // [dynamic.InitialPriceExponent] when the header does not carry one.
-func priceExponent(h *types.Header) dynamic.PriceExponent {
+func priceExponent(config *extras.ChainConfig, h *types.Header) dynamic.PriceExponent {
 	if pe := customtypes.GetHeaderExtra(h).MinPriceExponent; pe != nil {
 		return *pe
+	}
+	if config.IsFlareFamilyCode() {
+		return dynamic.FlareInitialPriceExponent
 	}
 	return dynamic.InitialPriceExponent
 }
@@ -190,7 +193,7 @@ func (h *hooks) GasConfigAfter(header *types.Header) (gas.Gas, gastime.GasPriceC
 
 	return te.Target(), gastime.GasPriceConfig{
 		TargetToExcessScaling: 87, // 87 ~= 60 / ln(2)
-		MinPrice:              priceExponent(header).Price(),
+		MinPrice:              priceExponent(config, header).Price(),
 	}
 }
 
@@ -324,7 +327,7 @@ func (b *builder) BuildHeader(parent *types.Header) (*types.Header, error) {
 	// Move each dynamic parameter toward this node's vote (nil = no move).
 	de = de.Toward(b.desired.delayExponent)
 	te = te.Toward(b.desired.targetExponent)
-	pe := priceExponent(parent).Toward(b.desired.priceExponent)
+	pe := priceExponent(config, parent).Toward(b.desired.priceExponent)
 	minDelayExcess := acp226.DelayExcess(de)
 	return customtypes.WithHeaderExtra(
 		&types.Header{

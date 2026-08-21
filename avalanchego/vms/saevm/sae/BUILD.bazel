@@ -81,6 +81,7 @@ go_test(
         "rpc_receipts_test.go",
         "rpc_stateful_test.go",
         "rpc_test.go",
+        "trace_block_flare_test.go",
         "tx_test.go",
         "vm_test.go",
     ],

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"time"
 
 	"github.com/ava-labs/libevm/common"
@@ -169,6 +170,19 @@ func BeforeExecutingBlock(hooks hook.Points, rules params.Rules, stateDB *state.
 	return nil
 }
 
+// DeriveExecutedBaseFee returns the base fee that a block's transactions pay,
+// derived from the parent's executed gas clock advanced to the block's
+// timestamp. This is the value [Execute] computes when its baseFee argument is
+// nil — the executed base fee — as opposed to the worst-case bound carried by a
+// SAE block header. The SAE rpc block tracers use it to normalise the base fee
+// of blocks not served with an executed header (non-canonical RLP and bad
+// blocks). Keep in sync with the derivation in [Execute].
+func DeriveExecutedBaseFee(parent *blocks.Block, hooks hook.Points, header *types.Header) *big.Int {
+	gasClock := parent.ExecutedByGasTime().Clone()
+	gasClock.BeforeBlock(hooks.BlockTime(header))
+	return gasClock.BaseFee().ToBig()
+}
+
 // Execute executes the transactions in the [blocks.Block], beginning from the
 // post-execution state of the [blocks.Block.ParentBlock]. `maxNumTxs` limits
 // the number of transactions to process, allowing partial execution for
@@ -230,7 +244,7 @@ func Execute(
 		b.CheckSenderBalanceBound(stateDB, signer, tx)
 
 		// Executes the transaction and calls [state.StateDB.Finalise].
-		receipt, err := core.ApplyTransaction(
+		receipt, err := ApplyTransaction(
 			config,
 			chainCtx,
 			&header.Coinbase,
@@ -251,12 +265,12 @@ func Execute(
 		// the queue. It's only worth it if [blocks.LastToSettleAt] regularly
 		// returns false, meaning that execution is blocking consensus.
 
-		// The [types.Header] that we pass to [core.ApplyTransaction] is
+		// The [types.Header] that we pass to [ApplyTransaction] is
 		// modified to reduce gas price from the worst-case value agreed by
 		// consensus. This changes the hash, which is what is copied to receipts
 		// and logs.
 		//
-		// [core.ApplyTransaction] also doesn't set [types.Receipt.EffectiveGasPrice].
+		// [ApplyTransaction] also doesn't set [types.Receipt.EffectiveGasPrice].
 		// Fixing both here avoids needing to call [types.Receipt.DeriveFields].
 		receipt.BlockHash = b.Hash()
 		for _, l := range receipt.Logs {

@@ -209,6 +209,7 @@ func (b *backend) StateAtTransaction(ctx context.Context, ethB *types.Block, txI
 type tracerAPI struct {
 	*tracers.API
 	traceCall *tracers.API
+	b         *tracerBackend // backs the shadowed block-level replay loops
 }
 
 func newTracerAPI(b *backend) *tracerAPI {
@@ -216,6 +217,7 @@ func newTracerAPI(b *backend) *tracerAPI {
 	return &tracerAPI{
 		API:       tracers.NewAPI(tb),
 		traceCall: tracers.NewAPI(&traceCallBackend{tb}),
+		b:         tb,
 	}
 }
 

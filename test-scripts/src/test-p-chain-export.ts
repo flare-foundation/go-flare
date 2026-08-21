@@ -13,7 +13,7 @@ async function PtoCExport(amountFLR: number) {
         addresses: [ctx.addressP]
     });
     const feeState = await ctx.pvmapi.getFeeState();
-    const exportTx = pvm.e.newExportTx(
+    const exportTx = pvm.newExportTx(
         {
             feeState,
             utxos: utxosp,

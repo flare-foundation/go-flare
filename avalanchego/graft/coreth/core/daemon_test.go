@@ -296,7 +296,7 @@ func TestAtomicDaemonAndMintLogsError(t *testing.T) {
 	}
 
 	// Act
-	atomicDaemonAndMint(badDaemonCallEVMMock, loggerMock)
+	AtomicDaemonAndMint(badDaemonCallEVMMock, loggerMock)
 
 	// Assert
 	if loggerMock.mockLoggerData.warnCalls != 1 {
@@ -450,7 +450,7 @@ func TestDaemonFiredAndMinted(t *testing.T) {
 	}
 
 	log := log.New()
-	atomicDaemonAndMint(defaultEVMMock, log)
+	AtomicDaemonAndMint(defaultEVMMock, log)
 
 	// EVM Call function calling the daemon should have been cqlled
 	if defaultEVMMock.mockEVMCallerData.callCalls != 1 {
@@ -475,7 +475,7 @@ func TestDaemonShouldNotMintMoreThanLimit(t *testing.T) {
 	}
 
 	log := log.New()
-	atomicDaemonAndMint(defaultEVMMock, log)
+	AtomicDaemonAndMint(defaultEVMMock, log)
 
 	// EVM Call function calling the daemon should have been called
 	if defaultEVMMock.mockEVMCallerData.callCalls != 1 {

@@ -6,6 +6,7 @@ package dynamic
 import (
 	"math"
 
+	"github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/upgrade/granite"
 	"github.com/ava-labs/avalanchego/vms/components/gas"
 )
 
@@ -18,6 +19,11 @@ type PriceExponent uint64
 // InitialPriceExponent is the initial price exponent. Its price is the 1 wei
 // minimum.
 const InitialPriceExponent PriceExponent = 0
+
+// FlareInitialPriceExponent is the ACP-283 exponent whose price equals the
+// pre-Helicon granite base-fee floor (granite.MinGasPrice, 500 GWei), so the
+// Helicon transition is fee-neutral on Flare-family networks.
+var FlareInitialPriceExponent = DesiredPriceExponent(granite.MinGasPrice)
 
 // Price returns the minimum gas price in wei (aAVAX).
 //

@@ -31,7 +31,7 @@ async function CtoPExport(amountFLR: number) {
     });
     const feeState = await ctx.pvmapi.getFeeState();
 
-    const importTx = pvm.e.newImportTx(
+    const importTx = pvm.newImportTx(
         {
             feeState,
             utxos,

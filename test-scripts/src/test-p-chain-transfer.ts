@@ -13,7 +13,7 @@ async function PtoPTransfer(amountFLR: number, toAddress: string) {
     });
     const feeState = await ctx.pvmapi.getFeeState();
 
-    const tx = pvm.e.newBaseTx(
+    const tx = pvm.newBaseTx(
         {
             feeState,
             utxos: utxosp,

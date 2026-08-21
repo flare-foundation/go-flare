@@ -17,7 +17,7 @@ async function addValidator(nodeId: string, endTime: number, weight: number) {
     });
     const feeState = await ctx.pvmapi.getFeeState();
 
-    const tx = pvm.e.newAddPermissionlessValidatorTx(
+    const tx = pvm.newAddPermissionlessValidatorTx(
         {
             feeState,
             utxos,

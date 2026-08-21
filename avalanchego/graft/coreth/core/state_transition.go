@@ -523,7 +523,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	chainID = st.evm.ChainConfig().ChainID
 	timestamp = st.evm.Context.Time
 
-	burnAddress, nominalGasPrice, isFlare, isSongbird, err := stateTransitionVariants.GetValue(chainID)(st)
+	burnAddress, nominalGasPrice, isFlare, isSongbird, err := StateTransitionVariants.GetValue(chainID)(st.evm.Context.Coinbase)
 	if err != nil {
 		return nil, err
 	}
@@ -569,7 +569,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	// Call the daemon if there is no vm error
 	if vmerr == nil && (isSongbird || isFlare) {
 		log := log.Root()
-		atomicDaemonAndMint(st, log)
+		AtomicDaemonAndMint(st, log)
 	}
 
 	if err := st.evm.ExecutionInvalidated(); err != nil {

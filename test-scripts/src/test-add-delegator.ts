@@ -13,7 +13,7 @@ async function addDelegator(nodeId: string, endTime: number, weight: number) {
     });
     const feeState = await ctx.pvmapi.getFeeState();
 
-    const tx = pvm.e.newAddPermissionlessDelegatorTx(
+    const tx = pvm.newAddPermissionlessDelegatorTx(
         {
             feeState,
             utxos,
