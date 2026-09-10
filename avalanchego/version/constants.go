@@ -46,8 +46,8 @@ var (
 
 	CurrentSgb = &Application{
 		Major: 0,
-		Minor: 12,
-		Patch: 2,
+		Minor: 13,
+		Patch: 0,
 	}
 	CurrentSgbApp = &Application{
 		Name:  Client,
@@ -58,13 +58,13 @@ var (
 	MinimumCompatibleSgbVersion = &Application{
 		Name:  Client,
 		Major: 0,
-		Minor: 12,
+		Minor: 13,
 		Patch: 0,
 	}
 	PrevMinimumCompatibleSgbVersion = &Application{
 		Name:  Client,
 		Major: 0,
-		Minor: 11,
+		Minor: 12,
 		Patch: 0,
 	}
 

@@ -122,19 +122,9 @@ func (vm *VM) Initialize(
 ) error {
 	vm.Ctx = chainCtx
 
-	var extDataHashes map[common.Hash]common.Hash
-	// Set the chain config for mainnet/fuji chain IDs
-	switch chainCtx.NetworkID {
-	case constants.MainnetID:
-		extDataHashes = mainnetExtDataHashes
-	}
-	// Free the memory of the extDataHash map
-	fujiExtDataHashes = nil
-	mainnetExtDataHashes = nil
-
 	// Create the atomic extension structs
 	// some of them need to be initialized after the inner VM is initialized
-	blockExtender := newBlockExtender(extDataHashes, vm)
+	blockExtender := newBlockExtender(nil, vm)
 	syncExtender := &atomicsync.Extender{}
 	syncProvider := &atomicsync.SummaryProvider{}
 	// Create and pass the leaf handler to the atomic extension

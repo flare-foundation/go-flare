@@ -43,9 +43,9 @@ type config struct {
 	signers []bls.Signer
 }
 
-// WithCount sets a lower bound on the number of validators. The set grows
+// WithMinimum sets a lower bound on the number of validators. The set grows
 // beyond n when more NodeIDs or signers are supplied.
-func WithCount(n int) Option {
+func WithMinimum(n int) Option {
 	return options.Func[config](func(c *config) {
 		c.n = n
 	})
@@ -68,8 +68,8 @@ func WithSigners(signers ...bls.Signer) Option {
 }
 
 // NewValidators creates a BLS warp validator set, each validator with weight 1.
-// The number of validators is the largest of the count set by [WithCount], the
-// number of NodeIDs, and the number of signers. Any unspecified NodeIDs and
+// The number of validators is the largest of the count set by [WithMinimum],
+// the number of NodeIDs, and the number of signers. Any unspecified NodeIDs and
 // signers are freshly generated.
 func NewValidators(tb testing.TB, opts ...Option) *Validators {
 	tb.Helper()
@@ -201,10 +201,7 @@ func SetValidators(tb testing.TB, ctx *snow.Context, vdrs *Validators) {
 	}
 	vdrState.GetWarpValidatorSetsF = func(context.Context, uint64) (map[ids.ID]validators.WarpSet, error) {
 		return map[ids.ID]validators.WarpSet{
-			ctx.SubnetID: {
-				Validators:  vdrs.validators,
-				TotalWeight: big.NewInt(int64(len(vdrs.validators))),
-			},
+			ctx.SubnetID: vdrs.WarpSet(),
 		}, nil
 	}
 }

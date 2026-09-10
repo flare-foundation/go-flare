@@ -18,8 +18,8 @@ var (
 
 // Chain IDs outside the Flare/Songbird families occur only in tests. Fees are
 // credited to the coinbase, matching upstream coreth exactly, so that
-// upstream-generated chain fixtures (e.g. plugin/evm/upgradechaintest) and
-// replaying VMs reproduce the same state.
+// upstream-generated chain fixtures (e.g. the synchronoustest fixture produced
+// by plugin/evm/corethgen) and replaying VMs reproduce the same state.
 func nonFlareChain(coinbase common.Address) (common.Address, uint64, bool, bool, error) {
 	return coinbase,
 		uint64(ap4.MinBaseFee),

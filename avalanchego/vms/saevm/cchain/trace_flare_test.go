@@ -10,16 +10,22 @@ import (
 	"github.com/ava-labs/libevm/common"
 	"github.com/ava-labs/libevm/common/hexutil"
 	"github.com/ava-labs/libevm/core/types"
+	"github.com/ava-labs/libevm/eth/tracers"
 	"github.com/ava-labs/libevm/eth/tracers/native"
 	"github.com/ava-labs/libevm/libevm/options"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/vms/saevm/saetest"
 
 	cparams "github.com/ava-labs/avalanchego/graft/coreth/params"
 	ethparams "github.com/ava-labs/libevm/params"
 )
+
+// prestateTracer configures the block tracers to report the state each
+// transaction read, which pins the intra-block fee settlement.
+var prestateTracer = tracers.TraceConfig{Tracer: utils.PointerTo("prestateTracer")}
 
 // TestFlareTraceBlockReplaysFlareState asserts that the block-level tracing
 // endpoints (debug_traceBlock*, debug_intermediateRoots) replay transactions

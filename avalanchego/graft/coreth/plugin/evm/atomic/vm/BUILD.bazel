@@ -12,7 +12,6 @@ go_library(
         "api.go",
         "block_extension.go",
         "bonus_blocks.go",
-        "ext_data_hashes.go",
         "formatting.go",
         "tx_semantic_verifier.go",
         "vm.go",

@@ -546,6 +546,8 @@ func TestGetStake(t *testing.T) {
 		tx.ID(),
 		addDelTx,
 		genesistest.DefaultValidatorStartTime,
+		addDelTx.EndTime(),
+		addDelTx.Weight(),
 		0,
 	)
 	require.NoError(err)
@@ -700,6 +702,8 @@ func TestGetCurrentValidators(t *testing.T) {
 		delTx.ID(),
 		addDelTx,
 		genesistest.DefaultValidatorStartTime,
+		addDelTx.EndTime(),
+		addDelTx.Weight(),
 		0,
 	)
 	require.NoError(err)
@@ -1546,7 +1550,7 @@ func TestGetCurrentValidatorsForL1(t *testing.T) {
 					SubnetID:  subnetID,
 					NodeID:    ids.GenerateTestNodeID(),
 					PublicKey: otherPK,
-					Weight:    0,
+					Weight:    1,
 					StartTime: time.Unix(2, 0),
 				},
 			},

@@ -8,12 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"os"
 	"sync/atomic"
 	"time"
 
 	"github.com/ava-labs/libevm/common"
-	"github.com/ava-labs/libevm/common/hexutil"
 	"github.com/ava-labs/libevm/core"
 	"github.com/ava-labs/libevm/core/rawdb"
 	"github.com/ava-labs/libevm/core/state"
@@ -21,25 +19,36 @@ import (
 	"github.com/ava-labs/libevm/core/vm"
 	"github.com/ava-labs/libevm/eth/tracers"
 	"github.com/ava-labs/libevm/eth/tracers/logger"
-	"github.com/ava-labs/libevm/rlp"
 	"github.com/ava-labs/libevm/rpc"
 	"go.uber.org/zap"
 
+	"github.com/ava-labs/avalanchego/vms/saevm/hook"
 	"github.com/ava-labs/avalanchego/vms/saevm/saexec"
 )
 
 // This file shadows libevm's block-level tracing endpoints on [tracerAPI] so
 // that every transaction is replayed through [saexec.ApplyTransaction] — the
-// same era-splitting pipeline used by live execution and by
+// same era-splitting pipeline used by live execution ([saexec.Execute]) and by
 // [backend.StateAtTransaction] — instead of libevm's plain core.ApplyMessage.
 // On Flare/Songbird chains the plain replay misses the Flare per-transaction
 // mechanisms (fee burn/refund, daemon minting, and, pre-Helicon, coreth's
 // full StateTransition including the one-time transition-contract calls), so
 // traces and intermediate roots would diverge from the canonical state.
 //
-// Everything else mirrors libevm's eth/tracers/api.go behavior byte-for-byte
-// (error strings, tracer construction, timeouts, partial-result semantics).
-// Check for differences in the upstream implementation when updating libevm.
+// Only the per-transaction application differs from upstream. The replay base
+// state — the parent's post-execution state with the traced block's
+// start-executing-block changes applied — and the reported block hash come
+// from the same backends that serve upstream's [tracers.API]: [tracerBackend]
+// for canonical blocks and [suppliedHashBackend] for caller-supplied ones (see
+// the package README). Everything else mirrors libevm's eth/tracers/api.go
+// byte-for-byte (error strings, tracer construction, timeouts, partial-result
+// semantics). Check for differences in the upstream implementation when
+// updating libevm.
+//
+// Shadowed here: debug_traceBlockByNumber, debug_traceBlockByHash and
+// debug_intermediateRoots. debug_traceBlock and debug_traceBlockFromFile are
+// shadowed in stateful.go (upstream re-seals the caller-supplied block's base
+// fee there) and dispatch to [tracerAPI.traceBlockReplay].
 //
 // Not shadowed (still libevm's plain-ApplyMessage replay): debug_traceChain,
 // debug_standardTraceBlockToFile, debug_traceBadBlock, and
@@ -51,6 +60,23 @@ const (
 	defaultTraceReexec  = uint64(128) // resolved for parity; [backend.StateAtBlock] ignores it
 )
 
+// replayBackend is the part of the tracer backends that differs between
+// tracing a canonical block ([tracerBackend]) and a caller-supplied one
+// ([suppliedHashBackend]): the replay base state and the reported block hash.
+// See the README table for the behaviour of each implementation.
+type replayBackend interface {
+	// StateAtBlock returns the parent's post-execution state with the traced
+	// block's start-executing-block changes applied.
+	StateAtBlock(ctx context.Context, parent *types.Block, reexec uint64, base *state.StateDB, readOnly bool, preferDisk bool) (*state.StateDB, tracers.StateReleaseFunc, error)
+	// BlockHash returns the hash reported for the traced block.
+	BlockHash(*types.Block) common.Hash
+}
+
+var (
+	_ replayBackend = (*tracerBackend)(nil)
+	_ replayBackend = (*suppliedHashBackend)(nil)
+)
+
 // TraceBlockByNumber shadows [tracers.API.TraceBlockByNumber] to replay
 // transactions with the Flare execution pipeline.
 func (a *tracerAPI) TraceBlockByNumber(ctx context.Context, number rpc.BlockNumber, config *tracers.TraceConfig) ([]*tracers.TxTraceResult, error) {
@@ -58,7 +84,7 @@ func (a *tracerAPI) TraceBlockByNumber(ctx context.Context, number rpc.BlockNumb
 	if err != nil {
 		return nil, err
 	}
-	return a.traceBlockReplay(ctx, block, config)
+	return a.traceBlockReplay(ctx, a.tracerBackend, block, config)
 }
 
 // TraceBlockByHash shadows [tracers.API.TraceBlockByHash] to replay
@@ -68,89 +94,75 @@ func (a *tracerAPI) TraceBlockByHash(ctx context.Context, hash common.Hash, conf
 	if err != nil {
 		return nil, err
 	}
-	return a.traceBlockReplay(ctx, block, config)
+	return a.traceBlockReplay(ctx, a.tracerBackend, block, config)
 }
 
-// TraceBlock shadows [tracers.API.TraceBlock] to replay transactions with the
-// Flare execution pipeline. The block's base fee is normalised to the executed
-// value during shared replay setup ([replayStateAtParent] →
-// [executedBaseFeeBlock]).
-func (a *tracerAPI) TraceBlock(ctx context.Context, blob hexutil.Bytes, config *tracers.TraceConfig) ([]*tracers.TxTraceResult, error) {
-	block := new(types.Block)
-	if err := rlp.DecodeBytes(blob, block); err != nil {
-		return nil, fmt.Errorf("could not decode block: %v", err)
-	}
-	return a.traceBlockReplay(ctx, block, config)
-}
-
-// executedBaseFeeBlock returns block re-sealed so its header carries the base
-// fee its transactions actually pay (the executed base fee) rather than SAE's
-// worst-case pre-execution bound. Replaying against the bound charges a higher
-// effective base fee, diverging the Flare fee settlement, later transactions'
-// interim state, and the intermediate roots from canonical execution.
+// resealWithExecutedBaseFee returns a caller-supplied block re-sealed with the
+// executed base fee, replacing the worst-case bound its header carries. The
+// block need not be canonical, but its parent MUST be. Replaying against the
+// bound would charge a higher effective base fee, diverging the Flare fee
+// settlement, later transactions' interim state and the intermediate roots
+// from canonical execution. Shared by [tracerAPI.TraceBlock] (where upstream
+// inlines it) and the bad-block path of [tracerAPI.IntermediateRoots].
 //
-// The correct base fee comes from one of two sources:
-//   - the stored artifact of the canonical block at this height (authoritative,
-//     and already applied for the by-number/by-hash endpoints); or
-//   - otherwise, deterministically derived from the parent's executed gas clock
-//     and the supplied block's timestamp — the same value [saexec.Execute]
-//     computes for a freshly built block. This covers non-canonical blocks
-//     (a debug_traceBlock RLP block, an IntermediateRoots bad block).
-//
-// Pre-Helicon coreth blocks are replayed through the legacy path, which uses
-// the header base fee directly, so it is already the executed value and the
-// block is returned unchanged.
-func (a *tracerAPI) executedBaseFeeBlock(ctx context.Context, block *types.Block) *types.Block {
-	if saexec.IsLegacyCorethBlock(a.b.ChainConfig(), block.Time()) {
-		return block
-	}
-	num := rpc.BlockNumber(block.NumberU64()) // #nosec G115 -- won't overflow for a while.
-	if bl, err := a.b.restoreExecutedBlock(ctx, rpc.BlockNumberOrHashWithNumber(num)); err == nil {
-		// The canonical block's hash is over its raw consensus header; the
-		// by-number/by-hash endpoints instead serve it re-sealed with the
-		// executed header. Match either form and prefer the stored artifact.
-		executed := block.WithSeal(executedHeader(bl))
-		switch block.Hash() {
-		case bl.Hash():
-			return executed // raw canonical (e.g. debug_traceBlock RLP): re-seal.
-		case executed.Hash():
-			return block // already carries the executed header.
-		}
-	}
-	// Non-canonical block: derive from the parent's executed gas clock.
-	parent, err := a.b.restoreExecutedBlock(ctx, rpc.BlockNumberOrHashWithHash(block.ParentHash(), true /* canonical */))
-	if err != nil {
-		return block // parent unavailable: best-effort, keep the supplied header.
-	}
+// A synchronous (pre-SAE) block carries the base fee its transactions actually
+// paid, so it is returned as supplied.
+func (a *tracerAPI) resealWithExecutedBaseFee(ctx context.Context, block *types.Block) (*types.Block, error) {
 	hdr := block.Header()
-	hdr.BaseFee = saexec.DeriveExecutedBaseFee(parent, a.b.Hooks(), hdr)
-	return block.WithSeal(hdr)
-}
-
-// TraceBlockFromFile shadows [tracers.API.TraceBlockFromFile] to replay
-// transactions with the Flare execution pipeline.
-func (a *tracerAPI) TraceBlockFromFile(ctx context.Context, file string, config *tracers.TraceConfig) ([]*tracers.TxTraceResult, error) {
-	blob, err := os.ReadFile(file)
-	if err != nil {
-		return nil, fmt.Errorf("could not read file: %v", err)
+	if hook.Synchronous(a.tracerBackend.Hooks(), hdr) {
+		return block, nil
 	}
-	return a.TraceBlock(ctx, blob, config)
+	parent, err := a.tracerBackend.restoreExecutedParent(ctx, block)
+	if err != nil {
+		return nil, fmt.Errorf("restoring parent block: %w", err)
+	}
+	// The parent's gas clock, advanced to the start of the block, determines
+	// the executed base fee, so the supplied one is discarded. This is the
+	// same derivation [saexec.Execute] performs for a freshly built block.
+	gasClock := parent.ExecutedByGasTime()
+	gasClock.BeforeBlock(a.tracerBackend.Hooks().BlockTime(hdr))
+	hdr.BaseFee = gasClock.BaseFee().ToBig()
+	return block.WithSeal(hdr), nil
 }
 
 // IntermediateRoots shadows [tracers.API.IntermediateRoots] to replay
 // transactions with the Flare execution pipeline. Like upstream, a failing
 // transaction ends the replay and the roots collected so far are returned
 // with a nil error.
+//
+// A canonical block is served with its executed header and replayed from the
+// state [tracerBackend] supplies. A bad block is not: its header carries the
+// worst-case base fee, and its start-executing-block changes may differ from
+// those of the canonical block at the same height, so it is re-sealed with the
+// executed base fee and replayed from the state [suppliedHashBackend] supplies,
+// exactly like a debug_traceBlock RLP block.
 func (a *tracerAPI) IntermediateRoots(ctx context.Context, hash common.Hash, config *tracers.TraceConfig) ([]common.Hash, error) {
 	block, _ := a.blockByHash(ctx, hash)
-	if block == nil {
+	isBadBlock := block == nil
+	if isBadBlock {
 		// Check in the bad blocks
-		block = rawdb.ReadBadBlock(a.b.ChainDb(), hash)
+		block = rawdb.ReadBadBlock(a.tracerBackend.ChainDb(), hash)
 	}
 	if block == nil {
 		return nil, fmt.Errorf("block %#x not found", hash)
 	}
-	block, statedb, release, err := a.replayStateAtParent(ctx, block, config)
+	if block.NumberU64() == 0 {
+		return nil, errors.New("genesis is not traceable")
+	}
+	var be replayBackend = a.tracerBackend
+	if isBadBlock {
+		resealed, err := a.resealWithExecutedBaseFee(ctx, block)
+		if err != nil {
+			return nil, err
+		}
+		be = &suppliedHashBackend{
+			tracerBackend: a.tracerBackend,
+			supplied:      block,
+			resealed:      resealed,
+		}
+		block = resealed
+	}
+	statedb, release, err := a.replayStateAtParent(ctx, be, block, config)
 	if err != nil {
 		return nil, err
 	}
@@ -160,14 +172,14 @@ func (a *tracerAPI) IntermediateRoots(ctx context.Context, hash common.Hash, con
 		roots              []common.Hash
 		usedGas            uint64
 		header             = block.Header()
-		deleteEmptyObjects = a.b.ChainConfig().IsEIP158(block.Number())
+		deleteEmptyObjects = a.tracerBackend.ChainConfig().IsEIP158(block.Number())
 	)
 	for i, tx := range block.Transactions() {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 		if err := a.applyReplayTx(statedb, header, tx, i, &usedGas, vm.Config{}); err != nil {
-			a.b.Logger().Warn("Tracing intermediate roots did not complete",
+			a.tracerBackend.Logger().Warn("Tracing intermediate roots did not complete",
 				zap.Int("txindex", i),
 				zap.Stringer("txhash", tx.Hash()),
 				zap.Error(err),
@@ -190,7 +202,8 @@ func (a *tracerAPI) IntermediateRoots(ctx context.Context, hash common.Hash, con
 // traceBlockReplay is the Flare counterpart of libevm's unexported
 // API.traceBlock and API.traceBlockParallel: it configures a tracer per
 // transaction and replays all of the block's transactions through the
-// era-aware [tracerAPI.applyReplayTx].
+// era-aware [tracerAPI.applyReplayTx], from the base state and with the block
+// hash that be supplies.
 //
 // State advancement is always sequential and era-aware, never upstream's
 // parallel path: traceBlockParallel advances the shared state with plain,
@@ -208,8 +221,11 @@ func (a *tracerAPI) IntermediateRoots(ctx context.Context, hash common.Hash, con
 //
 // No explicit statedb.Finalise per transaction: [saexec.ApplyTransaction]
 // finalises internally on both era paths, mirroring upstream's loop.
-func (a *tracerAPI) traceBlockReplay(ctx context.Context, block *types.Block, config *tracers.TraceConfig) ([]*tracers.TxTraceResult, error) {
-	block, statedb, release, err := a.replayStateAtParent(ctx, block, config)
+func (a *tracerAPI) traceBlockReplay(ctx context.Context, be replayBackend, block *types.Block, config *tracers.TraceConfig) ([]*tracers.TxTraceResult, error) {
+	if block.NumberU64() == 0 {
+		return nil, errors.New("genesis is not traceable")
+	}
+	statedb, release, err := a.replayStateAtParent(ctx, be, block, config)
 	if err != nil {
 		return nil, err
 	}
@@ -217,7 +233,7 @@ func (a *tracerAPI) traceBlockReplay(ctx context.Context, block *types.Block, co
 
 	var (
 		txs       = block.Transactions()
-		blockHash = a.b.BlockHash(block)
+		blockHash = be.BlockHash(block)
 		header    = block.Header()
 		usedGas   uint64
 		results   = make([]*tracers.TxTraceResult, len(txs))
@@ -372,61 +388,35 @@ func (t *cancellableTracer) cancel() {
 func (a *tracerAPI) applyReplayTx(statedb *state.StateDB, header *types.Header, tx *types.Transaction, index int, usedGas *uint64, cfg vm.Config) error {
 	statedb.SetTxContext(tx.Hash(), index)
 	gp := new(core.GasPool).AddGas(tx.Gas())
-	_, err := saexec.ApplyTransaction(a.b.ChainConfig(), a.b.ChainContext(), &header.Coinbase, gp, statedb, header, tx, usedGas, cfg)
+	_, err := saexec.ApplyTransaction(a.tracerBackend.ChainConfig(), a.tracerBackend.ChainContext(), &header.Coinbase, gp, statedb, header, tx, usedGas, cfg)
 	return err
 }
 
 // replayStateAtParent mirrors the preamble shared by libevm's traceBlock and
-// IntermediateRoots: it rejects the genesis block, resolves the parent, and
-// returns the replay base state — the parent's post-execution state with
-// block's own before-block changes (EIP-4788 beacon root and the Flare
-// before-block hooks) applied.
-//
-// It normalises the block's base fee to the executed value (via
-// [executedBaseFeeBlock]) and returns the resulting block, so canonical and
-// non-canonical SAE blocks alike replay against the base fee their transactions
-// actually pay rather than SAE's worst-case bound.
-//
-// It also deliberately bypasses [tracerBackend.StateAtBlock], whose before-block
-// hook applies the changes of the *canonical* child at parent+1. That is only
-// correct when the traced block IS that canonical child (the by-number and
-// by-hash endpoints). For an arbitrary debug_traceBlock RLP block or an
-// IntermediateRoots bad block, the supplied block may differ from the canonical
-// child — with a different timestamp or parent-beacon-root — so the before-block
-// changes must key off the supplied block. This applies them via
-// [saexec.BeforeExecutingBlock] on the parent's clean post-execution state,
-// exactly as [saexec.Execute] does for live execution.
-func (a *tracerAPI) replayStateAtParent(ctx context.Context, block *types.Block, config *tracers.TraceConfig) (*types.Block, *state.StateDB, tracers.StateReleaseFunc, error) {
-	if block.NumberU64() == 0 {
-		return nil, nil, nil, errors.New("genesis is not traceable")
-	}
+// IntermediateRoots: it resolves the (canonical) parent and returns the replay
+// base state served by be — the parent's post-execution state with the traced
+// block's start-executing-block changes (EIP-4788 beacon root and the
+// StartExecutingBlock hook), applied by [saexec.Execute] exactly as for live
+// execution. [tracerBackend] keys those changes off the canonical child, which
+// is the block the by-number and by-hash endpoints trace; [suppliedHashBackend]
+// keys them off the caller-supplied block, whose header (timestamp,
+// parent-beacon-root) may differ from the canonical block's at that height.
+func (a *tracerAPI) replayStateAtParent(ctx context.Context, be replayBackend, block *types.Block, config *tracers.TraceConfig) (*state.StateDB, tracers.StateReleaseFunc, error) {
 	parent, err := a.blockByNumberAndHash(ctx, rpc.BlockNumber(block.NumberU64()-1), block.ParentHash()) // #nosec G115 -- won't overflow for a while.
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	reexec := defaultTraceReexec
 	if config != nil && config.Reexec != nil {
 		reexec = *config.Reexec
 	}
-	// a.b.backend.StateAtBlock is the base method WITHOUT tracerBackend's
-	// canonical-child before-block hook (see the doc comment).
-	sdb, release, err := a.b.backend.StateAtBlock(ctx, parent, reexec, nil, true, false)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	block = a.executedBaseFeeBlock(ctx, block)
-	rules := a.b.ChainConfig().Rules(block.Number(), true /*isMerge*/, block.Time())
-	if err := saexec.BeforeExecutingBlock(a.b.Hooks(), rules, sdb, parent.Header(), block); err != nil {
-		release()
-		return nil, nil, nil, err
-	}
-	return block, sdb, release, nil
+	return be.StateAtBlock(ctx, parent, reexec, nil, true, false)
 }
 
 // blockByNumber mirrors libevm's unexported API.blockByNumber over
 // [tracerBackend], including the error strings.
 func (a *tracerAPI) blockByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Block, error) {
-	block, err := a.b.BlockByNumber(ctx, number)
+	block, err := a.tracerBackend.BlockByNumber(ctx, number)
 	if err != nil {
 		return nil, err
 	}
@@ -439,7 +429,7 @@ func (a *tracerAPI) blockByNumber(ctx context.Context, number rpc.BlockNumber) (
 // blockByHash mirrors libevm's unexported API.blockByHash over
 // [tracerBackend], including the error strings.
 func (a *tracerAPI) blockByHash(ctx context.Context, hash common.Hash) (*types.Block, error) {
-	block, err := a.b.BlockByHash(ctx, hash)
+	block, err := a.tracerBackend.BlockByHash(ctx, hash)
 	if err != nil {
 		return nil, err
 	}
@@ -457,7 +447,7 @@ func (a *tracerAPI) blockByNumberAndHash(ctx context.Context, number rpc.BlockNu
 	if err != nil {
 		return nil, err
 	}
-	if a.b.BlockHash(block) == hash {
+	if a.tracerBackend.BlockHash(block) == hash {
 		return block, nil
 	}
 	return a.blockByHash(ctx, hash)

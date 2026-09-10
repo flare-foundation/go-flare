@@ -50,7 +50,6 @@ type Diff struct {
 	currentStakerDiffs  diffStakers
 	pendingStakerDiffs  diffStakers
 
-	addedSubnetIDs []ids.ID
 	// Subnet ID --> Owner of the subnet
 	subnetOwners map[ids.ID]fx.Owner
 	// Subnet ID --> Conversion of the subnet
@@ -58,14 +57,14 @@ type Diff struct {
 	// Subnet ID --> Tx that transforms the subnet
 	transformedSubnets map[ids.ID]*txs.Tx
 
-	addedChains map[ids.ID][]*txs.Tx
-
-	addedRewardUTXOs map[ids.ID][]*avax.UTXO
-
 	addedTxs map[ids.ID]*txAndStatus
 
 	// map of modified UTXOID -> *UTXO if the UTXO is nil, it has been removed
 	modifiedUTXOs map[ids.ID]*avax.UTXO
+
+	// applyOps records mutations in the order they were issued. [Diff.Apply]
+	// replays them against the base state.
+	applyOps []func(Chain) error
 }
 
 // NewDiff returns a new [Diff] whose parent is identified by parentID within
@@ -125,6 +124,10 @@ func (d *Diff) GetTimestamp() time.Time {
 
 func (d *Diff) SetTimestamp(timestamp time.Time) {
 	d.timestamp = timestamp
+	d.recordOp(func(c Chain) error {
+		c.SetTimestamp(timestamp)
+		return nil
+	})
 }
 
 func (d *Diff) GetFeeState() gas.State {
@@ -133,6 +136,10 @@ func (d *Diff) GetFeeState() gas.State {
 
 func (d *Diff) SetFeeState(feeState gas.State) {
 	d.feeState = feeState
+	d.recordOp(func(c Chain) error {
+		c.SetFeeState(feeState)
+		return nil
+	})
 }
 
 func (d *Diff) GetL1ValidatorExcess() gas.Gas {
@@ -141,6 +148,10 @@ func (d *Diff) GetL1ValidatorExcess() gas.Gas {
 
 func (d *Diff) SetL1ValidatorExcess(excess gas.Gas) {
 	d.l1ValidatorExcess = excess
+	d.recordOp(func(c Chain) error {
+		c.SetL1ValidatorExcess(excess)
+		return nil
+	})
 }
 
 func (d *Diff) GetAccruedFees() uint64 {
@@ -149,6 +160,10 @@ func (d *Diff) GetAccruedFees() uint64 {
 
 func (d *Diff) SetAccruedFees(accruedFees uint64) {
 	d.accruedFees = accruedFees
+	d.recordOp(func(c Chain) error {
+		c.SetAccruedFees(accruedFees)
+		return nil
+	})
 }
 
 func (d *Diff) GetCurrentSupply(subnetID ids.ID) (uint64, error) {
@@ -173,6 +188,10 @@ func (d *Diff) SetCurrentSupply(subnetID ids.ID, currentSupply uint64) {
 	} else {
 		d.currentSupply[subnetID] = currentSupply
 	}
+	d.recordOp(func(c Chain) error {
+		c.SetCurrentSupply(subnetID, currentSupply)
+		return nil
+	})
 }
 
 func (d *Diff) GetExpiryIterator() (iterator.Iterator[ExpiryEntry], error) {
@@ -204,10 +223,18 @@ func (d *Diff) HasExpiry(entry ExpiryEntry) (bool, error) {
 
 func (d *Diff) PutExpiry(entry ExpiryEntry) {
 	d.expiryDiff.PutExpiry(entry)
+	d.recordOp(func(c Chain) error {
+		c.PutExpiry(entry)
+		return nil
+	})
 }
 
 func (d *Diff) DeleteExpiry(entry ExpiryEntry) {
 	d.expiryDiff.DeleteExpiry(entry)
+	d.recordOp(func(c Chain) error {
+		c.DeleteExpiry(entry)
+		return nil
+	})
 }
 
 func (d *Diff) GetActiveL1ValidatorsIterator() (iterator.Iterator[L1Validator], error) {
@@ -271,7 +298,13 @@ func (d *Diff) HasL1Validator(subnetID ids.ID, nodeID ids.NodeID) (bool, error) 
 }
 
 func (d *Diff) PutL1Validator(l1Validator L1Validator) error {
-	return d.l1ValidatorsDiff.putL1Validator(d, l1Validator)
+	if err := d.l1ValidatorsDiff.putL1Validator(d, l1Validator); err != nil {
+		return err
+	}
+	d.recordOp(func(c Chain) error {
+		return c.PutL1Validator(l1Validator)
+	})
+	return nil
 }
 
 func (d *Diff) GetCurrentValidator(subnetID ids.ID, nodeID ids.NodeID) (*Staker, error) {
@@ -299,6 +332,9 @@ func (d *Diff) SetStakingInfo(subnetID ids.ID, nodeID ids.NodeID, stakingInfo St
 	}
 
 	d.setStakingInfo(subnetID, nodeID, stakingInfo)
+	d.recordOp(func(c Chain) error {
+		return c.SetStakingInfo(subnetID, nodeID, stakingInfo)
+	})
 	return nil
 }
 
@@ -344,6 +380,9 @@ func (d *Diff) PutCurrentValidator(staker *Staker) error {
 
 	d.setStakingInfo(staker.SubnetID, staker.NodeID, StakingInfo{})
 
+	d.recordOp(func(c Chain) error {
+		return c.PutCurrentValidator(staker)
+	})
 	return nil
 }
 
@@ -359,6 +398,9 @@ func (d *Diff) DeleteCurrentValidator(staker *Staker) error {
 	d.currentStakerDiffs.DeleteValidator(staker)
 	delete(d.modifiedStakingInfo[staker.SubnetID], staker.NodeID)
 
+	d.recordOp(func(c Chain) error {
+		return c.DeleteCurrentValidator(staker)
+	})
 	return nil
 }
 
@@ -382,6 +424,9 @@ func (d *Diff) PutCurrentDelegator(staker *Staker) error {
 	}
 
 	d.currentStakerDiffs.PutDelegator(staker)
+	d.recordOp(func(c Chain) error {
+		return c.PutCurrentDelegator(staker)
+	})
 	return nil
 }
 
@@ -391,6 +436,9 @@ func (d *Diff) DeleteCurrentDelegator(staker *Staker) error {
 	}
 
 	d.currentStakerDiffs.DeleteDelegator(staker)
+	d.recordOp(func(c Chain) error {
+		return c.DeleteCurrentDelegator(staker)
+	})
 	return nil
 }
 
@@ -428,11 +476,21 @@ func (d *Diff) GetPendingValidator(subnetID ids.ID, nodeID ids.NodeID) (*Staker,
 }
 
 func (d *Diff) PutPendingValidator(staker *Staker) error {
-	return d.pendingStakerDiffs.PutValidator(staker)
+	if err := d.pendingStakerDiffs.PutValidator(staker); err != nil {
+		return err
+	}
+	d.recordOp(func(c Chain) error {
+		return c.PutPendingValidator(staker)
+	})
+	return nil
 }
 
 func (d *Diff) DeletePendingValidator(staker *Staker) {
 	d.pendingStakerDiffs.DeleteValidator(staker)
+	d.recordOp(func(c Chain) error {
+		c.DeletePendingValidator(staker)
+		return nil
+	})
 }
 
 func (d *Diff) GetPendingDelegatorIterator(subnetID ids.ID, nodeID ids.NodeID) (iterator.Iterator[*Staker], error) {
@@ -451,10 +509,18 @@ func (d *Diff) GetPendingDelegatorIterator(subnetID ids.ID, nodeID ids.NodeID) (
 
 func (d *Diff) PutPendingDelegator(staker *Staker) {
 	d.pendingStakerDiffs.PutDelegator(staker)
+	d.recordOp(func(c Chain) error {
+		c.PutPendingDelegator(staker)
+		return nil
+	})
 }
 
 func (d *Diff) DeletePendingDelegator(staker *Staker) {
 	d.pendingStakerDiffs.DeleteDelegator(staker)
+	d.recordOp(func(c Chain) error {
+		c.DeletePendingDelegator(staker)
+		return nil
+	})
 }
 
 func (d *Diff) GetPendingStakerIterator() (iterator.Iterator[*Staker], error) {
@@ -472,7 +538,10 @@ func (d *Diff) GetPendingStakerIterator() (iterator.Iterator[*Staker], error) {
 }
 
 func (d *Diff) AddSubnet(subnetID ids.ID) {
-	d.addedSubnetIDs = append(d.addedSubnetIDs, subnetID)
+	d.recordOp(func(c Chain) error {
+		c.AddSubnet(subnetID)
+		return nil
+	})
 }
 
 func (d *Diff) GetSubnetOwner(subnetID ids.ID) (fx.Owner, error) {
@@ -491,6 +560,10 @@ func (d *Diff) GetSubnetOwner(subnetID ids.ID) (fx.Owner, error) {
 
 func (d *Diff) SetSubnetOwner(subnetID ids.ID, owner fx.Owner) {
 	d.subnetOwners[subnetID] = owner
+	d.recordOp(func(c Chain) error {
+		c.SetSubnetOwner(subnetID, owner)
+		return nil
+	})
 }
 
 func (d *Diff) GetSubnetToL1Conversion(subnetID ids.ID) (SubnetToL1Conversion, error) {
@@ -506,8 +579,12 @@ func (d *Diff) GetSubnetToL1Conversion(subnetID ids.ID) (SubnetToL1Conversion, e
 	return parentState.GetSubnetToL1Conversion(subnetID)
 }
 
-func (d *Diff) SetSubnetToL1Conversion(subnetID ids.ID, c SubnetToL1Conversion) {
-	d.subnetToL1Conversions[subnetID] = c
+func (d *Diff) SetSubnetToL1Conversion(subnetID ids.ID, conv SubnetToL1Conversion) {
+	d.subnetToL1Conversions[subnetID] = conv
+	d.recordOp(func(c Chain) error {
+		c.SetSubnetToL1Conversion(subnetID, conv)
+		return nil
+	})
 }
 
 func (d *Diff) GetSubnetTransformation(subnetID ids.ID) (*txs.Tx, error) {
@@ -533,17 +610,17 @@ func (d *Diff) AddSubnetTransformation(transformSubnetTxIntf *txs.Tx) {
 	} else {
 		d.transformedSubnets[transformSubnetTx.Subnet] = transformSubnetTxIntf
 	}
+	d.recordOp(func(c Chain) error {
+		c.AddSubnetTransformation(transformSubnetTxIntf)
+		return nil
+	})
 }
 
 func (d *Diff) AddChain(createChainTx *txs.Tx) {
-	tx := createChainTx.Unsigned.(*txs.CreateChainTx)
-	if d.addedChains == nil {
-		d.addedChains = map[ids.ID][]*txs.Tx{
-			tx.SubnetID: {createChainTx},
-		}
-	} else {
-		d.addedChains[tx.SubnetID] = append(d.addedChains[tx.SubnetID], createChainTx)
-	}
+	d.recordOp(func(c Chain) error {
+		c.AddChain(createChainTx)
+		return nil
+	})
 }
 
 func (d *Diff) GetTx(txID ids.ID) (*txs.Tx, status.Status, error) {
@@ -571,13 +648,17 @@ func (d *Diff) AddTx(tx *txs.Tx, status status.Status) {
 	} else {
 		d.addedTxs[txID] = txStatus
 	}
+	d.recordOp(func(c Chain) error {
+		c.AddTx(tx, status)
+		return nil
+	})
 }
 
 func (d *Diff) AddRewardUTXO(txID ids.ID, utxo *avax.UTXO) {
-	if d.addedRewardUTXOs == nil {
-		d.addedRewardUTXOs = make(map[ids.ID][]*avax.UTXO)
-	}
-	d.addedRewardUTXOs[txID] = append(d.addedRewardUTXOs[txID], utxo)
+	d.recordOp(func(c Chain) error {
+		c.AddRewardUTXO(txID, utxo)
+		return nil
+	})
 }
 
 func (d *Diff) GetUTXO(utxoID ids.ID) (*avax.UTXO, error) {
@@ -603,6 +684,10 @@ func (d *Diff) AddUTXO(utxo *avax.UTXO) {
 	} else {
 		d.modifiedUTXOs[utxo.InputID()] = utxo
 	}
+	d.recordOp(func(c Chain) error {
+		c.AddUTXO(utxo)
+		return nil
+	})
 }
 
 func (d *Diff) DeleteUTXO(utxoID ids.ID) {
@@ -613,147 +698,21 @@ func (d *Diff) DeleteUTXO(utxoID ids.ID) {
 	} else {
 		d.modifiedUTXOs[utxoID] = nil
 	}
+	d.recordOp(func(c Chain) error {
+		c.DeleteUTXO(utxoID)
+		return nil
+	})
+}
+
+func (d *Diff) recordOp(op func(Chain) error) {
+	d.applyOps = append(d.applyOps, op)
 }
 
 func (d *Diff) Apply(baseState Chain) error {
-	baseState.SetTimestamp(d.timestamp)
-	baseState.SetFeeState(d.feeState)
-	baseState.SetL1ValidatorExcess(d.l1ValidatorExcess)
-	baseState.SetAccruedFees(d.accruedFees)
-	for subnetID, supply := range d.currentSupply {
-		baseState.SetCurrentSupply(subnetID, supply)
-	}
-	for entry, isAdded := range d.expiryDiff.modified {
-		if isAdded {
-			baseState.PutExpiry(entry)
-		} else {
-			baseState.DeleteExpiry(entry)
-		}
-	}
-	// Ensure that all l1Validator deletions happen before any l1Validator
-	// additions. This ensures that a subnetID+nodeID pair that was deleted and
-	// then re-added in a single diff can't get reordered into the addition
-	// happening first; which would return an error.
-	for _, l1Validator := range d.l1ValidatorsDiff.modified {
-		if !l1Validator.isDeleted() {
-			continue
-		}
-		if err := baseState.PutL1Validator(l1Validator); err != nil {
+	for _, op := range d.applyOps {
+		if err := op(baseState); err != nil {
 			return err
 		}
 	}
-	for _, l1Validator := range d.l1ValidatorsDiff.modified {
-		if l1Validator.isDeleted() {
-			continue
-		}
-		if err := baseState.PutL1Validator(l1Validator); err != nil {
-			return err
-		}
-	}
-	for _, subnetValidatorDiffs := range d.currentStakerDiffs.validatorDiffs {
-		for _, validatorDiff := range subnetValidatorDiffs {
-			// Delegators must be removed before their respective validators
-			for _, delegator := range validatorDiff.deletedDelegators {
-				if err := baseState.DeleteCurrentDelegator(delegator); err != nil {
-					return fmt.Errorf("deleting current delegator: %w", err)
-				}
-			}
-
-			// We might have removed the validator and then added it in the same diff.
-			// We therefore first delete and then only after add it.
-			if validatorDiff.removed != nil {
-				if err := baseState.DeleteCurrentValidator(validatorDiff.removed); err != nil {
-					return fmt.Errorf("deleting current validator: %w", err)
-				}
-			}
-			if validatorDiff.added != nil {
-				if err := baseState.PutCurrentValidator(validatorDiff.added); err != nil {
-					return err
-				}
-			}
-
-			// Delegators must be added after validators are added
-			if err := addCurrentDelegators(baseState, validatorDiff); err != nil {
-				return err
-			}
-		}
-	}
-	for subnetID, nodes := range d.modifiedStakingInfo {
-		for nodeID, stakingInfo := range nodes {
-			if err := baseState.SetStakingInfo(subnetID, nodeID, stakingInfo); err != nil {
-				return fmt.Errorf("setting staking info: %w", err)
-			}
-		}
-	}
-	for _, subnetValidatorDiffs := range d.pendingStakerDiffs.validatorDiffs {
-		for _, validatorDiff := range subnetValidatorDiffs {
-			// We might have removed the validator and then added it in the same diff.
-			// We therefore first delete and then only after add it.
-			if validatorDiff.removed != nil {
-				baseState.DeletePendingValidator(validatorDiff.removed)
-			}
-			if validatorDiff.added != nil {
-				if err := baseState.PutPendingValidator(validatorDiff.added); err != nil {
-					return err
-				}
-			}
-
-			addedDelegatorIterator := iterator.FromTree(validatorDiff.addedDelegators)
-			for addedDelegatorIterator.Next() {
-				baseState.PutPendingDelegator(addedDelegatorIterator.Value())
-			}
-			addedDelegatorIterator.Release()
-
-			for _, delegator := range validatorDiff.deletedDelegators {
-				baseState.DeletePendingDelegator(delegator)
-			}
-		}
-	}
-	for _, subnetID := range d.addedSubnetIDs {
-		baseState.AddSubnet(subnetID)
-	}
-	for _, tx := range d.transformedSubnets {
-		baseState.AddSubnetTransformation(tx)
-	}
-	for _, chains := range d.addedChains {
-		for _, chain := range chains {
-			baseState.AddChain(chain)
-		}
-	}
-	for _, tx := range d.addedTxs {
-		baseState.AddTx(tx.tx, tx.status)
-	}
-	for txID, utxos := range d.addedRewardUTXOs {
-		for _, utxo := range utxos {
-			baseState.AddRewardUTXO(txID, utxo)
-		}
-	}
-	for utxoID, utxo := range d.modifiedUTXOs {
-		if utxo != nil {
-			baseState.AddUTXO(utxo)
-		} else {
-			baseState.DeleteUTXO(utxoID)
-		}
-	}
-	for subnetID, owner := range d.subnetOwners {
-		baseState.SetSubnetOwner(subnetID, owner)
-	}
-	for subnetID, c := range d.subnetToL1Conversions {
-		baseState.SetSubnetToL1Conversion(subnetID, c)
-	}
-	return nil
-}
-
-// addCurrentDelegators adds all delegators for validator to baseState
-func addCurrentDelegators(state Chain, validator *diffValidator) error {
-	addedDelegatorIterator := iterator.FromTree(validator.addedDelegators)
-	defer addedDelegatorIterator.Release()
-
-	for addedDelegatorIterator.Next() {
-		if err := state.PutCurrentDelegator(addedDelegatorIterator.Value()); err != nil {
-			return fmt.Errorf("putting current delegator: %w", err)
-		}
-	}
-
 	return nil
 }

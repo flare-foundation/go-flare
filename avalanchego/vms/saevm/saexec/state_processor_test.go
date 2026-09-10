@@ -39,9 +39,9 @@ import (
 // withCChainExtras runs fn with the libevm extras registered exactly as
 // main/main.go does for the production binary (RegisterAllLibEVMExtras),
 // scoped to fn. [ApplyTransactionWithExtras] relies on this registration:
-// coreth's params.RulesExtra.AfterExecutingTransaction hook credits the base
-// fee to [constants.BlackholeAddr], without which settleFees would find the
-// coinbase underfunded.
+// coreth's params.RulesExtra.ShouldCreditBaseFeeToCoinbase makes libevm credit
+// the base fee to the coinbase ([constants.BlackholeAddr]), without which
+// settleFees would find the coinbase underfunded.
 func withCChainExtras(t *testing.T, fn func(t *testing.T)) {
 	t.Helper()
 	require.NoError(t, corethevm.WithTempRegisteredLibEVMExtras(func() error {
@@ -251,7 +251,7 @@ func TestSettleFees(t *testing.T) {
 			// Upstream-parity mode: when the burn address IS the coinbase and
 			// the call is not prioritised, settlement must be a no-op even if
 			// the coinbase holds less than the full fee (libevm without
-			// coreth's AfterExecutingTransaction hook credits only the tip).
+			// coreth's ShouldCreditBaseFeeToCoinbase hook credits only the tip).
 			name:        "burn_address_is_coinbase_noop_even_underfunded",
 			coinbase:    constants.BlackholeAddr,
 			extras:      songbirdExtras,

@@ -104,7 +104,8 @@ func (legacyChainContext) Engine() dconsensus.Engine { return nil }
 // [ApplyTransaction]) rather than [ApplyTransactionWithExtras]. Only these
 // blocks use the header base fee directly; SAE-era blocks (post-Helicon coreth,
 // or any config without coreth extras) carry a worst-case base-fee bound whose
-// executed value must be derived (see [DeriveExecutedBaseFee]). A config without
+// executed value is derived from the parent's executed gas clock (see [Execute]
+// and the SAE rpc tracers' re-seal of caller-supplied blocks). A config without
 // coreth extras, or with no scheduled Helicon, is never legacy.
 func IsLegacyCorethBlock(config *params.ChainConfig, blockTime uint64) bool {
 	upgrades, hasCorethExtras := config.Hooks().(*corethextras.ChainConfig)
@@ -294,11 +295,11 @@ func settleFees(statedb *state.StateDB, coinbase common.Address, msg *core.Messa
 	}
 	if statedb.GetBalance(coinbase).Cmp(actualFee) < 0 {
 		// Unreachable for verified blocks: libevm's ApplyMessage credits the
-		// effective tip to the coinbase, coreth's
-		// RulesExtra.AfterExecutingTransaction hook credits the base fee to
-		// constants.BlackholeAddr, and SAE block verification forces
-		// header.Coinbase == constants.BlackholeAddr — so the coinbase holds
-		// at least usedGas * effectiveGasPrice at this point.
+		// effective tip to the coinbase and, because coreth's
+		// RulesExtra.ShouldCreditBaseFeeToCoinbase returns true, the base
+		// fee as well; SAE block verification forces header.Coinbase ==
+		// constants.BlackholeAddr — so the coinbase holds at least
+		// usedGas * effectiveGasPrice at this point.
 		return fmt.Errorf("coinbase %s balance below transaction fee %s", coinbase, actualFee)
 	}
 	statedb.SubBalance(coinbase, actualFee)

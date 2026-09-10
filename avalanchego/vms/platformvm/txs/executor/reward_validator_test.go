@@ -190,7 +190,7 @@ func addAutoRenewedValidator(t testing.TB, env *environment, tx *txs.Tx, cfg aut
 		AutoCompoundRewardShares: cfg.autoCompoundRewardShares,
 	}
 	if cfg.restake {
-		stakingInfo.NextPeriod = env.config.MinValidatorStake
+		stakingInfo.NextPeriod = uint64(env.config.MinStakeDuration / time.Second)
 	}
 
 	nodeID := (tx.Unsigned.(*txs.AddAutoRenewedValidatorTx)).NodeID()
@@ -581,6 +581,8 @@ func TestRewardDelegatorTxExecuteOnCommitPreDelegateeDeferral(t *testing.T) {
 		vdrTx.ID(),
 		addValTx,
 		addValTx.StartTime(),
+		addValTx.EndTime(),
+		addValTx.Weight(),
 		0,
 	)
 	require.NoError(err)
@@ -590,6 +592,8 @@ func TestRewardDelegatorTxExecuteOnCommitPreDelegateeDeferral(t *testing.T) {
 		delTx.ID(),
 		addDelTx,
 		addDelTx.StartTime(),
+		addDelTx.EndTime(),
+		addDelTx.Weight(),
 		1000000,
 	)
 	require.NoError(err)
@@ -711,7 +715,9 @@ func TestRewardDelegatorTxExecuteOnCommitPostDelegateeDeferral(t *testing.T) {
 	vdrStaker, err := state.NewCurrentStaker(
 		vdrTx.ID(),
 		addValTx,
-		time.Unix(int64(vdrStartTime), 0),
+		addValTx.StartTime(),
+		addValTx.EndTime(),
+		addValTx.Weight(),
 		vdrRewardAmt,
 	)
 	require.NoError(err)
@@ -721,7 +727,9 @@ func TestRewardDelegatorTxExecuteOnCommitPostDelegateeDeferral(t *testing.T) {
 	delStaker, err := state.NewCurrentStaker(
 		delTx.ID(),
 		addDelTx,
-		time.Unix(int64(delStartTime), 0),
+		addDelTx.StartTime(),
+		addDelTx.EndTime(),
+		addDelTx.Weight(),
 		delRewardAmt,
 	)
 	require.NoError(err)
@@ -937,6 +945,8 @@ func TestRewardDelegatorTxAndValidatorTxExecuteOnCommitPostDelegateeDeferral(t *
 		vdrTx.ID(),
 		addValTx,
 		addValTx.StartTime(),
+		addValTx.EndTime(),
+		addValTx.Weight(),
 		vdrRewardAmt,
 	)
 	require.NoError(err)
@@ -946,7 +956,9 @@ func TestRewardDelegatorTxAndValidatorTxExecuteOnCommitPostDelegateeDeferral(t *
 	delStaker, err := state.NewCurrentStaker(
 		delTx.ID(),
 		addDelTx,
-		time.Unix(int64(delStartTime), 0),
+		addDelTx.StartTime(),
+		addDelTx.EndTime(),
+		addDelTx.Weight(),
 		delRewardAmt,
 	)
 	require.NoError(err)
@@ -1107,6 +1119,8 @@ func TestRewardDelegatorTxExecuteOnAbort(t *testing.T) {
 		vdrTx.ID(),
 		addValTx,
 		addValTx.StartTime(),
+		addValTx.EndTime(),
+		addValTx.Weight(),
 		0,
 	)
 	require.NoError(err)
@@ -1116,6 +1130,8 @@ func TestRewardDelegatorTxExecuteOnAbort(t *testing.T) {
 		delTx.ID(),
 		addDelTx,
 		addDelTx.StartTime(),
+		addDelTx.EndTime(),
+		addDelTx.Weight(),
 		1000000,
 	)
 	require.NoError(err)

@@ -54,8 +54,11 @@ func TestApricotProposalBlockTimeVerification(t *testing.T) {
 
 	// create a proposal transaction to be included into proposal block
 	utx := &txs.AddValidatorTx{
-		BaseTx:    txs.BaseTx{},
-		Validator: txs.Validator{End: uint64(chainTime.Unix())},
+		BaseTx: txs.BaseTx{},
+		Validator: txs.Validator{
+			End:  uint64(chainTime.Unix()),
+			Wght: 1,
+		},
 		StakeOuts: []*avax.TransferableOutput{
 			{
 				Asset: avax.Asset{
@@ -83,6 +86,7 @@ func TestApricotProposalBlockTimeVerification(t *testing.T) {
 		TxID:      addValTx.ID(),
 		NodeID:    utx.NodeID(),
 		SubnetID:  utx.SubnetID(),
+		Weight:    utx.Weight(),
 		StartTime: utx.StartTime(),
 		EndTime:   chainTime,
 		NextTime:  chainTime,
@@ -145,8 +149,11 @@ func TestBanffProposalBlockTimeVerification(t *testing.T) {
 	// setup state to validate proposal block transaction
 	nextStakerTime := chainTime.Add(executor.SyncBound).Add(-1 * time.Second)
 	unsignedNextStakerTx := &txs.AddValidatorTx{
-		BaseTx:    txs.BaseTx{},
-		Validator: txs.Validator{End: uint64(nextStakerTime.Unix())},
+		BaseTx: txs.BaseTx{},
+		Validator: txs.Validator{
+			End:  uint64(nextStakerTime.Unix()),
+			Wght: 1,
+		},
 		StakeOuts: []*avax.TransferableOutput{
 			{
 				Asset: avax.Asset{
@@ -170,6 +177,7 @@ func TestBanffProposalBlockTimeVerification(t *testing.T) {
 		NodeID:    unsignedNextStakerTx.NodeID(),
 		SubnetID:  unsignedNextStakerTx.SubnetID(),
 		Priority:  txs.PrimaryNetworkValidatorCurrentPriority,
+		Weight:    unsignedNextStakerTx.Weight(),
 		StartTime: nextStakerTime,
 		EndTime:   nextStakerTime,
 		NextTime:  nextStakerTime,
@@ -568,6 +576,8 @@ func TestBanffProposalBlockUpdateStakers(t *testing.T) {
 					addStaker0.ID(),
 					addValTx,
 					addValTx.StartTime(),
+					addValTx.EndTime(),
+					addValTx.Weight(),
 					0,
 				)
 				require.NoError(err)
@@ -671,6 +681,8 @@ func TestBanffProposalBlockRemoveSubnetValidator(t *testing.T) {
 		tx.ID(),
 		addSubnetValTx,
 		addSubnetValTx.StartTime(),
+		addSubnetValTx.EndTime(),
+		addSubnetValTx.Weight(),
 		0,
 	)
 	require.NoError(err)
@@ -739,6 +751,8 @@ func TestBanffProposalBlockRemoveSubnetValidator(t *testing.T) {
 		addStaker0.ID(),
 		addValTx,
 		addValTx.StartTime(),
+		addValTx.EndTime(),
+		addValTx.Weight(),
 		0,
 	)
 	require.NoError(err)
@@ -861,6 +875,8 @@ func TestBanffProposalBlockTrackedSubnet(t *testing.T) {
 				addStaker0.ID(),
 				addValTx,
 				addValTx.StartTime(),
+				addValTx.EndTime(),
+				addValTx.Weight(),
 				0,
 			)
 			require.NoError(err)
@@ -953,6 +969,8 @@ func TestBanffProposalBlockDelegatorStakerWeight(t *testing.T) {
 		addStaker0.ID(),
 		addValTx,
 		addValTx.StartTime(),
+		addValTx.EndTime(),
+		addValTx.Weight(),
 		0,
 	)
 	require.NoError(err)
@@ -1042,6 +1060,8 @@ func TestBanffProposalBlockDelegatorStakerWeight(t *testing.T) {
 		addStaker0.ID(),
 		addValTx,
 		addValTx.StartTime(),
+		addValTx.EndTime(),
+		addValTx.Weight(),
 		0,
 	)
 	require.NoError(err)
@@ -1138,6 +1158,8 @@ func TestBanffProposalBlockDelegatorStakers(t *testing.T) {
 		addStaker0.ID(),
 		addValTx,
 		addValTx.StartTime(),
+		addValTx.EndTime(),
+		addValTx.Weight(),
 		0,
 	)
 	require.NoError(err)
@@ -1227,6 +1249,8 @@ func TestBanffProposalBlockDelegatorStakers(t *testing.T) {
 		addStaker0.ID(),
 		addValTx,
 		addValTx.StartTime(),
+		addValTx.EndTime(),
+		addValTx.Weight(),
 		0,
 	)
 	require.NoError(err)

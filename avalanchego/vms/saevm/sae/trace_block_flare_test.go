@@ -39,7 +39,7 @@ func TestDebugTraceBlockRLPBeforeBlockUsesSuppliedBlock(t *testing.T) {
 		mu   sync.Mutex
 		seen = map[uint64]common.Hash{}
 	)
-	sut.hooks.BeforeExecutingBlockFn = func(_ params.Rules, _ *state.StateDB, _ *types.Header, block *types.Block) error {
+	sut.hooks.StartExecutingBlockFn = func(_ params.Rules, _ *state.StateDB, _ *types.Header, block *types.Block) error {
 		mu.Lock()
 		seen[block.Time()] = block.Hash()
 		mu.Unlock()

@@ -18,6 +18,8 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//chains/atomic",
+        "//codec",
+        "//genesis",
         "//ids",
         "//snow",
         "//snow/consensus/snowman",
