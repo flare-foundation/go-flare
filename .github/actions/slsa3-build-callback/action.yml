@@ -40,7 +40,7 @@ runs:
   using: 'composite'
   steps:
     - name: Build
-      uses: ./../__TOOL_CHECKOUT_DIR__/.github/actions/go-build
+      uses: ./../__TOOL_CHECKOUT_DIR__/.github/actions/go-build # zizmor: ignore[self-repository] path is rewritten by the SLSA delegator at runtime
       with:
         go_version: ${{ fromJSON(inputs.slsa-workflow-inputs).go_version }}
         working_directory: ./../__TOOL_CHECKOUT_DIR__
@@ -62,7 +62,7 @@ runs:
 
     - name: Upload binaries
       id: upload
-      uses: slsa-framework/slsa-github-generator/actions/delegator/secure-upload-folder@v2.1.0
+      uses: slsa-framework/slsa-github-generator/actions/delegator/secure-upload-folder@f7dd8c54c2067bafc12ca7a55595d5ee9b75204a # v2.1.0
       with:
         name: ${{ fromJSON(inputs.slsa-workflow-inputs).build_artifact_name }}
         path: ./binaries/
