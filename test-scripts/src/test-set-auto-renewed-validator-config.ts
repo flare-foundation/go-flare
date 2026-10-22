@@ -62,5 +62,5 @@ async function setAutoRenewedValidatorConfig(nodeId: string, period: number) {
 
 runTest(() => setAutoRenewedValidatorConfig(
     nodeID,
-    100 // stop auto-renewing at the end of the current validation cycle
+    0 // stop auto-renewing at the end of the current validation cycle (any other value must be >= 15 mins on localflare)
 ))

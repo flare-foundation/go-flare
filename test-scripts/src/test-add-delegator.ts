@@ -32,6 +32,6 @@ async function addDelegator(nodeId: string, endTime: number, weight: number) {
 
 runTest(() => addDelegator(
     'NodeID-7Xhw2mDxuDS44j42TCB6U5579esbSt3Lg',
-    Math.ceil(Date.now() / 1000) + 60 * 60 + 5, // 1 hour (+ 5 seconds) from now
+    Math.ceil(Date.now() / 1000) + 11 * 60 + 5, // 11 minutes (+ 5 seconds) from now
     10_000
 ))

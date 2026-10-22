@@ -5,8 +5,8 @@ import { runTest } from "./runner";
 // Arbitrary valid node ID (the node does not have to be running); different from
 // the one in test-add-validator.ts so both scripts can run on the same network.
 const nodeID = 'NodeID-GWPcbFJZFfZreETSoWjPimr846mXEKCtu';
-const blsPublicKey = '0xadb0203ebc76627d28fb9440272a2701b85f5c5d4266352686ea42666f5026f1fdabab59529932f1eddb317a6f7435f9';
-const blsSignature = '0x926a1c21953babb12189ec88bfab5cb0060b385efa04c51abe4a3bc42266f80eebb84bcfaacfc8f075560ab444bda8de17bf9013ec20a80dfdfda4ae047a0b39669d153dcee94eb964fe194f5d55c5bba5939ff9ba07b728b6733d696c33ac5a'
+const blsPublicKey = '0xa926858ebfba247e6d759e40bc82f92c20f359769e3538d58562bf30077f5e4c62b3b149f11b8e68a2f5599acd782de2';
+const blsSignature = '0xb48df13f6e0167e2f40cc7c02cf81bf4a2c0b1b686395a56690deb6b5876c0a654ac41253455f41a6c65ac2fbf712d980d9012375edf73efb341d0961ac09197bf5f807192b6cd9f44c9e9032b0e035e4d07ba7eebccf434688610a2f51bc492'
 
 async function addAutoRenewedValidator(nodeId: string, period: number, weight: number) {
     const ctx = await localFlareContext();
@@ -55,6 +55,6 @@ async function addAutoRenewedValidator(nodeId: string, period: number, weight: n
 
 runTest(() => addAutoRenewedValidator(
     nodeID,
-    3600, // minimal staking period on localflare (1 hour)
+    15 * 60, // 15 minutes
     10_000
 ))
