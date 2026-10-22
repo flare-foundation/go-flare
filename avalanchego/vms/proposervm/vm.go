@@ -418,6 +418,9 @@ func (vm *VM) SetPreference(ctx context.Context, preferred ids.ID) error {
 
 		if err := vm.setPreferenceVM.SetPreferenceWithContext(ctx, innerBlkID, &block.Context{
 			PChainHeight: nextPChainHeight,
+			// Flare: a child's own P-chain height is chosen when it is built
+			// and is at least the preferred block's height.
+			ProposerPChainHeight: preferredPChainHeight,
 		}); err != nil {
 			return err
 		}
@@ -426,6 +429,7 @@ func (vm *VM) SetPreference(ctx context.Context, preferred ids.ID) error {
 			zap.Stringer("blkID", preferred),
 			zap.Stringer("innerBlkID", innerBlkID),
 			zap.Uint64("pChainHeight", nextPChainHeight),
+			zap.Uint64("proposerPChainHeight", preferredPChainHeight),
 		)
 		return nil
 	}

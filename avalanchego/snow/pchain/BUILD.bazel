@@ -1,0 +1,9 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "pchain",
+    srcs = ["pchain.go"],
+    importpath = "github.com/ava-labs/avalanchego/snow/pchain",
+    visibility = ["//visibility:public"],
+    deps = ["//ids"],
+)

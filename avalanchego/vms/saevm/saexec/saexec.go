@@ -8,6 +8,7 @@
 package saexec
 
 import (
+	"context"
 	"fmt"
 	"sync/atomic"
 
@@ -37,8 +38,13 @@ type Executor struct {
 	done  chan struct{}
 	log   logging.Logger
 	hooks hook.Points
+	// Flare: ctx is cancelled by [Executor.Close] to abort a block waiting in
+	// [hook.ExecutionGate.AwaitExecutionPrerequisites].
+	ctx    context.Context
+	cancel context.CancelFunc
 
 	queue        chan queuedBlock
+	queueErr     atomic.Pointer[Unhealthy]
 	lastExecuted atomic.Pointer[blocks.Block]
 
 	headEvents  event.FeedOf[core.ChainHeadEvent]
@@ -74,11 +80,14 @@ func New(
 		return nil, fmt.Errorf("initializing saexec metrics: %w", err)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 	e := &Executor{
 		Tracker: tracker,
 		done:    make(chan struct{}), // closed by [Executor.processQueue] once `queue` is closed and drained
 		log:     logger,
 		hooks:   hooks,
+		ctx:     ctx,
+		cancel:  cancel,
 		// On startup we enqueue every block since the last time the trie DB was
 		// committed, so the queue needs sufficient capacity to avoid
 		// [Executor.Enqueue] warning about it being too full.
@@ -97,15 +106,53 @@ func New(
 	}
 	e.lastExecuted.Store(lastExecuted)
 
-	go e.processQueue()
+	go e.processQueue() //nolint:errcheck // Stored in [Executor.queueErr] for access via [Executor.HealthCheck]
 	return e, nil
 }
 
-// Close shuts down the [Executor] and waits for all queued blocks to finish
-// executing.
-func (e *Executor) Close() {
+// Unhealthy is the [error] type returned by [Executor.HealthCheck].
+type Unhealthy struct {
+	err   error
+	cause *blocks.Block
+}
+
+// Error implements [error].
+func (e *Unhealthy) Error() string {
+	return fmt.Sprintf("saexec.Executor unhealthy due to block %d (%#x): %s", e.cause.NumberU64(), e.cause.Hash(), e.err.Error())
+}
+
+// Unwrap returns the error that caused the [Executor] to enter an unhealthy
+// state.
+func (e *Unhealthy) Unwrap() error {
+	return e.err
+}
+
+// Block returns the block that caused the [Executor] to enter an unhealthy
+// state.
+func (e *Unhealthy) Block() *blocks.Block {
+	return e.cause
+}
+
+// HealthCheck returns any error resulting from queue processing. It MAY return
+// nil even if the [Executor] has been closed, as long as the shutdown was
+// graceful. If non-nil, the error will be of type [Unhealthy].
+func (e *Executor) HealthCheck() error {
+	if err := e.queueErr.Load(); err != nil { // Avoids returning typed nil
+		return err
+	}
+	return nil
+}
+
+// executing. It returns [Executor.HealthCheck].
+// A block still waiting in
+// [hook.ExecutionGate.AwaitExecutionPrerequisites] is aborted instead; it and
+// every block queued after it remain accepted-but-unexecuted and are
+// re-executed on restart (recovery re-enqueues all such blocks).
+func (e *Executor) Close() error {
+	e.cancel() // Flare: abort a block waiting on its execution prerequisites
 	close(e.queue)
 	<-e.done
+	return e.HealthCheck()
 }
 
 // ChainConfig returns the config originally passed to [New].

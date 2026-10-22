@@ -416,9 +416,7 @@ func (vm *VMServer) BuildBlock(ctx context.Context, req *vmpb.BuildBlockRequest)
 	if vm.bVM == nil || req.PChainHeight == nil {
 		blk, err = vm.vm.BuildBlock(ctx)
 	} else {
-		blk, err = vm.bVM.BuildBlockWithContext(ctx, &block.Context{
-			PChainHeight: *req.PChainHeight,
-		})
+		blk, err = vm.bVM.BuildBlockWithContext(ctx, blockContextFromRequest(req.PChainHeight, req.ProposerPChainHeight))
 	}
 	if err != nil {
 		return nil, err
@@ -772,9 +770,7 @@ func (vm *VMServer) BlockVerify(ctx context.Context, req *vmpb.BlockVerifyReques
 		if !ok {
 			return nil, fmt.Errorf("%w but got %T", errExpectedBlockWithVerifyContext, blk)
 		}
-		blockCtx := &block.Context{
-			PChainHeight: *req.PChainHeight,
-		}
+		blockCtx := blockContextFromRequest(req.PChainHeight, req.ProposerPChainHeight)
 		err = blkWithCtx.VerifyWithContext(ctx, blockCtx)
 	}
 	if err != nil {
@@ -936,4 +932,17 @@ func convertNetworkUpgrades(pbUpgrades *vmpb.NetworkUpgrades) (upgrade.Config, e
 		HeliconTime:                  helicon,
 		SongbirdTransitionTime:       songbirdTransition,
 	}, nil
+}
+
+// blockContextFromRequest rebuilds a block context from its gRPC request
+// fields. pChainHeight must be non-nil (it signals the presence of a context);
+// proposerPChainHeight is a Flare addition that older clients may omit.
+func blockContextFromRequest(pChainHeight, proposerPChainHeight *uint64) *block.Context {
+	blockCtx := &block.Context{
+		PChainHeight: *pChainHeight,
+	}
+	if proposerPChainHeight != nil {
+		blockCtx.ProposerPChainHeight = *proposerPChainHeight
+	}
+	return blockCtx
 }

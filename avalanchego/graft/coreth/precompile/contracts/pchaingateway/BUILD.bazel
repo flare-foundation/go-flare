@@ -1,0 +1,64 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//.bazel:defs.bzl", "graft_go_test")
+
+package(default_visibility = [
+    "//graft/coreth:__subpackages__",
+    "//graft/coreth:external_consumers",
+])
+
+go_library(
+    name = "pchaingateway",
+    srcs = [
+        "config.go",
+        "contract.go",
+        "errors.go",
+        "gas.go",
+        "handlers.go",
+        "module.go",
+    ],
+    embedsrcs = ["IPChainGateway.abi"],
+    importpath = "github.com/ava-labs/avalanchego/graft/coreth/precompile/contracts/pchaingateway",
+    deps = [
+        "//graft/coreth/precompile/contract",
+        "//graft/coreth/precompile/modules",
+        "//graft/coreth/precompile/precompileconfig",
+        "//ids",
+        "//snow/pchain",
+        "//utils/constants",
+        "//utils/formatting/address",
+        "//vms/secp256k1fx",
+        "@com_github_ava_labs_libevm//accounts/abi",
+        "@com_github_ava_labs_libevm//common",
+        "@com_github_ava_labs_libevm//common/math",
+        "@com_github_ava_labs_libevm//core/vm",
+        "@com_github_ava_labs_libevm//crypto",
+    ],
+)
+
+graft_go_test(
+    name = "pchaingateway_test",
+    srcs = [
+        "config_test.go",
+        "contract_test.go",
+    ],
+    embed = [":pchaingateway"],
+    deps = [
+        "//graft/coreth/precompile/contract",
+        "//graft/coreth/precompile/precompileconfig",
+        "//graft/coreth/precompile/precompiletest",
+        "//graft/evm/utils",
+        "//ids",
+        "//snow",
+        "//snow/pchain",
+        "//snow/snowtest",
+        "//utils/constants",
+        "//utils/crypto/secp256k1",
+        "//utils/formatting/address",
+        "//vms/secp256k1fx",
+        "@com_github_ava_labs_libevm//common",
+        "@com_github_ava_labs_libevm//core/vm",
+        "@com_github_ava_labs_libevm//crypto",
+        "@com_github_stretchr_testify//require",
+        "@org_uber_go_mock//gomock",
+    ],
+)

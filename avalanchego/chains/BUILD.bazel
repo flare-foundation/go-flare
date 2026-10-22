@@ -46,6 +46,7 @@ go_library(
         "//snow/networking/sender",
         "//snow/networking/timeout",
         "//snow/networking/tracker",
+        "//snow/pchain",
         "//snow/validators",
         "//staking",
         "//subnets",

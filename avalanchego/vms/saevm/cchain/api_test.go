@@ -28,8 +28,8 @@ import (
 	"github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/customtypes"
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/choices"
+	"github.com/ava-labs/avalanchego/snow/engine/snowman/block"
 	"github.com/ava-labs/avalanchego/snow/snowtest"
-	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/saevm/cchain/synchronoustest"
@@ -190,7 +190,7 @@ func TestGetAtomicTxStatus(t *testing.T) {
 		require.NoErrorf(t, err, "%T.getTxStatus()", sut.Client)
 		want := TxStatus{
 			Status: choices.Accepted,
-			Height: utils.PointerTo(avajson.Uint64(blk.NumberU64())),
+			Height: new(avajson.Uint64(blk.NumberU64())),
 		}
 		require.Equalf(t, want, got, "%T.getTxStatus()", sut.Client)
 	})
@@ -228,7 +228,11 @@ func TestRPCExtras(t *testing.T) {
 
 	// A cross-chain export gives the built block non-empty extData, so
 	// extDataHash and blockExtraData carry meaningful (non-default) values.
-	blk := sut.issueAndExecute(ctx, t, w.newMinimalTx(t))
+	// Flare: a block context makes the builder commit pChainHeight.
+	stx := w.newMinimalTx(t)
+	require.NoErrorf(t, sut.IssueTx(ctx, stx), "%T.IssueTx()", sut.Client)
+	blk := sut.runConsensusLoop(ctx, t, withBlockContext(&block.Context{ProposerPChainHeight: 7}))
+	sut.waitForTxPoolStateUpdate(ctx, t, stx)
 
 	var (
 		blockNumber = hexutil.EncodeUint64(blk.NumberU64())
@@ -246,6 +250,7 @@ func TestRPCExtras(t *testing.T) {
 	require.NotNilf(t, extra.SettledGasUnix, "%T.SettledGasUnix", extra)
 	require.NotNilf(t, extra.SettledGasNumerator, "%T.SettledGasNumerator", extra)
 	require.NotNilf(t, extra.SettledExcess, "%T.SettledExcess", extra)
+	require.NotNilf(t, extra.PChainHeight, "%T.PChainHeight", extra)
 	wantHeaderExtras := map[string]string{
 		"extDataHash":           extra.ExtDataHash.Hex(),
 		"extDataGasUsed":        hexutil.EncodeBig(extra.ExtDataGasUsed),
@@ -258,6 +263,7 @@ func TestRPCExtras(t *testing.T) {
 		"settledGasUnix":        hexutil.EncodeUint64(*extra.SettledGasUnix),
 		"settledGasNumerator":   hexutil.EncodeUint64(*extra.SettledGasNumerator),
 		"settledExcess":         hexutil.EncodeUint64(*extra.SettledExcess),
+		"pChainHeight":          hexutil.EncodeUint64(*extra.PChainHeight), // Flare
 	}
 	numHeaderExtras := reflect.TypeFor[customtypes.HeaderExtra]().NumField()
 	require.Lenf(t, wantHeaderExtras, numHeaderExtras, "%T field count", customtypes.HeaderExtra{})
@@ -310,6 +316,8 @@ func TestRPCExtras(t *testing.T) {
 // TestSynchronousRPCs replays JSON-RPC calls recorded from the synchronous VM
 // and requires an identical response, covering state, receipt, log, and tracing
 // RPCs at every height for every pre-SAE network upgrade.
+//
+// TODO(StephenButtolph): Test RPCs re-executing synchronous blocks.
 func TestSynchronousRPCs(t *testing.T) {
 	// The fixture's keys are relative to the VM's own database rather than to
 	// the base database that contains it.

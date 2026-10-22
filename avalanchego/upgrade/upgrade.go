@@ -160,7 +160,7 @@ var (
 		FortunaTime:                  ZeroTime,
 		GraniteTime:                  ZeroTime,
 		GraniteEpochDuration:         5 * time.Minute,
-		HeliconTime:                  UnscheduledActivationTime,
+		HeliconTime:                  ZeroTime,
 	}
 	Local = Config{
 		ApricotPhase1Time:            ZeroTime,
@@ -181,7 +181,7 @@ var (
 		FortunaTime:                  ZeroTime,
 		GraniteTime:                  ZeroTime,
 		GraniteEpochDuration:         5 * time.Minute,
-		HeliconTime:                  UnscheduledActivationTime,
+		HeliconTime:                  ZeroTime,
 	}
 	Default = Config{
 		ApricotPhase1Time:            InitiallyActiveTime,
@@ -201,7 +201,7 @@ var (
 		FortunaTime:                  InitiallyActiveTime,
 		GraniteTime:                  InitiallyActiveTime,
 		GraniteEpochDuration:         30 * time.Second,
-		HeliconTime:                  UnscheduledActivationTime,
+		HeliconTime:                  InitiallyActiveTime,
 	}
 
 	ErrInvalidUpgradeTimes = errors.New("invalid upgrade configuration")

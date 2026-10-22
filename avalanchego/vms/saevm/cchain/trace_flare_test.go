@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/vms/saevm/saetest"
 
 	cparams "github.com/ava-labs/avalanchego/graft/coreth/params"
@@ -25,7 +24,7 @@ import (
 
 // prestateTracer configures the block tracers to report the state each
 // transaction read, which pins the intra-block fee settlement.
-var prestateTracer = tracers.TraceConfig{Tracer: utils.PointerTo("prestateTracer")}
+var prestateTracer = tracers.TraceConfig{Tracer: new("prestateTracer")}
 
 // TestFlareTraceBlockReplaysFlareState asserts that the block-level tracing
 // endpoints (debug_traceBlock*, debug_intermediateRoots) replay transactions

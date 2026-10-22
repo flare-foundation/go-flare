@@ -51,6 +51,12 @@ type HeaderExtra struct {
 	SettledGasUnix      *uint64
 	SettledGasNumerator *uint64
 	SettledExcess       *uint64
+
+	// PChainHeight is the ProposerVM (ACP-181 epoch) P-chain height the SAE
+	// block builder committed for this block; it bounds the P-chain gateway
+	// precompile's reads. Flare addition, set from Helicon on; nil on legacy
+	// coreth blocks and at genesis.
+	PChainHeight *uint64
 }
 
 // HeaderTimeMilliseconds returns the header timestamp in milliseconds.
@@ -156,6 +162,10 @@ func (h *HeaderExtra) PostCopy(dst *ethtypes.Header) {
 		v := *h.SettledExcess
 		cp.SettledExcess = &v
 	}
+	if h.PChainHeight != nil {
+		v := *h.PChainHeight
+		cp.PChainHeight = &v
+	}
 	SetHeaderExtra(dst, cp)
 }
 
@@ -190,6 +200,9 @@ func (h *HeaderExtra) PostRPCMarshal(_ *ethtypes.Header, m map[string]any) {
 	}
 	if h.SettledExcess != nil {
 		m["settledExcess"] = hexutil.Uint64(*h.SettledExcess)
+	}
+	if h.PChainHeight != nil {
+		m["pChainHeight"] = hexutil.Uint64(*h.PChainHeight)
 	}
 }
 
@@ -249,6 +262,7 @@ func (h *HeaderSerializable) updateFromExtras(extras *HeaderExtra) {
 	h.SettledGasUnix = extras.SettledGasUnix
 	h.SettledGasNumerator = extras.SettledGasNumerator
 	h.SettledExcess = extras.SettledExcess
+	h.PChainHeight = extras.PChainHeight
 }
 
 func (h *HeaderSerializable) updateToExtras(extras *HeaderExtra) {
@@ -263,6 +277,7 @@ func (h *HeaderSerializable) updateToExtras(extras *HeaderExtra) {
 	extras.SettledGasUnix = h.SettledGasUnix
 	extras.SettledGasNumerator = h.SettledGasNumerator
 	extras.SettledExcess = h.SettledExcess
+	extras.PChainHeight = h.PChainHeight
 }
 
 // NOTE: both generators currently do not support type aliases.
@@ -336,6 +351,11 @@ type HeaderSerializable struct {
 	SettledGasUnix      *uint64 `json:"settledGasUnix"      rlp:"optional"`
 	SettledGasNumerator *uint64 `json:"settledGasNumerator" rlp:"optional"`
 	SettledExcess       *uint64 `json:"settledExcess"       rlp:"optional"`
+
+	// PChainHeight was added by Flare at Helicon (SAE blocks only) and is
+	// ignored in legacy headers. It MUST stay the last field so that a nil
+	// value is omitted from the RLP encoding of older headers.
+	PChainHeight *uint64 `json:"pChainHeight" rlp:"optional"`
 }
 
 // field type overrides for gencodec
@@ -360,6 +380,7 @@ type headerMarshaling struct {
 	SettledGasUnix      *hexutil.Uint64
 	SettledGasNumerator *hexutil.Uint64
 	SettledExcess       *hexutil.Uint64
+	PChainHeight        *hexutil.Uint64
 }
 
 // Hash returns the block hash of the header, which is simply the keccak256 hash of its

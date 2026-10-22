@@ -113,6 +113,7 @@ func (b *tracedBlock) VerifyWithContext(ctx context.Context, blockCtx *block.Con
 		attribute.Stringer("blkID", b.ID()),
 		attribute.Int64("height", int64(b.Height())),
 		attribute.Int64("pChainHeight", int64(blockCtx.PChainHeight)),
+		attribute.Int64("proposerPChainHeight", int64(blockCtx.ProposerPChainHeight)),
 	))
 	defer span.End()
 

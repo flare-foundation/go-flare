@@ -364,6 +364,11 @@ func (b *wrappedBlock) semanticVerify(predicateContext *precompileconfig.Predica
 	if err := customheader.VerifySettled(header); err != nil {
 		return err
 	}
+	// Ensure the committed P-chain height is unset. The field belongs to SAE
+	// (Flare, Helicon and later) and must never appear on a coreth block.
+	if err := customheader.VerifyPChainHeight(header); err != nil {
+		return err
+	}
 
 	if extraConfig.IsHelicon(header.Time) {
 		return errIsHeliconBlock

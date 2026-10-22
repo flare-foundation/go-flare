@@ -71,7 +71,8 @@ func TestPostForkCommonComponents_buildChild(t *testing.T) {
 	innerVM := blockmock.NewChainVM(ctrl)
 	innerBlockBuilderVM := blockmock.NewBuildBlockWithContextChainVM(ctrl)
 	innerBlockBuilderVM.EXPECT().BuildBlockWithContext(gomock.Any(), &block.Context{
-		PChainHeight: pChainHeight,
+		PChainHeight:         pChainHeight,
+		ProposerPChainHeight: pChainHeight,
 	}).Return(builtBlk, nil).AnyTimes()
 
 	vdrState := validatorsmock.NewState(ctrl)
@@ -378,7 +379,8 @@ func TestPreEtnaContextPChainHeight(t *testing.T) {
 	innerBlockBuilderVM := blockmock.NewBuildBlockWithContextChainVM(ctrl)
 	// Expect the that context passed in has parent's P-Chain height
 	innerBlockBuilderVM.EXPECT().BuildBlockWithContext(gomock.Any(), &block.Context{
-		PChainHeight: parentPChainHeght,
+		PChainHeight:         parentPChainHeght,
+		ProposerPChainHeight: pChainHeight, // Flare: always the block's own height
 	}).Return(innerChildBlock, nil).AnyTimes()
 
 	vdrState := validatorsmock.NewState(ctrl)

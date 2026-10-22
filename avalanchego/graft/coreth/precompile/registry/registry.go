@@ -7,6 +7,7 @@ package registry
 // Force imports of each precompile to ensure each precompile's init function runs and registers itself
 // with the registry.
 import (
+	_ "github.com/ava-labs/avalanchego/graft/coreth/precompile/contracts/pchaingateway"
 	_ "github.com/ava-labs/avalanchego/graft/coreth/precompile/contracts/warp"
 	// ADD PRECOMPILES BELOW
 	// _ "github.com/ava-labs/avalanchego/graft/coreth/precompile/contracts/newprecompile"
@@ -17,5 +18,6 @@ import (
 // in /coreth/contracts/contracts/**.
 
 // WarpMessengerAddress = common.HexToAddress("0x0200000000000000000000000000000000000005")
+// PChainGatewayAddress = common.HexToAddress("0x0300000000000000000000000000000000000000") // Flare
 // ADD PRECOMPILES BELOW
 // NewPrecompileAddress = common.HexToAddress("0x02000000000000000000000000000000000000??")

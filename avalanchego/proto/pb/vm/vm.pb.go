@@ -966,10 +966,13 @@ func (x *WaitForEventResponse) GetMessage() Message {
 }
 
 type BuildBlockRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PChainHeight  *uint64                `protobuf:"varint,1,opt,name=p_chain_height,json=pChainHeight,proto3,oneof" json:"p_chain_height,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	PChainHeight *uint64                `protobuf:"varint,1,opt,name=p_chain_height,json=pChainHeight,proto3,oneof" json:"p_chain_height,omitempty"`
+	// Flare: [block.Context.ProposerPChainHeight], the P-chain height sealed
+	// into the proposervm block. Only meaningful when p_chain_height is set.
+	ProposerPChainHeight *uint64 `protobuf:"varint,2,opt,name=proposer_p_chain_height,json=proposerPChainHeight,proto3,oneof" json:"proposer_p_chain_height,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *BuildBlockRequest) Reset() {
@@ -1005,6 +1008,13 @@ func (*BuildBlockRequest) Descriptor() ([]byte, []int) {
 func (x *BuildBlockRequest) GetPChainHeight() uint64 {
 	if x != nil && x.PChainHeight != nil {
 		return *x.PChainHeight
+	}
+	return 0
+}
+
+func (x *BuildBlockRequest) GetProposerPChainHeight() uint64 {
+	if x != nil && x.ProposerPChainHeight != nil {
+		return *x.ProposerPChainHeight
 	}
 	return 0
 }
@@ -1392,9 +1402,12 @@ type BlockVerifyRequest struct {
 	Bytes []byte                 `protobuf:"bytes,1,opt,name=bytes,proto3" json:"bytes,omitempty"`
 	// If set, the VM server casts the block to a [block.WithVerifyContext] and
 	// calls [VerifyWithContext] instead of [Verify].
-	PChainHeight  *uint64 `protobuf:"varint,2,opt,name=p_chain_height,json=pChainHeight,proto3,oneof" json:"p_chain_height,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	PChainHeight *uint64 `protobuf:"varint,2,opt,name=p_chain_height,json=pChainHeight,proto3,oneof" json:"p_chain_height,omitempty"`
+	// Flare: [block.Context.ProposerPChainHeight], the P-chain height sealed
+	// into the proposervm block. Only meaningful when p_chain_height is set.
+	ProposerPChainHeight *uint64 `protobuf:"varint,3,opt,name=proposer_p_chain_height,json=proposerPChainHeight,proto3,oneof" json:"proposer_p_chain_height,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *BlockVerifyRequest) Reset() {
@@ -1437,6 +1450,13 @@ func (x *BlockVerifyRequest) GetBytes() []byte {
 func (x *BlockVerifyRequest) GetPChainHeight() uint64 {
 	if x != nil && x.PChainHeight != nil {
 		return *x.PChainHeight
+	}
+	return 0
+}
+
+func (x *BlockVerifyRequest) GetProposerPChainHeight() uint64 {
+	if x != nil && x.ProposerPChainHeight != nil {
+		return *x.ProposerPChainHeight
 	}
 	return 0
 }
@@ -2950,10 +2970,12 @@ const file_vm_vm_proto_rawDesc = "" +
 	"\vserver_addr\x18\x01 \x01(\tR\n" +
 	"serverAddr\"=\n" +
 	"\x14WaitForEventResponse\x12%\n" +
-	"\amessage\x18\x01 \x01(\x0e2\v.vm.MessageR\amessage\"Q\n" +
+	"\amessage\x18\x01 \x01(\x0e2\v.vm.MessageR\amessage\"\xa9\x01\n" +
 	"\x11BuildBlockRequest\x12)\n" +
-	"\x0ep_chain_height\x18\x01 \x01(\x04H\x00R\fpChainHeight\x88\x01\x01B\x11\n" +
-	"\x0f_p_chain_height\"\xd9\x01\n" +
+	"\x0ep_chain_height\x18\x01 \x01(\x04H\x00R\fpChainHeight\x88\x01\x01\x12:\n" +
+	"\x17proposer_p_chain_height\x18\x02 \x01(\x04H\x01R\x14proposerPChainHeight\x88\x01\x01B\x11\n" +
+	"\x0f_p_chain_heightB\x1a\n" +
+	"\x18_proposer_p_chain_height\"\xd9\x01\n" +
 	"\x12BuildBlockResponse\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\fR\x02id\x12\x1b\n" +
 	"\tparent_id\x18\x02 \x01(\fR\bparentId\x12\x14\n" +
@@ -2979,11 +3001,13 @@ const file_vm_vm_proto_rawDesc = "" +
 	"\x03err\x18\x06 \x01(\x0e2\t.vm.ErrorR\x03err\x12.\n" +
 	"\x13verify_with_context\x18\a \x01(\bR\x11verifyWithContext\"&\n" +
 	"\x14SetPreferenceRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\fR\x02id\"h\n" +
+	"\x02id\x18\x01 \x01(\fR\x02id\"\xc0\x01\n" +
 	"\x12BlockVerifyRequest\x12\x14\n" +
 	"\x05bytes\x18\x01 \x01(\fR\x05bytes\x12)\n" +
-	"\x0ep_chain_height\x18\x02 \x01(\x04H\x00R\fpChainHeight\x88\x01\x01B\x11\n" +
-	"\x0f_p_chain_height\"O\n" +
+	"\x0ep_chain_height\x18\x02 \x01(\x04H\x00R\fpChainHeight\x88\x01\x01\x12:\n" +
+	"\x17proposer_p_chain_height\x18\x03 \x01(\x04H\x01R\x14proposerPChainHeight\x88\x01\x01B\x11\n" +
+	"\x0f_p_chain_heightB\x1a\n" +
+	"\x18_proposer_p_chain_height\"O\n" +
 	"\x13BlockVerifyResponse\x128\n" +
 	"\ttimestamp\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\"$\n" +
 	"\x12BlockAcceptRequest\x12\x0e\n" +

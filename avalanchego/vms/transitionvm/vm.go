@@ -195,6 +195,7 @@ func copyContext(ctx *snow.Context) *snow.Context {
 		Metrics:         ctx.Metrics,
 		WarpSigner:      ctx.WarpSigner,
 		ValidatorState:  ctx.ValidatorState,
+		PChainReader:    ctx.PChainReader, // Flare: P-chain gateway reader
 		ChainDataDir:    ctx.ChainDataDir,
 	}
 }

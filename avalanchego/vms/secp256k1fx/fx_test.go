@@ -108,7 +108,7 @@ func TestFxVerifyTransfer(t *testing.T) {
 }
 
 // Flare-specific: VerifyCredentials must accept signatures produced over the
-// EIP-191-prefixed hash of the hex-encoded tx hash (fx.go:210-218).
+// EIP-191-prefixed hash of the hex-encoded tx hash (SigningHashes.EthPrefixed).
 func TestFxVerifyTransferEthSignature(t *testing.T) {
 	require := require.New(t)
 	vm := TestVM{

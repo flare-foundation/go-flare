@@ -39,17 +39,16 @@ import (
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/database/memdb"
 	"github.com/ava-labs/avalanchego/database/prefixdb"
-	"github.com/ava-labs/avalanchego/graft/coreth/params/extras"
 	"github.com/ava-labs/avalanchego/graft/coreth/plugin/evm"
 	"github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/customtypes"
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/network/p2p"
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/snow/engine/snowman/block"
+	"github.com/ava-labs/avalanchego/snow/pchain"
 	"github.com/ava-labs/avalanchego/snow/snowtest"
 	"github.com/ava-labs/avalanchego/upgrade"
 	"github.com/ava-labs/avalanchego/upgrade/upgradetest"
-	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
 	"github.com/ava-labs/avalanchego/utils/logging"
@@ -57,6 +56,7 @@ import (
 	"github.com/ava-labs/avalanchego/version"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/components/gas"
+	"github.com/ava-labs/avalanchego/vms/evm/sync/customrawdb"
 	"github.com/ava-labs/avalanchego/vms/saevm/blocks"
 	"github.com/ava-labs/avalanchego/vms/saevm/cchain/cchaintest"
 	"github.com/ava-labs/avalanchego/vms/saevm/cchain/dynamic"
@@ -82,7 +82,8 @@ import (
 
 func TestMain(m *testing.M) {
 	evm.RegisterAllLibEVMExtras()
-	goleak.VerifyTestMain(m, saetest.GoleakOptions()...)
+	// Flare: TestGenesisMatchesCoreth boots the Coreth VM, see corethVMGoleakOptions.
+	goleak.VerifyTestMain(m, append(saetest.GoleakOptions(), corethVMGoleakOptions()...)...)
 }
 
 var _ saetest.Peer = (*SUT)(nil)
@@ -121,6 +122,7 @@ type (
 		chainDataDir string
 		state        snow.State
 		upgrades     upgrade.Config
+		pchainReader pchain.Reader
 
 		skipRPCTransport bool
 	}
@@ -200,6 +202,14 @@ func withGenesis(g core.Genesis) sutOption {
 
 // withUpgrades overrides the network upgrade schedule, which defaults to
 // every upgrade being active from genesis.
+// withPChainReader sets the snow context's P-chain reader (Flare P-chain
+// gateway precompile); the default SUT has none.
+func withPChainReader(r pchain.Reader) sutOption {
+	return options.Func[sutConfig](func(c *sutConfig) {
+		c.pchainReader = r
+	})
+}
+
 func withUpgrades(u upgrade.Config) sutOption {
 	return options.Func[sutConfig](func(c *sutConfig) {
 		c.upgrades = u
@@ -267,6 +277,13 @@ func withCommitInterval(n uint64) sutOption {
 	})
 }
 
+// withFirewood selects Firewood as the trie database
+func withFirewood() sutOption {
+	return options.Func[sutConfig](func(c *sutConfig) {
+		c.vmConfig.StateScheme = customrawdb.FirewoodScheme
+	})
+}
+
 // withStateSyncDisabled clears [config.StateSyncEnabled], which defaults to
 // true.
 func withStateSyncDisabled() sutOption {
@@ -315,14 +332,10 @@ func newSUT(tb testing.TB, opts ...sutOption) (context.Context, *SUT) {
 func tryNewSUT(tb testing.TB, opts ...sutOption) (*SUT, error) {
 	tb.Helper()
 
-	// Run under the latest network upgrade rules by default.
-	chainConfig := cparams.Copy(saetest.ChainConfig())
-	cparams.WithExtra(&chainConfig, extras.TestChainConfig)
-
 	var (
 		cfg = options.ApplyTo(&sutConfig{
 			genesis: core.Genesis{
-				Config:     &chainConfig,
+				Config:     cchaintest.ChainConfig(),
 				Timestamp:  uint64(upgrade.InitiallyActiveTime.Unix()), //#nosec G115 -- Known non-negative
 				Difficulty: big.NewInt(0),                              // irrelevant but required to marshal
 				Alloc:      types.GenesisAlloc{},
@@ -357,6 +370,7 @@ func tryNewSUT(tb testing.TB, opts ...sutOption) (*SUT, error) {
 	snowCtx.NetworkID = cfg.networkID
 	snowCtx.NetworkUpgrades = cfg.upgrades
 	snowCtx.SharedMemory = memory.NewSharedMemory(snowtest.CChainID)
+	snowCtx.PChainReader = cfg.pchainReader
 	log := loggingtest.New(tb, logging.Debug)
 	snowCtx.Log = log
 	warptest.SetValidators(tb, snowCtx, cfg.validators)
@@ -779,7 +793,10 @@ func (s *SUT) parseVerifyAccept(ctx context.Context, tb testing.TB, blk *blocks.
 // VerifyBlock error, exercising rebuild-and-compare against the tampered
 // field(s). tamper receives the full header so callers can mutate both
 // [types.Header] fields (e.g. Time) and the header extra.
-func (s *SUT) verifyTampered(ctx context.Context, tb testing.TB, valid *blocks.Block, tamper func(*types.Header)) error {
+//
+// Flare: opts select the [block.Context] to verify with (default nil), so
+// blocks built with a context can be re-verified under the same one.
+func (s *SUT) verifyTampered(ctx context.Context, tb testing.TB, valid *blocks.Block, tamper func(*types.Header), opts ...blockOption) error {
 	tb.Helper()
 
 	hdr := valid.Header()
@@ -789,7 +806,7 @@ func (s *SUT) verifyTampered(ctx context.Context, tb testing.TB, valid *blocks.B
 	require.NoErrorf(tb, err, "rlp.EncodeToBytes(tampered block)")
 	parsed, err := s.ParseBlock(ctx, buf)
 	require.NoErrorf(tb, err, "%T.ParseBlock(tampered block)", s.VM)
-	return s.VerifyBlock(ctx, nil, parsed)
+	return s.VerifyBlock(ctx, options.As(opts...).context, parsed)
 }
 
 // tamperExtra adapts a header-extra mutator into the [types.Header] mutator that
@@ -961,11 +978,13 @@ func addNAVAX(tb testing.TB, balance uint256.Int, nAVAXDelta int64) uint256.Int 
 
 	var (
 		op       = balance.AddOverflow
-		absDelta = uint64(nAVAXDelta)
+		absDelta uint64
 	)
 	if nAVAXDelta < 0 {
 		op = balance.SubOverflow
-		absDelta = -absDelta
+		absDelta = uint64(-nAVAXDelta)
+	} else {
+		absDelta = uint64(nAVAXDelta)
 	}
 
 	delta := tx.ScaleAVAX(absDelta)
@@ -1033,6 +1052,57 @@ func TestImport(t *testing.T) {
 	)
 	sut.assertAccount(t, receiver, nonce, tx.ScaleAVAX(amountMinted))
 	sut.assertUTXOsMissing(t, sut.ctx.ChainID, sourceChain, utxo)
+}
+
+func TestStatefulRPCsReconstructExtraState(t *testing.T) {
+	const (
+		commitInterval uint64 = 4
+		numBlocks             = 2*commitInterval + 3
+	)
+
+	tests := []struct {
+		name string
+		opts []sutOption
+	}{
+		{
+			name: "hashdb_pruning",
+			opts: []sutOption{withCommitInterval(commitInterval)},
+		},
+		{
+			name: "firewood_commit_interval",
+			opts: []sutOption{withFirewood(), withArchival(), withCommitInterval(commitInterval)},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			key := txtest.NewKey(t)
+			sender := key.EthAddress()
+			timeOpt, clock := withVMTime(testStartTime)
+			opts := []sutOption{withMaxAllocFor(sender), timeOpt, withDB(memdb.New()), withChainDataDir(t.TempDir())}
+			opts = append(opts, tt.opts...)
+
+			ctx, node := newSUT(t, opts...)
+			w := newWallet(key, node.ctx, node.Client)
+			for range numBlocks {
+				blk := node.issueAndExecute(ctx, t, w.newMinimalTx(t))
+				clock.AdvanceToSettle(ctx, t, blk)
+			}
+
+			// Restarting the VM clears all caches so that every uncommitted
+			// state root MUST be reconstructed by re-execution.
+			require.NoErrorf(t, node.Shutdown(ctx), "%T.Shutdown()", node.VM)
+			t.Run("restart", func(t *testing.T) {
+				ctx, sut := newSUT(t, opts...)
+
+				for h := range numBlocks + 1 {
+					got, err := sut.ethclient.NonceAt(ctx, sender, new(big.Int).SetUint64(h))
+					require.NoErrorf(t, err, "%T.NonceAt(%d)", sut.ethclient, h)
+					assert.Equalf(t, h, got, "%T.NonceAt(%d): one export per block", sut.ethclient, h)
+				}
+			})
+		})
+	}
 }
 
 // TestBuildBlockOnProcessing verifies that the block builder excludes a mempool
@@ -1580,7 +1650,7 @@ func TestDynamicPriceExponent(t *testing.T) {
 		},
 		{
 			name:    "max_diff",
-			desired: utils.PointerTo[gas.Price](2),
+			desired: new(gas.Price(2)),
 			want: []dynamic.PriceExponent{
 				maxDiff,
 				2 * maxDiff,
@@ -1633,7 +1703,7 @@ func TestDynamicTargetExponent(t *testing.T) {
 		},
 		{
 			name:    "max_diff",
-			desired: utils.PointerTo[gas.Gas](15_000_000),
+			desired: new(gas.Gas(15_000_000)),
 			want: []dynamic.TargetExponent{
 				maxDiff,
 				2 * maxDiff,
@@ -1686,7 +1756,7 @@ func TestDynamicMinDelayExcess(t *testing.T) {
 		},
 		{
 			name:    "votes_up_capped",
-			desired: utils.PointerTo[uint64](4000), // above the ~2000ms initial
+			desired: new(uint64(4000)), // above the ~2000ms initial
 			want: []dynamic.DelayExponent{
 				dynamic.InitialDelayExponent + maxDiff,
 				dynamic.InitialDelayExponent + 2*maxDiff,
@@ -1694,7 +1764,7 @@ func TestDynamicMinDelayExcess(t *testing.T) {
 		},
 		{
 			name:    "votes_down_capped",
-			desired: utils.PointerTo[uint64](1000),
+			desired: new(uint64(1000)),
 			want: []dynamic.DelayExponent{
 				dynamic.InitialDelayExponent - maxDiff,
 				dynamic.InitialDelayExponent - 2*maxDiff,
@@ -1778,7 +1848,7 @@ func TestVerifyRejectsBlockTimeBelowMinDelay(t *testing.T) {
 	require.NoErrorf(t, sut.IssueTx(ctx, w.newMinimalTx(t)), "%T.IssueTx()", sut.Client)
 	child := sut.buildVerify(ctx, t, sut.lastAccepted(ctx, t))
 
-	earlyMS := uint64(earliestBuildTime(parent).UnixMilli()) - 1 //#nosec G115 -- Known non-negative
+	earlyMS := uint64(earliestBuildTime(parent).UnixMilli()) - 1
 	err := sut.verifyTampered(ctx, t, child, func(hdr *types.Header) {
 		hdr.Time = earlyMS / 1000
 		tamperExtra(func(e *customtypes.HeaderExtra) {
@@ -1964,7 +2034,7 @@ func TestPreHeliconBlocksDisallowed(t *testing.T) {
 		valid := sut.buildVerify(ctx, t, sut.lastAccepted(ctx, t))
 
 		hdr := valid.Header()
-		preHeliconMS := uint64(preHeliconTime.UnixMilli()) //#nosec G115 -- Known non-negative
+		preHeliconMS := uint64(preHeliconTime.UnixMilli())
 		hdr.Time = preHeliconMS / 1000
 		customtypes.GetHeaderExtra(hdr).TimeMilliseconds = &preHeliconMS
 

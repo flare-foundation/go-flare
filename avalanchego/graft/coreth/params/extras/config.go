@@ -11,8 +11,8 @@ import (
 	"github.com/ava-labs/libevm/common"
 
 	"github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/upgrade/granite"
+	"github.com/ava-labs/avalanchego/graft/evm/utils"
 	"github.com/ava-labs/avalanchego/snow"
-	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/vms/evm/acp176"
 

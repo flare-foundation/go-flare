@@ -10,7 +10,7 @@ import (
 	"github.com/ava-labs/avalanchego/upgrade"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ava-labs/avalanchego/utils"
+	"github.com/ava-labs/avalanchego/graft/evm/utils"
 )
 
 func TestIsTimestampForked(t *testing.T) {

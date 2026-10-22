@@ -47,6 +47,7 @@ func (h HeaderSerializable) MarshalJSON() ([]byte, error) {
 		SettledGasUnix      *hexutil.Uint64  `json:"settledGasUnix"      rlp:"optional"`
 		SettledGasNumerator *hexutil.Uint64  `json:"settledGasNumerator" rlp:"optional"`
 		SettledExcess       *hexutil.Uint64  `json:"settledExcess"       rlp:"optional"`
+		PChainHeight        *hexutil.Uint64  `json:"pChainHeight" rlp:"optional"`
 		Hash                common.Hash      `json:"hash"`
 	}
 	var enc HeaderSerializable
@@ -80,6 +81,7 @@ func (h HeaderSerializable) MarshalJSON() ([]byte, error) {
 	enc.SettledGasUnix = (*hexutil.Uint64)(h.SettledGasUnix)
 	enc.SettledGasNumerator = (*hexutil.Uint64)(h.SettledGasNumerator)
 	enc.SettledExcess = (*hexutil.Uint64)(h.SettledExcess)
+	enc.PChainHeight = (*hexutil.Uint64)(h.PChainHeight)
 	enc.Hash = h.Hash()
 	return json.Marshal(&enc)
 }
@@ -117,6 +119,7 @@ func (h *HeaderSerializable) UnmarshalJSON(input []byte) error {
 		SettledGasUnix      *hexutil.Uint64   `json:"settledGasUnix"      rlp:"optional"`
 		SettledGasNumerator *hexutil.Uint64   `json:"settledGasNumerator" rlp:"optional"`
 		SettledExcess       *hexutil.Uint64   `json:"settledExcess"       rlp:"optional"`
+		PChainHeight        *hexutil.Uint64   `json:"pChainHeight" rlp:"optional"`
 	}
 	var dec HeaderSerializable
 	if err := json.Unmarshal(input, &dec); err != nil {
@@ -225,6 +228,9 @@ func (h *HeaderSerializable) UnmarshalJSON(input []byte) error {
 	}
 	if dec.SettledExcess != nil {
 		h.SettledExcess = (*uint64)(dec.SettledExcess)
+	}
+	if dec.PChainHeight != nil {
+		h.PChainHeight = (*uint64)(dec.PChainHeight)
 	}
 	return nil
 }

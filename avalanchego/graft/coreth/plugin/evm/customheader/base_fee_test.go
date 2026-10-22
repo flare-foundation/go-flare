@@ -20,7 +20,7 @@ import (
 	"github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/upgrade/ap5"
 	"github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/upgrade/etna"
 	"github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/upgrade/granite"
-	"github.com/ava-labs/avalanchego/utils"
+	"github.com/ava-labs/avalanchego/graft/evm/utils"
 	"github.com/ava-labs/avalanchego/vms/components/gas"
 	"github.com/ava-labs/avalanchego/vms/evm/acp176"
 )

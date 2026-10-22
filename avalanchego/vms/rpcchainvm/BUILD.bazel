@@ -68,6 +68,7 @@ go_library(
 go_test(
     name = "rpcchainvm_test",
     srcs = [
+        "block_context_flare_test.go",
         "batched_vm_test.go",
         "state_syncable_vm_test.go",
         "vm_test.go",

@@ -177,6 +177,8 @@ func (p *postForkCommonComponents) Verify(
 			zap.Stringer("blkID", child.ID()),
 			zap.Time("parentTimestamp", parentTimestamp),
 			zap.Time("blockTimestamp", childTimestamp),
+			zap.Uint64("pChainHeight", childPChainHeight),
+			zap.Reflect("epoch", childEpoch),
 		)
 	}
 
@@ -194,6 +196,8 @@ func (p *postForkCommonComponents) Verify(
 		ctx,
 		&smblock.Context{
 			PChainHeight: contextPChainHeight,
+			// Flare: the outer block's own P-chain height, verified above.
+			ProposerPChainHeight: childPChainHeight,
 		},
 		child,
 	)
@@ -262,6 +266,8 @@ func (p *postForkCommonComponents) buildChild(
 	if p.vm.blockBuilderVM != nil {
 		innerBlock, err = p.vm.blockBuilderVM.BuildBlockWithContext(ctx, &smblock.Context{
 			PChainHeight: contextPChainHeight,
+			// Flare: the P-chain height sealed into this outer block.
+			ProposerPChainHeight: pChainHeight,
 		})
 	} else {
 		innerBlock, err = p.vm.ChainVM.BuildBlock(ctx)

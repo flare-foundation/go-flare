@@ -56,6 +56,7 @@ import (
 	"github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/extension"
 	"github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/upgrade/granite"
 	"github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/vmerrors"
+	"github.com/ava-labs/avalanchego/graft/coreth/precompile/contracts/pchaingateway"
 	"github.com/ava-labs/avalanchego/graft/coreth/precompile/precompileconfig"
 	"github.com/ava-labs/avalanchego/graft/coreth/warp"
 	"github.com/ava-labs/avalanchego/graft/evm/constants"
@@ -495,6 +496,17 @@ func parseGenesis(ctx *snow.Context, bytes []byte) (*core.Genesis, error) {
 	if configExtra.DurangoBlockTimestamp != nil {
 		configExtra.PrecompileUpgrades = append(configExtra.PrecompileUpgrades, extras.PrecompileUpgrade{
 			Config: warpcontract.NewDefaultConfig(configExtra.DurangoBlockTimestamp),
+		})
+	}
+	// Flare: if Helicon is scheduled, schedule the P-chain gateway precompile
+	// at the same time. This must mirror the SAE genesis
+	// (vms/saevm/cchain/genesis.go): on networks whose Helicon time is at or
+	// before the genesis timestamp (the local networks) the transition VM
+	// starts Coreth first and hands over to SAE at height 0, and both must
+	// commit the same genesis block or SAE fails with a genesis mismatch.
+	if configExtra.HeliconTimestamp != nil {
+		configExtra.PrecompileUpgrades = append(configExtra.PrecompileUpgrades, extras.PrecompileUpgrade{
+			Config: pchaingateway.NewDefaultConfig(configExtra.HeliconTimestamp),
 		})
 	}
 	if err := configExtra.Verify(); err != nil {

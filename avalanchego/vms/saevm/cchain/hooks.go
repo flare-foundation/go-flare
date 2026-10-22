@@ -10,6 +10,7 @@ import (
 	"iter"
 	"math/big"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/ava-labs/libevm/common"
@@ -42,6 +43,7 @@ import (
 	"github.com/ava-labs/avalanchego/x/blockdb"
 
 	corethparams "github.com/ava-labs/avalanchego/graft/coreth/params"
+	"github.com/ava-labs/avalanchego/graft/coreth/precompile/contracts/pchaingateway"
 	corethwarp "github.com/ava-labs/avalanchego/graft/coreth/precompile/contracts/warp"
 	evmconstants "github.com/ava-labs/avalanchego/graft/evm/constants"
 	cchainstate "github.com/ava-labs/avalanchego/vms/saevm/cchain/state"
@@ -55,6 +57,10 @@ type hooks struct {
 	state       *cchainstate.State
 	warpStorage *warp.Storage
 	metrics     *metrics
+
+	// Flare: reports the missing P-chain reader once; see
+	// [hooks.AwaitExecutionPrerequisites].
+	pChainReaderMissingOnce sync.Once
 }
 
 func newHooks(
@@ -93,6 +99,7 @@ func newHooks(
 		state,
 		warpStorage,
 		metrics,
+		sync.Once{},
 	}
 }
 
@@ -227,12 +234,12 @@ func (*hooks) BlockTime(h *types.Header) time.Time {
 
 func blockTime(h *types.Header) time.Time {
 	ms := customtypes.HeaderTimeMilliseconds(h)
-	subSecondNanos := int64(ms%1000) * int64(time.Millisecond) //#nosec G115 -- ms%1000 < 1000
-	return time.Unix(int64(h.Time), subSecondNanos)            //#nosec G115 -- Won't overflow for a few millennia
+	subSecondNanos := int64(ms%1000) * int64(time.Millisecond)
+	return time.Unix(int64(h.Time), subSecondNanos) //#nosec G115 -- Won't overflow for a few millennia
 }
 
 func (h *hooks) EndOfBlockOps(b *types.Block) ([]hook.Op, error) {
-	txs, err := tx.ParseSlice(customtypes.BlockExtData(b))
+	txs, err := tx.FromBlock(h.chainConfig, b)
 	if err != nil {
 		return nil, fmt.Errorf("parsing txs: %w", err)
 	}
@@ -254,14 +261,78 @@ func (*hooks) CanExecuteTransaction(common.Address, *common.Address, libevm.Stat
 
 func (h *hooks) StartExecutingBlock(rules params.Rules, statedb *state.StateDB, parent *types.Header, _ *types.Block) error {
 	config := corethparams.GetExtra(h.chainConfig)
-	if isFirstDurangoBlock := corethparams.GetRulesExtra(rules).IsDurango && !config.IsDurango(parent.Time); isFirstDurangoBlock {
+	rulesExtra := corethparams.GetRulesExtra(rules)
+	if isFirstDurangoBlock := rulesExtra.IsDurango && !config.IsDurango(parent.Time); isFirstDurangoBlock {
 		activatePrecompile(statedb, corethwarp.ContractAddress)
+	}
+	// Flare: the P-chain gateway precompile is active from Helicon on.
+	if isFirstHeliconBlock := rulesExtra.IsHelicon && !config.IsHelicon(parent.Time); isFirstHeliconBlock {
+		activatePrecompile(statedb, pchaingateway.ContractAddress)
 	}
 	return nil
 }
 
+var _ hook.ExecutionGate = (*hooks)(nil)
+
+// Flare: tunables of the P-chain gateway execution gate; variables so that
+// tests can shorten them.
+var (
+	pChainHeightPollInterval = 200 * time.Millisecond
+	pChainHeightLogInterval  = 10 * time.Second
+)
+
+// AwaitExecutionPrerequisites implements [hook.ExecutionGate]: canonical
+// execution of a block waits until the local P-chain has accepted the P-chain
+// height committed in the header, so the P-chain gateway precompile never
+// reads an unaccepted height. Only the bootstrapping edge (blocks accepted
+// without verification while the P-chain still catches up) can make this
+// wait, and since the committed height is the ProposerVM block's own height
+// (only ~30s behind the P-chain) that wait really happens there; in normal
+// operation the ProposerVM guarantees the height before the block is
+// verified. Without a P-chain reader (plugin VMs, tests) there is nothing to
+// wait for, which is reported once at Info.
+func (h *hooks) AwaitExecutionPrerequisites(ctx context.Context, b *types.Block) error {
+	committed := customtypes.GetHeaderExtra(b.Header()).PChainHeight
+	if committed == nil {
+		return nil
+	}
+	reader := h.ctx.PChainReader
+	if reader == nil {
+		h.pChainReaderMissingOnce.Do(func() {
+			h.ctx.Log.Info("P-chain reader unavailable; not waiting for committed P-chain heights")
+		})
+		return nil
+	}
+
+	logAt := time.Now() // log on the first wait, then every log interval
+	for {
+		height, err := reader.LastAcceptedHeight()
+		if err == nil && height >= *committed {
+			return nil
+		}
+		if now := time.Now(); !now.Before(logAt) {
+			logAt = now.Add(pChainHeightLogInterval)
+			fields := []zap.Field{
+				zap.Uint64("blockNumber", b.NumberU64()),
+				zap.Uint64("committedPChainHeight", *committed),
+				zap.Uint64("localPChainHeight", height),
+			}
+			if err != nil {
+				h.ctx.Log.Warn("Failed to read the local P-chain height; retrying", append(fields, zap.Error(err))...)
+			} else {
+				h.ctx.Log.Info("Waiting for the local P-chain to reach the committed height", fields...)
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(pChainHeightPollInterval):
+		}
+	}
+}
+
 func (h *hooks) FinishExecutingBlock(statedb *state.StateDB, b *types.Block, _ types.Receipts) error {
-	txs, err := tx.ParseSlice(customtypes.BlockExtData(b))
+	txs, err := tx.FromBlock(h.chainConfig, b)
 	if err != nil {
 		return fmt.Errorf("parsing txs: %w", err)
 	}
@@ -278,7 +349,7 @@ func (h *hooks) FinishExecutingBlock(statedb *state.StateDB, b *types.Block, _ t
 func (h *hooks) AfterExecutingBlock(b *types.Block, receipts types.Receipts) error {
 	h.metrics.setMinBlockDelay(delayExponent(b.Header()).DelayDuration())
 
-	txs, err := tx.ParseSlice(customtypes.BlockExtData(b))
+	txs, err := tx.FromBlock(h.chainConfig, b)
 	if err != nil {
 		return fmt.Errorf("parsing txs: %w", err)
 	}
@@ -375,7 +446,7 @@ func (b *builder) BuildHeader(parent *types.Header) (*types.Header, error) {
 			errBelowMinBlockDelay, now, minTime, parentTime, de.DelayDuration())
 	}
 
-	nowMS := uint64(now.UnixMilli()) //#nosec G115 -- Known non-negative
+	nowMS := uint64(now.UnixMilli())
 
 	config := corethparams.GetExtra(b.chainConfig)
 	te, err := targetExponent(config, parent)
@@ -560,6 +631,18 @@ func (b *builder) BuildBlock(
 	he.SettledGasUnix = &settled.GasUnix
 	he.SettledGasNumerator = (*uint64)(&settled.GasNumerator)
 	he.SettledExcess = (*uint64)(&settled.Excess)
+
+	// Flare: commit the ProposerVM block's own P-chain height so that the
+	// P-chain gateway precompile's reads are bounded by a consensus-verified
+	// value that advances with every block (the epoch-pinned
+	// blockCtx.PChainHeight stays with warp verification above). The
+	// verifier rebuilds the block with its own outer block's height, so a
+	// mismatch fails verification. A nil context (tests) leaves the field
+	// unset.
+	if blockCtx != nil {
+		pChainHeight := blockCtx.ProposerPChainHeight
+		he.PChainHeight = &pChainHeight
+	}
 
 	return customtypes.NewBlockWithExtData(
 		header,

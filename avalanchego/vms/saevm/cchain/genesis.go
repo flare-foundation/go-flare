@@ -22,6 +22,7 @@ import (
 	"github.com/ava-labs/avalanchego/graft/coreth/params/extras"
 	"github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/customtypes"
 	"github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/upgrade/ap3"
+	"github.com/ava-labs/avalanchego/graft/coreth/precompile/contracts/pchaingateway"
 	"github.com/ava-labs/avalanchego/graft/coreth/precompile/contracts/warp"
 	"github.com/ava-labs/avalanchego/graft/evm/utils"
 	"github.com/ava-labs/avalanchego/snow"
@@ -29,7 +30,6 @@ import (
 	"github.com/ava-labs/avalanchego/vms/saevm/cchain/dynamic"
 
 	corethparams "github.com/ava-labs/avalanchego/graft/coreth/params"
-	avalancheutils "github.com/ava-labs/avalanchego/utils"
 	ethparams "github.com/ava-labs/libevm/params"
 )
 
@@ -126,6 +126,12 @@ func parseGenesis(ctx *snow.Context, b []byte) (*genesis, error) {
 					{
 						Config: warp.NewDefaultConfig(
 							utils.TimeToNewUint64(u.DurangoTime),
+						),
+					},
+					// Flare: the P-chain gateway is active from Helicon on.
+					{
+						Config: pchaingateway.NewDefaultConfig(
+							utils.TimeToNewUint64(u.HeliconTime),
 						),
 					},
 				},
@@ -284,13 +290,13 @@ func (g *genesis) block() (*types.Block, error) {
 	}
 
 	if c.IsGranite(g.Timestamp) {
-		headerExtra.TimeMilliseconds = avalancheutils.PointerTo(g.Timestamp * 1000)
-		headerExtra.MinDelayExcess = avalancheutils.PointerTo(acp226.InitialDelayExcess)
+		headerExtra.TimeMilliseconds = new(g.Timestamp * 1000)
+		headerExtra.MinDelayExcess = new(acp226.InitialDelayExcess)
 	}
 
 	if c.IsHelicon(g.Timestamp) {
-		headerExtra.TargetExponent = avalancheutils.PointerTo(dynamic.InitialTargetExponent)
-		headerExtra.MinPriceExponent = avalancheutils.PointerTo(dynamic.InitialPriceExponent)
+		headerExtra.TargetExponent = new(dynamic.InitialTargetExponent)
+		headerExtra.MinPriceExponent = new(dynamic.InitialPriceExponent)
 
 		// The genesis block is synchronous, so the markers must be zero to
 		// conform with [hook.Synchronous]. Most synchronous blocks omit these
@@ -374,8 +380,13 @@ func (g *genesis) writeState(db ethdb.Database, tdb *triedb.Database) (common.Ha
 	// the genesis timestamp is already after the Warp activation, then the
 	// state needs to reflect that or the precompile would never be marked as
 	// active.
-	if c := corethparams.GetExtra(g.Config); c.IsDurango(g.Timestamp) {
+	c := corethparams.GetExtra(g.Config)
+	if c.IsDurango(g.Timestamp) {
 		activatePrecompile(statedb, warp.ContractAddress)
+	}
+	// Flare: same for the P-chain gateway, active from Helicon on.
+	if c.IsHelicon(g.Timestamp) {
+		activatePrecompile(statedb, pchaingateway.ContractAddress)
 	}
 
 	const deleteEmptyObjects = true

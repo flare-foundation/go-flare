@@ -97,6 +97,20 @@ type Points interface {
 	AfterExecutingBlock(*types.Block, types.Receipts) error
 }
 
+// ExecutionGate is a Flare addition that MAY additionally be implemented by
+// [Points]. When it is, the canonical executor calls
+// AwaitExecutionPrerequisites before executing each block and does not start
+// execution until it returns nil. It is only ever used by canonical execution;
+// historical replay (tracing, eth_call, state reconstruction) never calls it
+// and must surface missing prerequisites as errors instead.
+type ExecutionGate interface {
+	// AwaitExecutionPrerequisites blocks until node-local prerequisites for
+	// executing b are met (e.g. the local P-chain has accepted the height
+	// committed in the header) or ctx is cancelled, in which case it MUST
+	// return the context's error.
+	AwaitExecutionPrerequisites(ctx context.Context, b *types.Block) error
+}
+
 // BlockBuilder constructs a block given its components.
 type BlockBuilder[T Transaction] interface {
 	// BuildHeader constructs a header from the parent header.

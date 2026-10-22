@@ -13,7 +13,7 @@ import (
 	"github.com/ava-labs/avalanchego/utils/metric"
 	"github.com/ava-labs/avalanchego/utils/wrappers"
 	"github.com/ava-labs/avalanchego/vms/components/gas"
-	"github.com/ava-labs/avalanchego/vms/platformvm/block"
+	"github.com/ava-labs/avalanchego/vms/platformvm/platform"
 )
 
 const (
@@ -34,7 +34,7 @@ var (
 var _ Metrics = (*metrics)(nil)
 
 type Block struct {
-	Block block.Block
+	Block platform.Block
 
 	GasConsumed gas.Gas
 	GasState    gas.State
@@ -64,6 +64,8 @@ type Metrics interface {
 
 	// Mark that this much stake is staked on the node.
 	SetLocalStake(uint64)
+	// Mark that this much stake is delegated to the node.
+	SetLocalDelegatedStake(uint64)
 	// Mark that this much stake is staked in the network.
 	SetTotalStake(*big.Int)
 	// Mark when this node will unstake from the Primary Network.
@@ -90,6 +92,10 @@ func New(registerer prometheus.Registerer) (Metrics, error) {
 		localStake: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "local_staked",
 			Help: "Amount (in nAVAX) of AVAX staked on this node",
+		}),
+		localDelegatedStake: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "local_delegated_staked",
+			Help: "Amount (in nAVAX) of AVAX delegated to this node",
 		}),
 		totalStake: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "total_staked",
@@ -153,6 +159,7 @@ func New(registerer prometheus.Registerer) (Metrics, error) {
 		registerer.Register(m.timeUntilUnstake),
 		registerer.Register(m.timeUntilSubnetUnstake),
 		registerer.Register(m.localStake),
+		registerer.Register(m.localDelegatedStake),
 		registerer.Register(m.totalStake),
 
 		registerer.Register(m.gasConsumed),
@@ -180,6 +187,7 @@ type metrics struct {
 	timeUntilUnstake       prometheus.Gauge
 	timeUntilSubnetUnstake *prometheus.GaugeVec
 	localStake             prometheus.Gauge
+	localDelegatedStake    prometheus.Gauge
 	totalStake             prometheus.Gauge
 
 	gasConsumed          prometheus.Counter
@@ -233,6 +241,10 @@ func (m *metrics) SetLocalStake(s uint64) {
 func (m *metrics) SetTotalStake(s *big.Int) {
 	sFloat, _ := s.Float64()
 	m.totalStake.Set(sFloat)
+}
+
+func (m *metrics) SetLocalDelegatedStake(s uint64) {
+	m.localDelegatedStake.Set(float64(s))
 }
 
 func (m *metrics) SetTimeUntilUnstake(timeUntilUnstake time.Duration) {

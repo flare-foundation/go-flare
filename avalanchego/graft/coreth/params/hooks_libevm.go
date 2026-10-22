@@ -17,6 +17,7 @@ import (
 	"github.com/ava-labs/avalanchego/graft/coreth/nativeasset"
 	"github.com/ava-labs/avalanchego/graft/coreth/params/extras"
 	"github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/customheader"
+	"github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/customtypes"
 	"github.com/ava-labs/avalanchego/graft/coreth/precompile/contract"
 	"github.com/ava-labs/avalanchego/graft/coreth/precompile/modules"
 	"github.com/ava-labs/avalanchego/graft/coreth/precompile/precompileconfig"
@@ -167,6 +168,9 @@ func makePrecompile(contract contract.StatefulPrecompiledContract) libevm.Precom
 				number:           env.BlockNumber(),
 				time:             env.BlockTime(),
 				predicateResults: predicateResults,
+				// Flare: the header value copy shares the extras payload, so
+				// this is the P-chain height committed by the SAE builder.
+				pChainHeight: customtypes.GetHeaderExtra(&header).PChainHeight,
 			},
 		}
 
@@ -239,6 +243,7 @@ type precompileBlockContext struct {
 	number           *big.Int
 	time             uint64
 	predicateResults predicate.BlockResults
+	pChainHeight     *uint64 // Flare: HeaderExtra.PChainHeight
 }
 
 func (p *precompileBlockContext) Number() *big.Int {
@@ -251,4 +256,12 @@ func (p *precompileBlockContext) Timestamp() uint64 {
 
 func (p *precompileBlockContext) GetPredicateResults(txHash common.Hash, precompileAddress common.Address) set.Bits {
 	return p.predicateResults.Get(txHash, precompileAddress)
+}
+
+// PChainHeight returns the P-chain height committed in the block header, if any.
+func (p *precompileBlockContext) PChainHeight() (uint64, bool) {
+	if p.pChainHeight == nil {
+		return 0, false
+	}
+	return *p.pChainHeight, true
 }

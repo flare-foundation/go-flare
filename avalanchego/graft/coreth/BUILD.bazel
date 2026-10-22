@@ -21,6 +21,7 @@ package_group(
         "//tests/reexecute/chaos",
         "//vms/evm/emulate",
         "//vms/saevm/cchain/...",
+        "//vms/saevm/saexec",
         "//wallet/chain/c",
         "//wallet/subnet/primary",
     ],

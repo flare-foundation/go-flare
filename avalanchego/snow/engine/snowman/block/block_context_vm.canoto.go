@@ -27,9 +27,11 @@ var (
 )
 
 const (
-	canoto__Context__PChainHeight = 1
+	canoto__Context__PChainHeight         = 1
+	canoto__Context__ProposerPChainHeight = 2
 
-	canoto__Context__PChainHeight__tag = "\x08" // canoto.Tag(canoto__Context__PChainHeight, canoto.Varint)
+	canoto__Context__PChainHeight__tag         = "\x08" // canoto.Tag(canoto__Context__PChainHeight, canoto.Varint)
+	canoto__Context__ProposerPChainHeight__tag = "\x10" // canoto.Tag(canoto__Context__ProposerPChainHeight, canoto.Varint)
 )
 
 type canotoData_Context struct {
@@ -47,6 +49,12 @@ func (*Context) CanotoSpec(...reflect.Type) *canoto.Spec {
 				Name:        "PChainHeight",
 				OneOf:       "",
 				TypeUint:    canoto.SizeOf(zero.PChainHeight),
+			},
+			{
+				FieldNumber: canoto__Context__ProposerPChainHeight,
+				Name:        "ProposerPChainHeight",
+				OneOf:       "",
+				TypeUint:    canoto.SizeOf(zero.ProposerPChainHeight),
 			},
 		},
 	}
@@ -97,6 +105,17 @@ func (c *Context) UnmarshalCanotoFrom(r canoto.Reader) error {
 			if canoto.IsZero(c.PChainHeight) {
 				return canoto.ErrZeroValue
 			}
+		case canoto__Context__ProposerPChainHeight:
+			if wireType != canoto.Varint {
+				return canoto.ErrUnexpectedWireType
+			}
+
+			if err := canoto.ReadUint(&r, &c.ProposerPChainHeight); err != nil {
+				return err
+			}
+			if canoto.IsZero(c.ProposerPChainHeight) {
+				return canoto.ErrZeroValue
+			}
 		default:
 			return canoto.ErrUnknownField
 		}
@@ -125,6 +144,9 @@ func (c *Context) CalculateCanotoCache() {
 	var size uint64
 	if !canoto.IsZero(c.PChainHeight) {
 		size += uint64(len(canoto__Context__PChainHeight__tag)) + canoto.SizeUint(c.PChainHeight)
+	}
+	if !canoto.IsZero(c.ProposerPChainHeight) {
+		size += uint64(len(canoto__Context__ProposerPChainHeight__tag)) + canoto.SizeUint(c.ProposerPChainHeight)
 	}
 	atomic.StoreUint64(&c.canotoData.size, size)
 }
@@ -167,6 +189,10 @@ func (c *Context) MarshalCanotoInto(w canoto.Writer) canoto.Writer {
 	if !canoto.IsZero(c.PChainHeight) {
 		canoto.Append(&w, canoto__Context__PChainHeight__tag)
 		canoto.AppendUint(&w, c.PChainHeight)
+	}
+	if !canoto.IsZero(c.ProposerPChainHeight) {
+		canoto.Append(&w, canoto__Context__ProposerPChainHeight__tag)
+		canoto.AppendUint(&w, c.ProposerPChainHeight)
 	}
 	return w
 }

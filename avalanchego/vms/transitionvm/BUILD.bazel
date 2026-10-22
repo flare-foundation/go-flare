@@ -38,6 +38,7 @@ go_library(
 go_test(
     name = "transitionvm_test",
     srcs = [
+        "copy_context_flare_test.go",
         "factory_test.go",
         "vm_block_test.go",
         "vm_consensus_test.go",
@@ -63,6 +64,7 @@ go_test(
         "//utils/set",
         "//version",
         "//vms",
+        "//vms/platformvm/pchainreader",
         "@com_github_ava_labs_libevm//libevm/options",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

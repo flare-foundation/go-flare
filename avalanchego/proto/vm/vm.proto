@@ -192,6 +192,9 @@ enum Message {
 
 message BuildBlockRequest {
   optional uint64 p_chain_height = 1;
+  // Flare: [block.Context.ProposerPChainHeight], the P-chain height sealed
+  // into the proposervm block. Only meaningful when p_chain_height is set.
+  optional uint64 proposer_p_chain_height = 2;
 }
 
 // Note: The status of a freshly built block is assumed to be Processing.
@@ -240,6 +243,9 @@ message BlockVerifyRequest {
   // If set, the VM server casts the block to a [block.WithVerifyContext] and
   // calls [VerifyWithContext] instead of [Verify].
   optional uint64 p_chain_height = 2;
+  // Flare: [block.Context.ProposerPChainHeight], the P-chain height sealed
+  // into the proposervm block. Only meaningful when p_chain_height is set.
+  optional uint64 proposer_p_chain_height = 3;
 }
 
 message BlockVerifyResponse {

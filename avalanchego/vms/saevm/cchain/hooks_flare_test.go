@@ -17,7 +17,6 @@ import (
 	"github.com/ava-labs/avalanchego/snow/snowtest"
 	"github.com/ava-labs/avalanchego/upgrade"
 	"github.com/ava-labs/avalanchego/upgrade/upgradetest"
-	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/vms/saevm/cchain/dynamic"
 	"github.com/ava-labs/avalanchego/vms/saevm/cchain/tx/txtest"
@@ -34,7 +33,7 @@ func TestPriceExponentFlareSeed(t *testing.T) {
 	withExponent := customtypes.WithHeaderExtra(
 		&types.Header{},
 		&customtypes.HeaderExtra{
-			MinPriceExponent: utils.PointerTo(carried),
+			MinPriceExponent: new(carried),
 		},
 	)
 

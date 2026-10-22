@@ -41,6 +41,7 @@ import (
 	"github.com/ava-labs/avalanchego/snow/networking/router"
 	"github.com/ava-labs/avalanchego/snow/networking/sender"
 	"github.com/ava-labs/avalanchego/snow/networking/timeout"
+	"github.com/ava-labs/avalanchego/snow/pchain"
 	"github.com/ava-labs/avalanchego/snow/validators"
 	"github.com/ava-labs/avalanchego/staking"
 	"github.com/ava-labs/avalanchego/subnets"
@@ -275,6 +276,8 @@ type manager struct {
 
 	// snowman++ related interface to allow validators retrieval
 	validatorState validators.State
+	// Flare: read access to accepted P-chain blocks for other chains
+	pchainReader pchain.Reader
 
 	avalancheGatherer    metrics.MultiGatherer            // chainID
 	handlerGatherer      metrics.MultiGatherer            // chainID
@@ -516,6 +519,7 @@ func (m *manager) buildChain(chainParams ChainParameters, sb subnets.Subnet) (*c
 			WarpSigner: warp.NewSigner(m.StakingBLSKey, m.NetworkID, chainParams.ID),
 
 			ValidatorState: m.validatorState,
+			PChainReader:   m.pchainReader,
 			ChainDataDir:   chainDataDir,
 		},
 		PrimaryAlias:   primaryAlias,
@@ -1157,6 +1161,17 @@ func (m *manager) createSnowmanChain(
 			ctx.ValidatorState = validators.NewNoValidatorsState(ctx.ValidatorState)
 		}
 		m.validatorState = valState
+
+		// Flare: expose accepted P-chain blocks and staking transactions to
+		// the other chains (C-chain P-chain gateway precompile). The reader
+		// takes the P-chain lock around every state access.
+		if provider, ok := vm.(pchain.ReaderProvider); ok {
+			m.pchainReader = provider.NewPChainReader(&ctx.Lock)
+		} else {
+			m.Log.Warn("P-chain VM does not provide a P-chain reader",
+				zap.String("vmType", fmt.Sprintf("%T", vm)),
+			)
+		}
 
 		// Set this func only for platform
 		//
