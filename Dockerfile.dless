@@ -1,3 +1,4 @@
+#checkov:skip=CKV_DOCKER_2: "Ensure that HEALTHCHECK instructions have been added to container images"
 FROM golang:1.26.8-trixie@sha256:aae9c439b447d24c93ee483408992857cf39a3fb6ab7fe53affc65d834891fa8 AS build
 
 WORKDIR /app/
@@ -8,9 +9,8 @@ COPY ./config /app/config
 
 WORKDIR /app/avalanchego/
 
-RUN /app/avalanchego/scripts/build.sh
-
-RUN mkdir -p /app/conf/coston /app/conf/C /app/logs /app/db /app/chainData
+RUN /app/avalanchego/scripts/build.sh && \
+    mkdir -p /app/conf/coston /app/conf/C /app/logs /app/db /app/chainData
 
 WORKDIR /entrypoint
 COPY entrypoint/main.go .

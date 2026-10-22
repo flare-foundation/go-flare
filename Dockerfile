@@ -1,3 +1,4 @@
+#checkov:skip=CKV_DOCKER_3: "Ensure that a user for the container has been created"
 FROM golang:1.26.8-trixie@sha256:aae9c439b447d24c93ee483408992857cf39a3fb6ab7fe53affc65d834891fa8 AS build
 
 WORKDIR /app/
@@ -34,10 +35,11 @@ ENV HTTP_HOST=0.0.0.0 \
     BOOTSTRAP_BEACON_CONNECTION_TIMEOUT="1m" \
     HTTP_ALLOWED_HOSTS="*"
 
-RUN apt-get update -y && \
-    apt-get install -y curl jq
-
-RUN mkdir -p /app/conf/coston /app/conf/C /app/logs /app/db /app/chainData
+# hadolint ignore=DL3008
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl jq && \
+    rm -rf /var/lib/apt/lists/* && \
+    mkdir -p /app/conf/coston /app/conf/C /app/logs /app/db /app/chainData
 
 COPY --from=build /app/avalanchego/build /app/build
 COPY entrypoint.sh /app/entrypoint.sh
@@ -50,7 +52,7 @@ VOLUME [ "${CHAIN_DATA_DIR}" ]
 VOLUME [ "${LOG_DIR}" ]
 VOLUME [ "${CHAIN_CONFIG_DIR}" ]
 
-HEALTHCHECK CMD curl --fail http://localhost:${HTTP_PORT}/ext/health || exit 1
+HEALTHCHECK CMD ["/bin/sh", "-c", "curl --fail http://localhost:${HTTP_PORT}/ext/health || exit 1"]
 
 ENTRYPOINT [ "/usr/bin/bash" ]
 CMD [ "/app/entrypoint.sh" ]

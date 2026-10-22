@@ -25,9 +25,10 @@ jobs:
     - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
       with:
         fetch-depth: 0
+        persist-credentials: false
   
     - name: Build
-      uses: ./.github/actions/go-build
+      uses: ./.github/actions/go-build # zizmor: ignore[self-repository] actionlint does not yet support the $/ syntax
       with:
         go_version: ${{ inputs.go_version }}
         working_directory: .

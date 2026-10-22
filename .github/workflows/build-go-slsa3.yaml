@@ -35,10 +35,11 @@ jobs:
         uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup SLSA
         id: setup
-        uses: slsa-framework/slsa-github-generator/actions/delegator/setup-generic@v2.1.0
+        uses: slsa-framework/slsa-github-generator/actions/delegator/setup-generic@v2.1.0 # zizmor: ignore[unpinned-uses] slsa-github-generator must be pinned by tag, not SHA, per its own security model (slsa-verifier checks the ref)
         with:
           slsa-workflow-recipient: "delegator_generic_slsa3.yml"
           slsa-runner-label: "ubuntu-latest"  # Only supports ubuntu-latest for now
@@ -52,7 +53,7 @@ jobs:
       contents: write
       packages: write
       actions: read
-    uses: slsa-framework/slsa-github-generator/.github/workflows/delegator_generic_slsa3.yml@v2.1.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/delegator_generic_slsa3.yml@v2.1.0 # zizmor: ignore[unpinned-uses] slsa-github-generator must be pinned by tag, not SHA, per its own security model (slsa-verifier checks the ref)
     with:
       slsa-token: ${{ needs.slsa-setup.outputs.slsa-token }}
 
