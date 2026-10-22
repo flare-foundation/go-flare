@@ -50,7 +50,7 @@ VOLUME [ "${DB_DIR}" ]
 VOLUME [ "${LOG_DIR}" ]
 VOLUME [ "${CHAIN_CONFIG_DIR}" ]
 
-HEALTHCHECK CMD curl --fail http://localhost:${HTTP_PORT}/ext/health || exit 1
+HEALTHCHECK CMD ["/bin/sh", "-c", "curl --fail http://localhost:${HTTP_PORT}/ext/health || exit 1"]
 
 ENTRYPOINT [ "/usr/bin/bash" ]
 CMD [ "/app/entrypoint.sh" ]
