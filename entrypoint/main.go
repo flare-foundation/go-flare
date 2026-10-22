@@ -198,6 +198,7 @@ func main() {
 		"--public-ip", os.Getenv("PUBLIC_IP"),
 		"--db-dir", os.Getenv("DB_DIR"),
 		"--db-type", os.Getenv("DB_TYPE"),
+		"--chain-data-dir", os.Getenv("CHAIN_DATA_DIR"),
 		"--bootstrap-ips", os.Getenv("BOOTSTRAP_IPS"),
 		"--bootstrap-ids", os.Getenv("BOOTSTRAP_IDS"),
 		"--bootstrap-beacon-connection-timeout", os.Getenv("BOOTSTRAP_BEACON_CONNECTION_TIMEOUT"),

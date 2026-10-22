@@ -1,4 +1,4 @@
-FROM golang:1.25.11-trixie@sha256:56a4d6ead4365cd569ca388003bdce672e7ca7286513f96b44b03d3b5e79d26f AS build
+FROM golang:1.26.8-trixie@sha256:aae9c439b447d24c93ee483408992857cf39a3fb6ab7fe53affc65d834891fa8 AS build
 
 WORKDIR /app/
 
@@ -20,6 +20,7 @@ ENV HTTP_HOST=0.0.0.0 \
     PUBLIC_IP= \
     DB_DIR=/app/db \
     DB_TYPE=leveldb \
+    CHAIN_DATA_DIR=/app/chainData \
     BOOTSTRAP_IPS= \
     BOOTSTRAP_IDS= \
     CHAIN_CONFIG_DIR=/app/conf \
@@ -36,7 +37,7 @@ ENV HTTP_HOST=0.0.0.0 \
 RUN apt-get update -y && \
     apt-get install -y curl jq
 
-RUN mkdir -p /app/conf/coston /app/conf/C /app/logs /app/db
+RUN mkdir -p /app/conf/coston /app/conf/C /app/logs /app/db /app/chainData
 
 COPY --from=build /app/avalanchego/build /app/build
 COPY entrypoint.sh /app/entrypoint.sh
@@ -45,6 +46,7 @@ EXPOSE ${STAKING_PORT}
 EXPOSE ${HTTP_PORT}
 
 VOLUME [ "${DB_DIR}" ]
+VOLUME [ "${CHAIN_DATA_DIR}" ]
 VOLUME [ "${LOG_DIR}" ]
 VOLUME [ "${CHAIN_CONFIG_DIR}" ]
 

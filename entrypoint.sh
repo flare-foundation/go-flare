@@ -68,6 +68,7 @@ exec /app/build/avalanchego \
 	--public-ip="$PUBLIC_IP" \
 	--db-dir="$DB_DIR" \
 	--db-type="$DB_TYPE" \
+	--chain-data-dir="$CHAIN_DATA_DIR" \
 	--bootstrap-ips="$BOOTSTRAP_IPS" \
 	--bootstrap-ids="$BOOTSTRAP_IDS" \
 	--bootstrap-beacon-connection-timeout="$BOOTSTRAP_BEACON_CONNECTION_TIMEOUT" \
