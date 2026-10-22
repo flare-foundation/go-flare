@@ -11,6 +11,7 @@ default:
 include:
   - component: gitlab.com/flarenetwork/ci-components-private/lgtm@2
   - component: gitlab.com/flarenetwork/ci-components-private/dependency-track@2
+  - component: gitlab.com/flarenetwork/ci-components-private/lint-github-actions@2
   - component: gitlab.com/flarenetwork/ci-components-private/lint-shell@2
     inputs:
       exclude_regex: "^avalanchego/.*"
