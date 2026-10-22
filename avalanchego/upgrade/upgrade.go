@@ -121,7 +121,7 @@ var (
 		FortunaTime:           time.Date(2026, time.March, 24, 12, 0, 0, 0, time.UTC),
 		GraniteTime:           time.Date(2026, time.June, 16, 12, 0, 0, 0, time.UTC),
 		GraniteEpochDuration:  5 * time.Minute,
-		HeliconTime:           UnscheduledActivationTime,
+		HeliconTime:           time.Date(2026, time.November, 3, 12, 0, 0, 0, time.UTC),
 	}
 	Coston = Config{
 		ApricotPhase1Time:      ZeroTime,

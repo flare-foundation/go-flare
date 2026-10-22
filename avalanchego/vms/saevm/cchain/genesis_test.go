@@ -72,7 +72,6 @@ func TestParseGenesis(t *testing.T) {
 		localCtx   = &snow.Context{NetworkUpgrades: upgrade.Default}
 
 		initiallyActive = evmutils.TimeToNewUint64(upgrade.InitiallyActiveTime)
-		unscheduled     = evmutils.TimeToNewUint64(upgrade.UnscheduledActivationTime)
 		zeroTime        = evmutils.TimeToNewUint64(upgrade.ZeroTime)
 	)
 	tests := []struct {
@@ -194,7 +193,7 @@ func TestParseGenesis(t *testing.T) {
 							EtnaTimestamp:                   new(uint64(1763042400)),
 							FortunaTimestamp:                new(uint64(1774353600)),
 							GraniteTimestamp:                new(uint64(1781611200)),
-							HeliconTimestamp:                unscheduled,
+							HeliconTimestamp:                new(uint64(1793707200)),
 						},
 						AvalancheContext: extras.AvalancheContext{
 							SnowCtx: costwoCtx,
@@ -208,7 +207,7 @@ func TestParseGenesis(t *testing.T) {
 								},
 								{
 									Config: pchaingateway.NewDefaultConfig(
-										unscheduled, // Helicon
+										new(uint64(1793707200)), // Helicon
 									),
 								},
 							},
