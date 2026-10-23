@@ -20,7 +20,7 @@ on:
         description: "Name of attestations artifact"
         value: ${{ jobs.rename-attestations.outputs.attestations-artifact-name }}
 
-permissions: read-all
+permissions: {}
 
 jobs:
   slsa-setup:
