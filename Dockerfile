@@ -36,7 +36,7 @@ ENV HTTP_HOST=0.0.0.0 \
 
 # hadolint ignore=DL3008
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl jq && \
+    apt-get install -y --no-install-recommends ca-certificates curl jq && \
     rm -rf /var/lib/apt/lists/* && \
     mkdir -p /app/conf/coston /app/conf/C /app/logs /app/db
 
