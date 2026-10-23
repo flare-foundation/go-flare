@@ -18,7 +18,8 @@ See the [AvalancheGo v1.15.0 and v1.15.1 release notes](./avalanchego/RELEASES.m
 ### Flare-specific changes
 
  * A new read-only **P-chain gateway precompile** at `0x0300000000000000000000000000000000000000` lets C-chain contracts read accepted P-chain data during execution: the P-chain height, blocks, transactions with their inputs and outputs, and stake owners. See its [documentation](./avalanchego/graft/coreth/precompile/contracts/pchaingateway/README.md).
- * The daemon (inflation) contract call, the burning of transaction fees and the fee refunds for prioritized contracts are preserved under the new asynchronous execution.
+ * The daemon contract call, the burning of transaction fees and the fee refunds for prioritized contracts are preserved under the new asynchronous execution. The state connector handling, inactive since the Durango upgrade, is removed.
+ * For the Coston2 network, the minimum validator staking duration is reduced from 60 days to 7 days and the minimum delegation duration from 14 days to 24 hours after the activation.
 
 ### Note:
 

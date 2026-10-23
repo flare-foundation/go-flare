@@ -70,6 +70,7 @@ go work sync
 
 ### Staking Parameters (`vms/platformvm/txs/executor/inflation_settings.go`)
 - Returns different validator/delegator settings based on network ID and timestamp (`getValidatorRules`/`getDelegatorRules` take a leading `time.Time`)
+- Per-network phases are keyed on fork activation (Granite, Helicon) or fixed dates; Coston2's Helicon phase shortens the minimum validator staking duration to 7 days and the minimum delegation duration to 24 hours (Flare, Songbird and Coston have no Helicon phase yet)
 - All networks return **0 rewards** (rewards handled via smart contracts); see `vms/platformvm/reward/calculator.go`
 - Verification logic in `staker_tx_verification.go`
 

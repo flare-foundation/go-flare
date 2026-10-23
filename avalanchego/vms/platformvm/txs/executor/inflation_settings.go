@@ -112,6 +112,20 @@ func getFlareInflationSettings(currentTimestamp time.Time, config *config.Intern
 
 func getCostwoInflationSettings(currentTimestamp time.Time, config *config.Internal) InflationSettings {
 	switch {
+	case config.UpgradeConfig.IsHeliconActivated(currentTimestamp):
+		// Phase 4 (Helicon): shorter minimum validator and delegation durations
+		return InflationSettings{
+			MinValidatorStake:        1 * units.MegaAvax,
+			MaxValidatorStake:        200 * units.MegaAvax,
+			MinDelegatorStake:        50 * units.KiloAvax,
+			MinDelegationFee:         200_000,
+			MinStakeDuration:         7 * 24 * time.Hour,
+			MinDelegateDuration:      24 * time.Hour,
+			MaxStakeDuration:         365 * 24 * time.Hour,
+			MinFutureStartTimeOffset: MaxFutureStartTime,
+			MaxValidatorWeightFactor: 15,
+			MinStakeStartTime:        time.Date(2023, time.September, 7, 0, 0, 0, 0, time.UTC),
+		}
 	case config.UpgradeConfig.IsGraniteActivated(currentTimestamp):
 		// Phase 3 (Granite)
 		return InflationSettings{
