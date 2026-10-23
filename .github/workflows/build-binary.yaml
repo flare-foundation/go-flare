@@ -19,7 +19,7 @@ jobs:
       actions: read
     uses: ./.github/workflows/build-go-slsa3.yaml # zizmor: ignore[self-repository] actionlint does not yet support the $/ syntax
     with:
-      go_version: "1.26.8"
+      go_version: "1.26.10"
       ubuntu_version: "24.04"
       build_artifact_name: "avalanchego"
 
@@ -30,7 +30,7 @@ jobs:
       contents: read
     uses: ./.github/workflows/build-go-verification.yaml # zizmor: ignore[self-repository] actionlint does not yet support the $/ syntax
     with:
-      go_version: "1.26.8"
+      go_version: "1.26.10"
       ubuntu_version: "24.04"
       build_artifact_name: "avalanchego-verification"
 

@@ -22,8 +22,21 @@ type rpcResponse struct {
 	Result json.RawMessage `json:"result"`
 }
 
+func publicIPTraceURL(networkID string) string {
+	switch n := strings.ToLower(networkID); n {
+	case "songbird", "coston":
+		return "https://" + n + "-bootstrap.flare.network/cdn-cgi/trace"
+	case "costwo":
+		return "https://coston2-bootstrap.flare.network/cdn-cgi/trace"
+	default:
+		return "https://flare-bootstrap.flare.network/cdn-cgi/trace"
+	}
+}
+
 func fetchPublicIP() (string, error) {
-	resp, err := http.Get("https://flare.network/cdn-cgi/trace")
+	url := publicIPTraceURL(os.Getenv("NETWORK_ID"))
+	fmt.Fprintf(os.Stderr, "  Using %s\n", url)
+	resp, err := http.Get(url)
 	if err != nil {
 		return "", err
 	}

@@ -1,5 +1,5 @@
 #checkov:skip=CKV_DOCKER_2: "Ensure that HEALTHCHECK instructions have been added to container images"
-FROM golang:1.26.8-trixie@sha256:aae9c439b447d24c93ee483408992857cf39a3fb6ab7fe53affc65d834891fa8 AS build
+FROM golang:1.26.10-trixie@sha256:909771fef53e3dcb0950255f0c9a8b4728c3b841e61509c7b29b098de7ee02d4 AS build
 
 WORKDIR /app/
 
@@ -10,13 +10,13 @@ COPY ./config /app/config
 WORKDIR /app/avalanchego/
 
 RUN /app/avalanchego/scripts/build.sh && \
-    mkdir -p /app/conf/coston /app/conf/C /app/logs /app/db /app/chainData
+    mkdir -p /app/conf/coston /app/conf/C /app/logs /app/db /app/db/chainData
 
 WORKDIR /entrypoint
 COPY entrypoint/main.go .
 RUN go build -ldflags="-s -w" -o /out/entrypoint main.go
 
-FROM gcr.io/distroless/base:nonroot@sha256:e00da4d3bd422820880b080115b3bad24349bef37ed46d68ed0d13e150dc8d67 AS final
+FROM gcr.io/distroless/cc:nonroot@sha256:83b9b50586253821cf63ffcec87d3d94265a093ad30da232039af962dd8f4edf AS final
 
 USER nonroot
 
@@ -28,7 +28,7 @@ ENV HTTP_HOST=0.0.0.0 \
     PUBLIC_IP= \
     DB_DIR=/app/db \
     DB_TYPE=leveldb \
-    CHAIN_DATA_DIR=/app/chainData \
+    CHAIN_DATA_DIR=/app/db/chainData \
     BOOTSTRAP_IPS= \
     BOOTSTRAP_IDS= \
     CHAIN_CONFIG_DIR=/app/conf \
@@ -45,7 +45,6 @@ ENV HTTP_HOST=0.0.0.0 \
 COPY --from=build --chown=nonroot:nonroot /app/conf /app/conf
 COPY --from=build --chown=nonroot:nonroot /app/logs /app/logs
 COPY --from=build --chown=nonroot:nonroot /app/db   /app/db
-COPY --from=build --chown=nonroot:nonroot /app/chainData /app/chainData
 
 COPY --from=build --chown=nonroot:nonroot /app/avalanchego/build /app/build
 COPY --from=build --chown=nonroot:nonroot /out/entrypoint /app/entrypoint
@@ -54,7 +53,6 @@ EXPOSE ${STAKING_PORT}
 EXPOSE ${HTTP_PORT}
 
 VOLUME [ "${DB_DIR}" ]
-VOLUME [ "${CHAIN_DATA_DIR}" ]
 VOLUME [ "${LOG_DIR}" ]
 VOLUME [ "${CHAIN_CONFIG_DIR}" ]
 

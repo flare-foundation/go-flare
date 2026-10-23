@@ -18,12 +18,11 @@ docker run -d \
 
 ## Mounting storage
 
-The four points of interest for mounting are:
+The three points of interest for mounting are:
 
 | Name | Default location |
 |---|:--|
-| Database | `/app/db` |
-| Chain data | `/app/chainData` |
+| Database (including chain data) | `/app/db` |
 | Logging | `/app/logs` |
 | Configuration | `/app/conf` |
 
@@ -32,7 +31,6 @@ The four points of interest for mounting are:
 ```sh
 docker run -d \
 	-v /tmp/db:/app/db \
-	-v /tmp/chainData:/app/chainData \
 	-v /tmp/conf:/app/conf \
 	-p 9650:9650 \
 	-e AUTOCONFIGURE_BOOTSTRAP=1 \
@@ -51,14 +49,14 @@ These are the environment variables you can edit and their default values:
 | `PUBLIC_IP` | _(empty)_ | The public IP of the service |
 | `DB_DIR` | `/app/db` | The database directory location |
 | `DB_TYPE` | `leveldb` | The database type to be used |
-| `CHAIN_DATA_DIR` | `/app/chainData` | The chain data directory. Since v1.15.1 (Helicon upgrade) the C-chain stores its execution results here, outside the database, so it must be persisted together with `DB_DIR` |
+| `CHAIN_DATA_DIR` | `/app/db/chainData` | The chain data directory. Since v1.15.1 (Helicon upgrade) the C-chain stores its execution results here, outside the database, so it must be persisted together with `DB_DIR`; the default keeps it inside the `/app/db` mount |
 | `BOOTSTRAP_IPS` | _(empty)_ | A list of bootstrap server ips; ref [--bootstrap-ips-string](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#--bootstrap-ips-string) |
 | `BOOTSTRAP_IDS` | _(empty)_ | A list of bootstrap server ids; ref [--bootstrap-ids-string](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#--bootstrap-ids-string) |
 | `CHAIN_CONFIG_DIR` | `/app/conf` | Configuration directory |
 | `LOG_DIR` | `/app/logs` | Logging directory |
 | `LOG_LEVEL` | `info` | Logging level set with AvalancheGo flag [`--log-level`](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#--log-level-string-verbo-debug-trace-info-warn-error-fatal-off). |
 | `NETWORK_ID` | `costwo` | The network id. The common ids are `flare \| costwo` |
-| `AUTOCONFIGURE_PUBLIC_IP` | `0` | Set to `1` to autoconfigure `PUBLIC_IP`, skipped if PUBLIC_IP is set |
+| `AUTOCONFIGURE_PUBLIC_IP` | `0` | Set to `1` to autoconfigure `PUBLIC_IP` from `https://<network>-bootstrap.flare.network/cdn-cgi/trace` (`flare`, `songbird`, `coston`, `coston2`; other networks use `flare-bootstrap`), skipped if PUBLIC_IP is set |
 | `AUTOCONFIGURE_BOOTSTRAP` | `0` | Set to `1` to autoconfigure `BOOTSTRAP_IPS` and `BOOTSTRAP_IDS` |
 | `AUTOCONFIGURE_BOOTSTRAP_ENDPOINT` | `https://coston2-bootstrap.flare.network/ext/info` | Endpoint used for [bootstrapping](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#bootstrapping) when `AUTOCONFIGURE_BOOTSTRAP` is enabled. Possible values are `https://coston2-bootstrap.flare.network/ext/info`, `https://flare-bootstrap.flare.network/ext/info`, `https://coston-bootstrap.flare.network/ext/info` or `https://songbird-bootstrap.flare.network/ext/info`. |
 | `AUTOCONFIGURE_FALLBACK_ENDPOINTS` | _(empty)_ | Comma-divided fallback bootstrap endpoints, used if `AUTOCONFIGURE_BOOTSTRAP_ENDPOINT` is not valid (not whitelisted / unreachable / etc), tested from first-to-last until one is valid |

@@ -1,7 +1,7 @@
 # Avalanchego (Flare Fork)
 
 Fork of [ava-labs/avalanchego](https://github.com/ava-labs/avalanchego) with Flare and Songbird network support.
-Module: `github.com/ava-labs/avalanchego` | Go 1.26.8 (see `go.mod`/`go.work`; upstream v1.15.1 raised the minimum from 1.25.10).
+Module: `github.com/ava-labs/avalanchego` | Go 1.26.10 (see `go.mod`/`go.work`; upstream v1.15.1 raised the minimum from 1.25.10 to 1.26.8, Flare pins 1.26.10).
 
 **Upstream version:** Pinned to avalanchego **v1.15.1** (branch `flare-merge-1_15_1`) — this is **not** necessarily the latest upstream release. Newer upstream tags may exist; do not assume features/APIs from later versions are present here.
 

@@ -10,12 +10,12 @@ See [release notes](./RELEASES-flare.md) for more info.
 
 ## System Requirements
 
-- go version 1.26.8
+- go version 1.26.10
 - gcc, g++ and jq
 - CPU: Equivalent of 8 AWS vCPU
 - RAM: 16 GiB
 - Storage: 1TB Flare / 3.5TB Songbird
-- OS: Ubuntu 22.04/24.04
+- OS: Ubuntu 24.04
 
 ## Compilation
 

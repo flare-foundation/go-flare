@@ -26,8 +26,8 @@ See the [AvalancheGo v1.15.0 and v1.15.1 release notes](./avalanchego/RELEASES.m
  * After the activation, the C-chain ignores a number of configuration options and logs a warning for each of them, `eth-apis` is deprecated in favor of `apis`, and `state-sync-enabled` defaults to `true`. The `commit-interval` option must be left at its default (4096). See the [C-chain config reference](./avalanchego/vms/saevm/cchain/config.md).
  * The `admin`, `warp` and `personal` API namespaces, the `eth_accounts`, `eth_coinbase` and `eth_etherbase` RPCs and several `debug` RPCs are removed.
  * The C-chain config option `api-max-duration` accepts only a duration string (for example `"30s"`) after the activation; a numeric value (nanoseconds) is rejected and the node fails to start. Update the value before the activation, the string form is also accepted by the current VM.
- * The C-chain keeps its execution results in the chain data directory (`--chain-data-dir`, default `$HOME/.avalanchego/chainData`), outside the node database. This directory must be on persistent storage together with the database directory; a node that loses it cannot start and has to be resynced. The Docker images now expose it as the `CHAIN_DATA_DIR` environment variable (default `/app/chainData`) and declare it as a volume.
- * Building from source now requires Go 1.26.8 or later.
+ * The C-chain keeps its execution results in the chain data directory (`--chain-data-dir`, default `<data-dir>/chainData`), outside the node database. This directory must be on persistent storage together with the database directory; a node that loses it cannot start and has to be resynced. The Docker images now expose it as the `CHAIN_DATA_DIR` environment variable, defaulting to `/app/db/chainData` inside the database volume, so a mount at `/app/db` persists both.
+ * Building from source now requires Go 1.26.10 or later.
 
 ## v1.14.2
 
