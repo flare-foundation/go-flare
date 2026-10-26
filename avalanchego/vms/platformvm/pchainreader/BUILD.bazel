@@ -1,0 +1,54 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//.bazel:defs.bzl", "go_test")
+
+go_library(
+    name = "pchainreader",
+    srcs = [
+        "decode.go",
+        "inputs.go",
+        "outputs.go",
+        "reader.go",
+        "store.go",
+    ],
+    importpath = "github.com/ava-labs/avalanchego/vms/platformvm/pchainreader",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//cache/lru",
+        "//database",
+        "//ids",
+        "//snow/pchain",
+        "//upgrade",
+        "//utils",
+        "//utils/constants",
+        "//vms/components/avax",
+        "//vms/components/verify",
+        "//vms/platformvm/platform",
+        "//vms/platformvm/stakeable",
+        "//vms/platformvm/state",
+        "//vms/secp256k1fx",
+    ],
+)
+
+go_test(
+    name = "pchainreader_test",
+    srcs = [
+        "parse_bench_flare_test.go",
+        "reader_test.go",
+    ],
+    embed = [":pchainreader"],
+    deps = [
+        "//database",
+        "//ids",
+        "//snow/pchain",
+        "//upgrade",
+        "//utils/constants",
+        "//utils/crypto/secp256k1",
+        "//vms/components/avax",
+        "//vms/platformvm/platform",
+        "//vms/platformvm/signer",
+        "//vms/platformvm/stakeable",
+        "//vms/secp256k1fx",
+        "//vms/types",
+        "@com_github_stretchr_testify//require",
+    ],
+)

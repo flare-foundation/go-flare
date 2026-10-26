@@ -4,14 +4,11 @@
 package secp256k1fx
 
 import (
-	"encoding/hex"
 	"errors"
 	"fmt"
 
 	"github.com/ava-labs/avalanchego/utils/crypto/secp256k1"
-	"github.com/ava-labs/avalanchego/utils/hashing"
 	"github.com/ava-labs/avalanchego/vms/components/verify"
-	"github.com/ava-labs/libevm/accounts"
 )
 
 const defaultCacheSize = 256
@@ -184,40 +181,19 @@ func (fx *Fx) VerifyCredentials(utx UnsignedTx, in *Input, cred *Credential, out
 		return nil
 	}
 
-	txHash := hashing.ComputeHash256(utx.Bytes())
-	txHashStr := hex.EncodeToString(txHash)
-	txHashEth := accounts.TextHash([]byte(txHashStr))
+	hashes := NewSigningHashes(utx.Bytes())
 	for i, index := range in.SigIndices {
 		// Make sure the input references an address that exists
 		if index >= uint32(len(out.Addrs)) {
 			return ErrInputOutputIndexOutOfBounds
 		}
 		// Make sure each signature in the signature list is from an owner of
-		// the output being consumed
+		// the output being consumed, under either accepted signing scheme
+		// (see SigningHashes)
 		sig := cred.Sigs[i]
-		pk, err := fx.recoverCache.RecoverPublicKeyFromHash(txHash, sig[:])
-		if err != nil {
+		if _, err := hashes.RecoverSigner(fx.recoverCache, sig[:], out.Addrs[index]); err != nil {
 			return err
 		}
-		expectedAddress := out.Addrs[index]
-
-		// Try to recover the address from the signature of the transaction hash without a prefix
-		// (Standard Avalanche approach, but unsupported/deprecated by most signing tools)
-		if expectedAddress == pk.Address() {
-			continue
-		}
-
-		// Try to recover the address from the signature of the prefixed message hash
-		// (with the standard Ethereum prefix, see accounts.TextHash)
-		pk, err = fx.recoverCache.RecoverPublicKeyFromHash(txHashEth, sig[:])
-		if err != nil {
-			return err
-		}
-		if expectedAddress == pk.Address() {
-			continue
-		}
-
-		return ErrWrongSig
 	}
 
 	return nil

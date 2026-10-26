@@ -428,6 +428,21 @@ func (mr *MockBlockContextMockRecorder) Number() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Number", reflect.TypeOf((*MockBlockContext)(nil).Number))
 }
 
+// PChainHeight mocks base method.
+func (m *MockBlockContext) PChainHeight() (uint64, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PChainHeight")
+	ret0, _ := ret[0].(uint64)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// PChainHeight indicates an expected call of PChainHeight.
+func (mr *MockBlockContextMockRecorder) PChainHeight() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PChainHeight", reflect.TypeOf((*MockBlockContext)(nil).PChainHeight))
+}
+
 // Timestamp mocks base method.
 func (m *MockBlockContext) Timestamp() uint64 {
 	m.ctrl.T.Helper()

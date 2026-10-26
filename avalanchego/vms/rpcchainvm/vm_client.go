@@ -445,8 +445,10 @@ func (vm *VMClient) Disconnected(ctx context.Context, nodeID ids.NodeID) error {
 // If the underlying VM doesn't actually implement this method, its [BuildBlock]
 // method will be called instead.
 func (vm *VMClient) buildBlockWithContext(ctx context.Context, blockCtx *block.Context) (snowman.Block, error) {
+	pChainHeight, proposerPChainHeight := blockContextRequestFields(blockCtx)
 	resp, err := vm.client.BuildBlock(ctx, &vmpb.BuildBlockRequest{
-		PChainHeight: &blockCtx.PChainHeight,
+		PChainHeight:         pChainHeight,
+		ProposerPChainHeight: proposerPChainHeight,
 	})
 	if err != nil {
 		return nil, err
@@ -859,9 +861,11 @@ func (b *blockClient) ShouldVerifyWithContext(context.Context) (bool, error) {
 }
 
 func (b *blockClient) VerifyWithContext(ctx context.Context, blockCtx *block.Context) error {
+	pChainHeight, proposerPChainHeight := blockContextRequestFields(blockCtx)
 	resp, err := b.vm.client.BlockVerify(ctx, &vmpb.BlockVerifyRequest{
-		Bytes:        b.bytes,
-		PChainHeight: &blockCtx.PChainHeight,
+		Bytes:                b.bytes,
+		PChainHeight:         pChainHeight,
+		ProposerPChainHeight: proposerPChainHeight,
 	})
 	if err != nil {
 		return err
@@ -902,4 +906,11 @@ func (s *summaryClient) Accept(ctx context.Context) (block.StateSyncMode, error)
 		return block.StateSyncSkipped, err
 	}
 	return block.StateSyncMode(resp.Mode), errEnumToError[resp.Err]
+}
+
+// blockContextRequestFields returns the request fields carrying blockCtx over
+// gRPC; the inverse of [blockContextFromRequest]. Presence of a block context
+// is signalled by a non-nil P-chain height.
+func blockContextRequestFields(blockCtx *block.Context) (pChainHeight, proposerPChainHeight *uint64) {
+	return &blockCtx.PChainHeight, &blockCtx.ProposerPChainHeight
 }

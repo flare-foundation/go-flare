@@ -9,6 +9,8 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -17,7 +19,9 @@ import (
 	"go.uber.org/mock/gomock"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 
+	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/snow/consensus/snowman"
@@ -67,7 +71,8 @@ func TestPostForkCommonComponents_buildChild(t *testing.T) {
 	innerVM := blockmock.NewChainVM(ctrl)
 	innerBlockBuilderVM := blockmock.NewBuildBlockWithContextChainVM(ctrl)
 	innerBlockBuilderVM.EXPECT().BuildBlockWithContext(gomock.Any(), &block.Context{
-		PChainHeight: pChainHeight,
+		PChainHeight:         pChainHeight,
+		ProposerPChainHeight: pChainHeight,
 	}).Return(builtBlk, nil).AnyTimes()
 
 	vdrState := validatorsmock.NewState(ctrl)
@@ -374,7 +379,8 @@ func TestPreEtnaContextPChainHeight(t *testing.T) {
 	innerBlockBuilderVM := blockmock.NewBuildBlockWithContextChainVM(ctrl)
 	// Expect the that context passed in has parent's P-Chain height
 	innerBlockBuilderVM.EXPECT().BuildBlockWithContext(gomock.Any(), &block.Context{
-		PChainHeight: parentPChainHeght,
+		PChainHeight:         parentPChainHeght,
+		ProposerPChainHeight: pChainHeight, // Flare: always the block's own height
 	}).Return(innerChildBlock, nil).AnyTimes()
 
 	vdrState := validatorsmock.NewState(ctrl)
@@ -646,4 +652,44 @@ func TestFailedToCalculateExpectedProposerLogLevel(t *testing.T) {
 			require.True(logged, "expected log entry was not emitted")
 		})
 	}
+}
+
+func TestLogUnexpectedPChainError(t *testing.T) {
+	tests := []struct {
+		name      string
+		err       error
+		wantLevel logging.Level
+	}{
+		{
+			name:      "ErrClosed logs at Warn",
+			err:       database.ErrClosed,
+			wantLevel: logging.Warn,
+		},
+		{
+			name:      "wrapped ErrClosed logs at Warn",
+			err:       fmt.Errorf("getting height: %w", database.ErrClosed),
+			wantLevel: logging.Warn,
+		},
+		{
+			name:      "unrelated error logs at Error",
+			err:       errors.New("boom"),
+			wantLevel: logging.Error,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			l, logs := newObservedLogger()
+			logUnexpectedPChainError(l, test.err, "msg")
+
+			require.Equal(t, 1, logs.Len())
+			entry := logs.All()[0]
+			require.Equal(t, zapcore.Level(test.wantLevel), entry.Level)
+			require.Equal(t, "msg", entry.Message)
+		})
+	}
+}
+
+func newObservedLogger() (logging.Logger, *observer.ObservedLogs) {
+	core, logs := observer.New(zapcore.Level(logging.Verbo))
+	return logging.NewLogger("", logging.WrappedCore{Core: core}), logs
 }

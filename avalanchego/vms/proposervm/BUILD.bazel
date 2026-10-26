@@ -40,6 +40,7 @@ go_library(
         "//upgrade",
         "//utils/constants",
         "//utils/json",
+        "//utils/logging",
         "//utils/math",
         "//utils/metric",
         "//utils/rpc",
@@ -63,6 +64,7 @@ go_library(
 go_test(
     name = "proposervm_test",
     srcs = [
+        "block_flare_test.go",
         "batched_vm_test.go",
         "block_test.go",
         "main_test.go",
@@ -118,5 +120,6 @@ go_test(
         "@org_uber_go_mock//gomock",
         "@org_uber_go_zap//:zap",
         "@org_uber_go_zap//zapcore",
+        "@org_uber_go_zap//zaptest/observer",
     ],
 )

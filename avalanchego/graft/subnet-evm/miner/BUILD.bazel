@@ -1,6 +1,11 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("//.bazel:defs.bzl", "graft_go_test")
 
+package(default_visibility = [
+    "//graft/subnet-evm:__subpackages__",
+    "//graft/subnet-evm:external_consumers",
+])
+
 go_library(
     name = "miner",
     srcs = [
@@ -9,12 +14,10 @@ go_library(
         "worker.go",
     ],
     importpath = "github.com/ava-labs/avalanchego/graft/subnet-evm/miner",
-    visibility = ["//visibility:public"],
     deps = [
         "//graft/subnet-evm/commontype",
         "//graft/subnet-evm/consensus",
         "//graft/subnet-evm/core",
-        "//graft/subnet-evm/core/extstate",
         "//graft/subnet-evm/core/txpool",
         "//graft/subnet-evm/params",
         "//graft/subnet-evm/plugin/evm/customheader",
@@ -23,6 +26,7 @@ go_library(
         "//utils/timer/mockable",
         "//utils/units",
         "//vms/evm/predicate",
+        "//vms/evm/prefetch",
         "@com_github_ava_labs_libevm//common",
         "@com_github_ava_labs_libevm//consensus/misc/eip4844",
         "@com_github_ava_labs_libevm//core/state",

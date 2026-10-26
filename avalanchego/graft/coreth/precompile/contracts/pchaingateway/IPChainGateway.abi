@@ -1,0 +1,498 @@
+[
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "height",
+        "type": "uint64"
+      }
+    ],
+    "name": "getBlock",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "blockId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "parentId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint64",
+        "name": "timestamp",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint8",
+        "name": "kind",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint32",
+        "name": "txCount",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getNativeAssetId",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getPChainHeight",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "height",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint32",
+        "name": "txIndex",
+        "type": "uint32"
+      }
+    ],
+    "name": "getStakeOwner",
+    "outputs": [
+      {
+        "internalType": "bytes20",
+        "name": "pChainOwner",
+        "type": "bytes20"
+      },
+      {
+        "internalType": "address",
+        "name": "cChainOwner",
+        "type": "address"
+      },
+      {
+        "internalType": "bool",
+        "name": "resolved",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "height",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint32",
+        "name": "txIndex",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "fromInput",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "maxInputs",
+        "type": "uint32"
+      }
+    ],
+    "name": "getTransactionInputs",
+    "outputs": [
+      {
+        "internalType": "struct IPChainGateway.Input[]",
+        "name": "inputs",
+        "type": "tuple[]",
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "utxoTxId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "utxoOutputIndex",
+            "type": "uint32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "assetId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "amount",
+            "type": "uint64"
+          },
+          {
+            "internalType": "bool",
+            "name": "imported",
+            "type": "bool"
+          },
+          {
+            "internalType": "bool",
+            "name": "resolved",
+            "type": "bool"
+          },
+          {
+            "internalType": "uint64",
+            "name": "locktime",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "stakeableLocktime",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint32",
+            "name": "threshold",
+            "type": "uint32"
+          },
+          {
+            "internalType": "bytes20[]",
+            "name": "addresses",
+            "type": "bytes20[]"
+          },
+          {
+            "internalType": "uint32[]",
+            "name": "sigIndices",
+            "type": "uint32[]"
+          }
+        ]
+      },
+      {
+        "internalType": "uint32",
+        "name": "inputCount",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "height",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint32",
+        "name": "txIndex",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "fromOutput",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "maxOutputs",
+        "type": "uint32"
+      }
+    ],
+    "name": "getTransactionOutputs",
+    "outputs": [
+      {
+        "internalType": "struct IPChainGateway.Output[]",
+        "name": "outputs",
+        "type": "tuple[]",
+        "components": [
+          {
+            "internalType": "uint8",
+            "name": "kind",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "assetId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "amount",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "locktime",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "stakeableLocktime",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint32",
+            "name": "threshold",
+            "type": "uint32"
+          },
+          {
+            "internalType": "bytes20[]",
+            "name": "addresses",
+            "type": "bytes20[]"
+          }
+        ]
+      },
+      {
+        "internalType": "uint32",
+        "name": "outputCount",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "height",
+        "type": "uint64"
+      },
+      {
+        "internalType": "uint32",
+        "name": "fromIndex",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "maxTxs",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "typeFilter",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint32",
+        "name": "maxInputsPerTx",
+        "type": "uint32"
+      },
+      {
+        "internalType": "uint32",
+        "name": "maxOutputsPerTx",
+        "type": "uint32"
+      }
+    ],
+    "name": "getTransactions",
+    "outputs": [
+      {
+        "internalType": "struct IPChainGateway.Tx[]",
+        "name": "txs",
+        "type": "tuple[]",
+        "components": [
+          {
+            "internalType": "uint8",
+            "name": "txType",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint32",
+            "name": "index",
+            "type": "uint32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "txId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes20",
+            "name": "nodeId",
+            "type": "bytes20"
+          },
+          {
+            "internalType": "uint64",
+            "name": "startTime",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "endTime",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "period",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint64",
+            "name": "weight",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint32",
+            "name": "delegationShares",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "autoCompoundRewardShares",
+            "type": "uint32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "stakerTxId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "remoteChainId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "inputCount",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "outputCount",
+            "type": "uint32"
+          },
+          {
+            "internalType": "struct IPChainGateway.Input[]",
+            "name": "inputs",
+            "type": "tuple[]",
+            "components": [
+              {
+                "internalType": "bytes32",
+                "name": "utxoTxId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint32",
+                "name": "utxoOutputIndex",
+                "type": "uint32"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "assetId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "amount",
+                "type": "uint64"
+              },
+              {
+                "internalType": "bool",
+                "name": "imported",
+                "type": "bool"
+              },
+              {
+                "internalType": "bool",
+                "name": "resolved",
+                "type": "bool"
+              },
+              {
+                "internalType": "uint64",
+                "name": "locktime",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "stakeableLocktime",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint32",
+                "name": "threshold",
+                "type": "uint32"
+              },
+              {
+                "internalType": "bytes20[]",
+                "name": "addresses",
+                "type": "bytes20[]"
+              },
+              {
+                "internalType": "uint32[]",
+                "name": "sigIndices",
+                "type": "uint32[]"
+              }
+            ]
+          },
+          {
+            "internalType": "struct IPChainGateway.Output[]",
+            "name": "outputs",
+            "type": "tuple[]",
+            "components": [
+              {
+                "internalType": "uint8",
+                "name": "kind",
+                "type": "uint8"
+              },
+              {
+                "internalType": "bytes32",
+                "name": "assetId",
+                "type": "bytes32"
+              },
+              {
+                "internalType": "uint64",
+                "name": "amount",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "locktime",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint64",
+                "name": "stakeableLocktime",
+                "type": "uint64"
+              },
+              {
+                "internalType": "uint32",
+                "name": "threshold",
+                "type": "uint32"
+              },
+              {
+                "internalType": "bytes20[]",
+                "name": "addresses",
+                "type": "bytes20[]"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "internalType": "uint32",
+        "name": "nextIndex",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]

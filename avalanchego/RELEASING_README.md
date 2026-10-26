@@ -69,9 +69,49 @@ These changes prepare the merge commit that will be tagged.
    RPCChainVMProtocol uint = 45
    ```
 
-   And update [`version/compatibility.json`](version/compatibility.json) to add the new version.
+   And update [`version/compatibility.json`](version/compatibility.json) and [`proto/README.md`](proto/README.md) for the new version.
 
-**Note:** Coreth and Subnet-EVM versions are automatically derived from `version/constants.go` and do not require manual updates.
+1. If this release activates a new network upgrade on Mainnet:
+
+   1. In [`upgrade/upgrade.go`](upgrade/upgrade.go), set the upgrade's time in `Default`
+      — the local-network schedule — to `InitiallyActiveTime`:
+
+      ```go
+      Default = Config{
+          // ...
+          HeliconTime: InitiallyActiveTime,
+      }
+      ```
+
+      Then update any tests that pin the local network's upgrade schedule or genesis
+      (e.g. its genesis hash).
+
+   1. In [`scripts/tests.upgrade.sh`](scripts/tests.upgrade.sh), set `DEFAULT_VERSION` to
+      `$VERSION` without the leading `v`, naming the upgrade in the comment above it:
+
+      ```bash
+      # v1.15.1 is the earliest version that activates Helicon on local networks.
+      DEFAULT_VERSION="1.15.1"
+      ```
+
+   1. In [`.github/workflows/go-ci-pre-merge.yml`](.github/workflows/go-ci-pre-merge.yml),
+      comment out the `Run e2e tests` step of the `upgrade` job, leaving `actions/checkout`
+      so the job still has a step:
+
+      ```yaml
+      upgrade:
+        runs-on: ubuntu-24.04
+        steps:
+          - uses: actions/checkout@v5
+          # TODO: Reactivate test once v1.15.1 is published
+          # - name: Run e2e tests
+          #   ...
+      ```
+
+   The test starts a network on the published `DEFAULT_VERSION` binary and restarts it on
+   the current code, so the two MUST agree on the local schedule. After this change only
+   `$VERSION` agrees, and it is not published until the release itself — so leave the job
+   off and re-enable it in [step 10](#10-post-release-version-bump).
 
 1. Update submodule require directives to reference the future tag:
 
@@ -245,31 +285,33 @@ As of this writing:
 
 #### Canary Deployment
 
-1. Clone [external-plugins-builder](https://github.com/ava-labs/external-plugins-builder):
+Echo and Dispatch deploy the public `avaplatform/subnet-evm` image.
 
-   ```bash
-   git checkout main
-   git pull
-   git checkout -b "echo-dispatch-$VERSION_RC"
+1. In `devops-argocd`, update the Dispatch and Echo image tags to
+   `$VERSION_RC`:
+
+   - Echo: [`base/subnet/testnet/echo/avalanchego/base/cornice.yaml`](https://github.com/ava-labs/devops-argocd/blob/main/base/subnet/testnet/echo/avalanchego/base/cornice.yaml)
+   - Dispatch: [`base/subnet/testnet/dispatch/avalanchego/base/cornice.yaml`](https://github.com/ava-labs/devops-argocd/blob/main/base/subnet/testnet/dispatch/avalanchego/base/cornice.yaml)
+
+   ```yaml
+   - name: api.image.tag
+     value: "$VERSION_RC"
+   - name: validator.image.tag
+     value: "$VERSION_RC"
    ```
 
-1. Update `configs/dispatch.yml` and `configs/echo.yml`:
-   - Set `app_version` to `$VERSION_RC`
-   - Update `avalanchego_version` if needed
-   - Update `golang_version` if needed
+   The repository should already be `avaplatform/subnet-evm`, with
+   `global.vmAliases` containing the standard Subnet-EVM VM ID:
+   `srEXiWaHuhNyGwPUi444Tu47ZEDwxTWrbQiuD7FmgSAQ6X7Dy`.
 
-1. Create PR and merge:
+1. Open and merge the deployment change for both L1s, then monitor deployments:
+   - **Dispatch**: [Logs][dispatch-logs] | [Dashboard][dispatch-dashboard]
+   - **Echo**: [Logs][echo-logs] | [Dashboard][echo-dashboard]
 
-   ```bash
-   git add .
-   git commit -m "Bump echo and dispatch to $VERSION_RC"
-   git push -u origin "echo-dispatch-$VERSION_RC"
-   gh pr create --repo github.com/ava-labs/external-plugins-builder --base main --title "Bump echo and dispatch to $VERSION_RC"
-   ```
-
-1. Monitor deployments after merge:
-   - **Dispatch**: [Logs](https://app.datadoghq.com/logs?query=subnet%3Adispatch%20%40logger%3A%2A&live=true) | [Metrics](https://app.datadoghq.com/dashboard/jrv-mm2-vuc/dispatch-testnet-subnets?live=true)
-   - **Echo**: [Logs](https://app.datadoghq.com/logs?query=subnet:echo%20@logger:*&live=true) | [Metrics](https://app.datadoghq.com/dashboard/jrv-mm2-vuc/echo-testnet-subnets?live=true)
+[dispatch-logs]: https://avalabs.grafana.net/explore?schemaVersion=1&orgId=1&panes=%7B%22subnet-logs%22%3A%7B%22datasource%22%3A%22grafanacloud-logs%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22expr%22%3A%22%7Bcluster%3D%5C%22subnets-testnet%5C%22%2Cservice_name%3D%5C%22avago%5C%22%2Csubnet%3D%5C%22dispatch%5C%22%7D%22%2C%22queryType%22%3A%22range%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22now-1h%22%2C%22to%22%3A%22now%22%7D%7D%7D
+[dispatch-dashboard]: https://avalabs.grafana.net/d/12154d054f846686fc46ad306e451c30/dispatch-testnet-subnets
+[echo-logs]: https://avalabs.grafana.net/explore?schemaVersion=1&orgId=1&panes=%7B%22subnet-logs%22%3A%7B%22datasource%22%3A%22grafanacloud-logs%22%2C%22queries%22%3A%5B%7B%22refId%22%3A%22A%22%2C%22expr%22%3A%22%7Bcluster%3D%5C%22subnets-testnet%5C%22%2Cservice_name%3D%5C%22avago%5C%22%2Csubnet%3D%5C%22echo%5C%22%7D%22%2C%22queryType%22%3A%22range%22%7D%5D%2C%22range%22%3A%7B%22from%22%3A%22now-1h%22%2C%22to%22%3A%22now%22%7D%7D%7D
+[echo-dashboard]: https://avalabs.grafana.net/d/87d80a2c2c15b54189eac1ae9c0241e4/echo-testnet-subnets
 
 1. Test transactions:
    1. If you have no wallet setup, create a new one using the [Core wallet](https://core.app/)
@@ -354,7 +396,10 @@ The tag push triggers these workflows automatically:
 
 - `build-linux-binaries.yml` - Linux amd64/arm64 tarballs
 - `build-macos-release.yml` - macOS zip
-- `build-ubuntu-amd64-release.yml` / `build-ubuntu-arm64-release.yml` - Debian packages
+- `build-linux-packages.yml` - Linux RPM/DEB packages (matrix over `{rpm, deb}` and `{amd64, arm64}` via the
+  `./.github/packaging/actions/build-package` composite action). On tag pushes, the `upload-debs-s3` job additionally
+  publishes `.deb` packages to `linux/debs/ubuntu/{jammy,noble}/{arch}/` and `GPG-KEY-avalanchego` to
+  `linux/debs/ubuntu/{jammy,noble}/`.
 - `publish_docker_image.yml` - Docker images
 
 Artifacts produced:
@@ -379,14 +424,10 @@ Artifacts produced:
 Antithesis test images are built and pushed to Google Artifact Registry on every merge to master via `publish_antithesis_images.yml`:
 
 - `antithesis-avalanchego-{config,node,workload}:latest`
-- `antithesis-xsvm-{config,node,workload}:latest`
 - `antithesis-subnet-evm-{config,node,workload}:latest`
 
-These are triggered daily for testing:
-
-- `trigger-antithesis-avalanchego.yml` - 10PM UTC
-- `trigger-antithesis-xsvm.yml` - 6AM UTC
-- `trigger-antithesis-subnet-evm.yml` - 2PM UTC
+See the [Antithesis testing documentation](tests/antithesis/README.md#scheduled-testing)
+for scheduled testing details.
 
 ### 10. Post-Release Version Bump
 
@@ -405,6 +446,10 @@ export NEXT_VERSION=v1.14.2
    ```
 
 1. Update all version files (as in step 3) to the next version.
+
+1. If you disabled the `upgrade` job in step 3, enable it again in
+   [`.github/workflows/go-ci-pre-merge.yml`](.github/workflows/go-ci-pre-merge.yml).
+   Uncomment the `Run e2e tests` step and delete the `TODO` comment.
 
 1. Create PR and merge:
 

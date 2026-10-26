@@ -3,13 +3,82 @@
 This document explains how Bazel is configured and used in the
 avalanchego monorepo.
 
+## Table of contents
+
+- [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
+- [Why Bazel?](#why-bazel)
+- [Architecture Overview](#architecture-overview)
+  - [Toolchain Strategy](#toolchain-strategy)
+  - [Version Pinning](#version-pinning)
+  - [Repository tools and external-dependency fetches](#repository-tools-and-external-dependency-fetches)
+  - [Why Bazel 8?](#why-bazel-8)
+  - [Multi-Module Structure](#multi-module-structure)
+  - [Key Configuration Files](#key-configuration-files)
+  - [BUILD.bazel Files with Custom Content](#buildbazel-files-with-custom-content)
+- [Gazelle](#gazelle)
+  - [Where Gazelle Comes From](#where-gazelle-comes-from)
+  - [When to Run Gazelle](#when-to-run-gazelle)
+  - [How Gazelle Handles Multiple Modules](#how-gazelle-handles-multiple-modules)
+  - [Custom Test Macros via `gazelle:map_kind`](#custom-test-macros-via-gazellemap_kind)
+- [External Dependency Handling](#external-dependency-handling)
+  - [Go Dependencies](#go-dependencies)
+  - [Patched Dependencies](#patched-dependencies)
+    - [Patching strategies](#patching-strategies)
+    - [libevm (secp256k1)](#libevm-secp256k1)
+    - [firewood-go-ethhash FFI](#firewood-go-ethhash-ffi)
+    - [blst (BLS Signatures)](#blst-bls-signatures)
+    - [gnark-crypto (BLS12-381 for KZG)](#gnark-crypto-bls12-381-for-kzg)
+  - [Protocol Buffers](#protocol-buffers)
+- [Common Tasks](#common-tasks)
+  - [Building](#building)
+  - [Testing](#testing)
+    - [Go Test Selection](#go-test-selection)
+    - [Test Options](#test-options)
+    - [Test Timeouts](#test-timeouts)
+    - [Non-Unit Tests and the `manual` Tag](#non-unit-tests-and-the-manual-tag)
+  - [Maintenance](#maintenance)
+- [Bazel CI External Dependency Caching](#bazel-ci-external-dependency-caching)
+  - [Why this exists](#why-this-exists)
+  - [Test platforms and cache policy](#test-platforms-and-cache-policy)
+  - [Why the remote cache uses gRPC](#why-the-remote-cache-uses-grpc)
+  - [What is cached](#what-is-cached)
+  - [Cache key](#cache-key)
+  - [Checked-in list of Bazel CI target patterns used to prepare the build dependency cache](#checked-in-list-of-bazel-ci-target-patterns-used-to-prepare-the-build-dependency-cache)
+  - [Enforcement](#enforcement)
+  - [Changing this safely](#changing-this-safely)
+  - [Apple CommandLineTools](#apple-commandlinetools)
+  - [The macOS C compiler](#the-macos-c-compiler)
+- [Adding a New Go Module](#adding-a-new-go-module)
+- [Troubleshooting](#troubleshooting)
+  - ["no such package" or import errors](#no-such-package-or-import-errors)
+  - [Missing external dependency](#missing-external-dependency)
+  - [CGO compilation errors](#cgo-compilation-errors)
+  - [gnark-crypto assembly errors](#gnark-crypto-assembly-errors)
+  - [Build cache issues](#build-cache-issues)
+  - ["duplicate target" errors](#duplicate-target-errors)
+- [CGO Configuration](#cgo-configuration)
+- [Version Stamping](#version-stamping)
+- [Known Limitations](#known-limitations)
+- [Future Improvements](#future-improvements)
+  - [Remote Execution](#remote-execution)
+  - [CI Integration](#ci-integration)
+  - [Patch Maintenance](#patch-maintenance)
+  - [Test Configuration](#test-configuration)
+- [References](#references)
+
 ## Prerequisites
 
 The `bazel` command is provided by [bazelisk](https://github.com/bazelbuild/bazelisk),
-which automatically downloads the correct Bazel version from `.bazelversion`. All
-Taskfile targets use `./scripts/run_bazel.sh`, which runs bazelisk directly if
-available or via `nix run` if not. In the nix dev shell (`nix develop`), `bazel`
-and `bazelisk` are both on PATH directly.
+which automatically downloads the correct Bazel version from `.bazelversion`. Most
+Taskfile targets use `./scripts/nix_run.sh bazelisk ...`, which runs in the repo's
+nix dev shell when needed and avoids nesting `nix develop` when already inside it.
+In the nix dev shell (`nix develop`), `bazel` and `bazelisk` are both on PATH directly.
+For Nix installation and repo dev shell setup, see [CONTRIBUTING.md](../CONTRIBUTING.md#nix).
+
+Some tasks (e.g. `task bazel-check-metadata`) only require tooling that is installed
+by default on GitHub Action runners (e.g. `bash`, `git`, `go`, `bazelisk`).  These
+tasks can be executed without a nix shell which in CI avoids the cost of nix installation.
 
 ## Quick Start
 
@@ -21,9 +90,9 @@ task bazel-build
 task bazel-build-opt
 
 # Run unit tests
-task bazel-test
+task bazel-test-unit
 
-# Update Bazel metadata after changing Go imports
+# Update Bazel metadata after changing Go imports or Bazel module deps
 task bazel-generate-metadata
 
 # Clean build cache
@@ -66,12 +135,33 @@ go_sdk.from_file(go_mod = "//:go.mod")
 
 ### Version Pinning
 
-| Tool | Version | Pin Mechanism | Rationale |
-|------|---------|---------------|-----------|
-| Bazel | 8.0.1 | `.bazelversion` + bazelisk | Current LTS with native bzlmod support |
-| Go | 1.25.7 | `go.mod` via go_sdk.from_file | Single source of truth |
-| rules_go | 0.57.0 | `MODULE.bazel` | Go 1.25+ support (compiles `pack` from source) |
-| gazelle | 0.45.0 | `MODULE.bazel` | Compatible with rules_go 0.57.0 |
+This repo keeps version pins in the checked-in configuration consumed by the
+relevant tooling rather than duplicating them in documentation:
+
+- Bazel: `.bazelversion`
+- Go: `go.mod` (read by `go_sdk.from_file()`)
+- Bazel modules such as `rules_go` and Gazelle: `MODULE.bazel`
+
+When checking or updating a version, use those files as the source of truth.
+
+### External-dependency fetches
+
+Bazel CI uses the Gazelle `go_deps` extension to read `go.work` for workspace
+modules and the external repositories they import.
+
+`MODULE.bazel` intentionally omits `use_repo` bindings for
+workspace modules such as `avalanchego` and `graft/*`. Those modules are built
+from the local source tree, so binding their generated local-path repos is not
+needed for normal builds. Omitting them also keeps broad fetches such as
+`bazel fetch //...` from traversing personal workspace state like local
+symlinks or repo-adjacent directories while trying to prepare external
+repositories for CI.
+
+If future Bazel changes appear to make this split unnecessary, treat that as a
+behavioral change to validate rather than a cleanup to apply mechanically. The
+important invariant is that Bazel CI can bootstrap repo tools and prefetch the
+external dependencies its jobs need without coupling that setup step to
+machine-specific workspace state.
 
 ### Why Bazel 8?
 
@@ -104,7 +194,7 @@ gazelle prefix directives.
 | File | Purpose | Safe to Delete? |
 |------|---------|-----------------|
 | `MODULE.bazel` | Bazel module definition, dependencies, patches | **No** |
-| `MODULE.bazel.lock` | Locked dependency versions | Yes (regenerated) |
+| `MODULE.bazel.lock` | Locked module/dependency resolution state | Yes (regenerated) |
 | `go.work` | Go workspace aggregating all modules (used by `go_deps`) | **No** |
 | `.bazelrc` | Bazel build flags and settings | **No** |
 | `.bazelignore` | Directories excluded from Bazel | **No** |
@@ -167,6 +257,13 @@ Run `task bazel-generate-metadata` after:
 - Changing import statements
 - Adding new packages/directories
 - Modifying `go.mod` dependencies
+- Modifying `MODULE.bazel`
+
+`task bazel-generate-metadata` also refreshes `MODULE.bazel.lock` into the
+same state later Bazel module commands expect. `bazel mod tidy` alone does not
+always fully refresh `MODULE.bazel.lock`, so a later Bazel command may rewrite
+it. Running the lockfile refresh as part of metadata generation makes that
+update happen in one predictable place instead of as a later surprise.
 
 ### How Gazelle Handles Multiple Modules
 
@@ -331,6 +428,12 @@ control rather than generating them at build time. This avoids proto
 toolchain complexity in Bazel while maintaining compatibility with the
 existing `go generate` workflow.
 
+Bazel targets that import protobuf runtime packages depend on the Go module
+`google.golang.org/protobuf` through `go_deps.from_file(go_work = "//:go.work")`
+and refer to it as `@org_golang_google_protobuf//...`. The repo does not rely
+on direct `protobuf` / `rules_proto` Bazel module dependencies for proto code
+generation.
+
 ## Common Tasks
 
 ### Building
@@ -348,27 +451,18 @@ bazel build //...
 
 ### Testing
 
-By default, `bazel test` matches `scripts/build_test.sh` behavior,
-with a few exceptions:
-
-- The script passes `-tags test` to `go test`; currently there are no
-  `//go:build test` files in this repo, so it has no effect.
-- The script excludes several directories via `go list | grep -v ...`;
-  Bazel instead relies on `tags = ["manual"]` to keep non-unit tests
-  out of `bazel test //...`.
+Use the Bazel test tasks for repository test suites. The tasks select Go test
+rules and exclude manual tests.
 
 ```bash
-# Run all unit tests (shuffle enabled, race on)
-task bazel-test                    # or: bazel test //...
+# Run all cacheable Go unit tests
+task bazel-test-unit
 
-# Run tests for a specific package
-bazel test //utils/...
+# Run all Go unit tests with race detection and shuffle
+task bazel-test-unit-race-shuffle
 
-# Run specific test functions (target:test_name + filter)
+# Run a specific test target
 bazel test //utils:set_test --test_filter=TestSet_Add
-
-# Fast local iteration (no race, no shuffle)
-task bazel-test-fast               # or: bazel test --config=fast //...
 
 # Collect coverage
 bazel coverage //...
@@ -377,25 +471,28 @@ bazel coverage //...
 task bazel-test-e2e
 ```
 
+#### Go Test Selection
+
+`scripts/run_bazel_go_tests.sh` queries Bazel for `go_test` rules. It excludes
+tests tagged `manual`. The unit-test tasks use this script for these scopes:
+
+| Scope | Rules selected |
+|-------|----------------|
+| `all` | All non-manual Go test rules |
+| `smoke` | The selected Go smoke test rule |
+
+This selection prevents Go test flags from reaching non-Go tests such as
+`gazelle_test`. Do not replace these tasks with `bazel test //...`.
+
 #### Test Options
 
 | Option | Default | Toggle with |
 |--------|---------|-------------|
-| Race detection | ON | `--config=norace` (disable) |
-| Shuffle | ON | `--config=noshuffle` (disable) |
-| Fast mode | - | `--config=fast` (no shuffle, no race) |
+| Race detection | OFF | `--config=race` (enable) |
+| Shuffle | OFF | `--config=race-shuffle` (enable) |
 
-Examples:
-```bash
-# Disable race detection
-bazel test --config=norace //...
-
-# Disable shuffle only
-bazel test --config=noshuffle //...
-
-# Fast mode (no shuffle, no race)
-bazel test --config=fast //...
-```
+Race/shuffle tasks use `race-shuffle` and disable test-result caching so Bazel
+runs shuffled tests again. Scheduled unit-test tasks use these tasks.
 
 #### Test Timeouts
 
@@ -420,10 +517,8 @@ tests) must have `tags = ["manual"]` in their BUILD.bazel file. This
 excludes them from `bazel test //...` which should only run unit
 tests.
 
-This roughly mirrors the behavior of `scripts/build_test.sh`, which excludes these directories via grep:
-```bash
-grep -v tests/e2e | grep -v tests/upgrade | grep -v tests/fixture/bootstrapmonitor/e2e | ...
-```
+The Go unit-test script excludes equivalent directories during package
+selection. See [`scripts/tests.unit.sh`](../scripts/tests.unit.sh).
 
 **Tests with `manual` tag:**
 
@@ -434,7 +529,6 @@ grep -v tests/e2e | grep -v tests/upgrade | grep -v tests/fixture/bootstrapmonit
 | Bootstrap monitor E2E | `tests/fixture/bootstrapmonitor/e2e/BUILD.bazel` |
 | Subnet-EVM warp tests | `graft/subnet-evm/tests/warp/BUILD.bazel` |
 | Subnet-EVM load tests | `graft/subnet-evm/tests/load/BUILD.bazel` |
-| Coreth warp tests | `graft/coreth/tests/warp/BUILD.bazel` |
 
 **When adding new non-unit tests**, add the manual tag with a `# keep`
 comment. The `# keep` is required because gazelle does not manage the
@@ -459,6 +553,9 @@ task bazel-generate-metadata
 # Update MODULE.bazel use_repo calls
 task bazel-mod-tidy               # or: bazel mod tidy
 
+# Refresh Bazel module metadata files
+task bazel-sync-module-metadata
+
 # Clean build outputs
 task bazel-clean                  # or: bazel clean
 
@@ -469,6 +566,18 @@ task bazel-clean-all              # or: bazel clean --expunge
 task bazel-check-metadata
 ```
 
+As part of `bazel-check-metadata`, package-local `BUILD.bazel` files are
+expected to define at most one `go_library` rule. Multiple
+`go_library` rules in one directory are usually stale metadata left
+behind by a package rename or move, where Gazelle added the new rule
+without removing the old checked-in one.
+
+This repo prefers linting for that stale-rule pattern rather than
+deleting and regenerating all non-curated `BUILD.bazel` files. The lint
+is narrower and safer: it fails on the specific suspicious state we want
+to prevent, without relying on a maintained list of which BUILD files
+are safe to destroy and recreate from scratch.
+
 In CI, the Bazel workflow runs `bazel-check-metadata` before Bazel build
 and test jobs. This makes stale metadata fail with a single actionable
 error instead of surfacing later as multiple downstream Bazel failures.
@@ -476,8 +585,318 @@ This is especially useful for pull requests tested against a moving base
 branch, where the metadata included in the PR may be stale relative to
 the current merge target.
 
-If `check-metadata` fails in CI, rebase or merge the target branch, run
-`task bazel-generate-metadata`, commit the resulting changes, and rerun CI.
+In GitHub Actions, the Bazel jobs use the local `./.github/actions/setup-bazel`
+composite action. It applies the shared runner disk guard described in
+[CI disk space](./ci-disk-space.md) before Bazel cache restore and setup work. The
+Bazel-specific action then restores the pinned Task binary with the shared
+`setup-task` action and prepares cache state for the dependencies those jobs are
+expected to need. Local developer use still defaults to the Go-based Task bootstrap
+when Task is not already on `PATH`.
+
+See [Bazel CI External Dependency
+Caching](#bazel-ci-external-dependency-caching) for the motivation,
+cache-key design, checked-in list of Bazel CI target patterns used to
+prepare the build dependency cache, and [how CI checks that
+list](#enforcement). The E2E Bazel job uses the same cache setup through
+`run-monitored-tmpnet-cmd`, which also collects test data and metrics.
+
+That check includes the Bazel module metadata files, so lockfile drift
+is caught in the metadata phase rather than showing up later as a
+surprising working-tree mutation.
+
+## Bazel CI External Dependency Caching
+
+### Why this exists
+
+The intent is similar to `actions/setup-go`: set up dependency caches once
+from a small amount of checked-in metadata so later CI jobs can reuse them
+instead of downloading the same things again. Bazel does not infer the right
+shared CI cache contents from `go.mod` alone, so this repo has to be more
+explicit about what it fetches ahead of time.
+
+The primary motivation is CI reliability, not just speed. This repo has seen
+GitHub Actions flakes when Bazel jobs had to download external dependencies and
+Go module data from the network in each job. Caching as much of that setup
+work as possible means fewer repeated network requests during the Bazel
+workflow, which reduces exposure to those infrastructure failures.
+
+### Test platforms and cache policy
+
+Bazel CI uses a small pre-merge test set. GitHub-hosted runners can fail for
+reasons outside the repository. A smaller job set reduces that risk.
+
+Non-scheduled Bazel CI runs these jobs:
+
+- Ubuntu 24.04 AMD64 CI runs one full cacheable unit-test job and a focused E2E
+  smoke test.
+- macOS 26 ARM64 CI runs one cacheable unit-test smoke target and one focused
+  E2E smoke test.
+
+Previously, Bazel CI divided the full unit-test suite among three
+component-specific jobs. These jobs ran in parallel to keep the pre-merge
+runtime acceptable. Pre-merge tests now use remote caching and do not use race
+detection. These changes remove the need for separate jobs. Reconsider separate
+jobs if these conditions change or one job makes the pre-merge runtime
+unacceptable.
+
+The E2E smoke task selects the C-Chain ProposerVM API test. Ubuntu and macOS use
+the same task. It does not provide full E2E coverage. A future change will
+replace the Ubuntu smoke test with a non-smoke E2E test. Each setup job checks
+Bazel metadata and prefetches the full CI dependency list.
+
+The daily scheduled workflow runs one full unit-test job on Ubuntu 22.04 and
+24.04, on AMD64 and ARM64, and on macOS 26 ARM64. It also runs the same focused
+E2E smoke test on each platform. Only the Ubuntu 24.04 AMD64 unit-test job uses
+race detection and shuffled test order. It uses `--nocache_test_results`. Thus,
+Bazel runs it again and does not use a cached random test result.
+
+The scheduled workflow also disables the remote cache. This provides daily
+validation that does not depend on remote action or test results.
+
+The remote cache stores results from the cacheable pre-merge unit tests when
+CI provides the remote-cache URL and authorization header. This policy applies
+only to Bazel CI. Go module version CI remains unchanged because it checks
+compatibility for downstream consumers.
+
+When you change the CI test set, update
+`./scripts/bazel_ci_dependency_list.sh`. The list must include every target
+pattern that `run_bazel_ci_command.sh` runs in CI.
+
+### Why the remote cache uses gRPC
+
+CI uses Bazel's gRPC remote-cache protocol instead of its HTTP protocol. This
+choice limits the effect of a slow or degraded network path. It is not a claim
+that gRPC is faster than HTTP in normal conditions.
+
+For an HTTP remote cache, Bazel applies
+[`--remote_timeout`](https://bazel.build/reference/command-line-reference#flag--remote_timeout)
+as an inactivity timeout. Each received byte resets the timeout. A large
+download can therefore continue for hours if the cache sends data very slowly.
+[Bazel issue #11782](https://github.com/bazelbuild/bazel/issues/11782) describes
+this difference between the HTTP and gRPC timeout behavior.
+
+For a gRPC remote cache, Bazel applies `--remote_timeout` as a deadline for each
+remote procedure call (RPC). Slow progress does not extend this deadline. Bazel
+then uses
+[`--remote_retries`](https://bazel.build/reference/command-line-reference#flag--remote_retries)
+to limit the retries after the first attempt.
+
+The CI setup currently sets a 60-second deadline and three retries. Thus, one
+failed RPC can use approximately 240 seconds:
+
+```text
+60 seconds × (1 initial attempt + 3 retries) = 240 seconds
+```
+
+This value is an estimate, not a wall-clock limit for the Bazel command. A
+command can make multiple RPCs. Retry delays and other build work also add time.
+Use command and job timeouts to set a limit for the complete CI operation.
+
+CI job timeouts bound the complete operation. The timeout values are configured
+in `.github/workflows/bazel-ci.yml` and
+`.github/workflows/bazel-ci-smoke.yml`. Scheduled jobs configure their longer
+limits in `.github/workflows/bazel-ci-scheduled.yml`. They run broader tests
+without the remote cache. Bazel's test timeouts still limit each test process.
+The job-level limits also cover loading, analysis, builds, downloads, retries,
+and test setup.
+
+Tests with Bazel 8.8.0 confirmed the expected behavior. An HTTP cache download
+continued beyond 120 seconds when a proxy limited traffic to 1 KiB/s. The test
+used `--remote_timeout=60s`, and the download continued to receive data. The
+same limit caused a gRPC cache read to fail after its deadline. Direct TLS did
+not change the gRPC deadline behavior.
+
+This policy accepts a bounded cache failure instead of a CI job that makes very
+slow progress for hours. In the gRPC test, Bazel reported `Missing digest` and
+failed the build. It did not fall back to local execution. Retries can recover
+from a temporary failure, but retry recovery under this throttling scenario has
+not been confirmed.
+
+Preserve these requirements when you change the remote-cache client settings:
+
+- Use the `grpcs://` scheme for the CI cache URL.
+- Set `--remote_timeout` and `--remote_retries` explicitly.
+- Treat the timeout as a limit for each RPC, not for the complete build.
+- Keep a separate timeout for the complete command or CI job.
+
+Reconsider the transport only if Bazel changes the HTTP timeout behavior or if
+the gRPC failure behavior no longer meets CI requirements. Test any change with
+a throttled cache read. Confirm that useful but slow traffic cannot keep the CI
+operation active without a limit.
+
+This repository configures only the Bazel client. Cache-server and proxy
+configuration are outside this repository's scope.
+
+### What is cached
+
+The Bazel CI cache setup configures three kinds of cached data:
+
+- Bazel `repository_cache`
+- shared Gazelle `GOMODCACHE`
+- Bazel remote action and test-result data
+
+GitHub Actions restores the repository cache and `GOMODCACHE` on each runner.
+These caches contain downloaded external dependencies. The setup job prepares
+them for the later jobs on the same platform.
+
+The shared `GOMODCACHE` is required because Gazelle `go_repository` otherwise
+keeps Go module downloads in each Bazel work area. Thus, a later job can use the
+network after the setup fetch runs. The action prevents this behavior with these
+settings:
+
+- `GO_REPOSITORY_USE_HOST_MODCACHE=1`
+- `GOMODCACHE=...`
+
+The remote cache is separate from the GitHub Actions caches. Bazel reads it and
+writes to it during configured pre-merge builds and tests. It stores action
+outputs and cacheable test results. The scheduled workflow does not read from or
+write to the remote cache.
+
+### Cache key
+
+The GitHub Actions cache key is:
+`bazel-repo-${runner.os}-${runner.arch}-${hashFiles('.bazelversion', 'MODULE.bazel.lock', 'scripts/bazel_ci_dependency_list.sh')}`
+with a same-platform restore prefix of
+`bazel-repo-${runner.os}-${runner.arch}-`.
+
+That split is intentional:
+- `runner.os` and `runner.arch` separate caches by platform
+- `.bazelversion` invalidates the cache when the Bazel version changes
+- `MODULE.bazel.lock` invalidates the cache when the pinned external
+  dependency set changes
+- `scripts/bazel_ci_dependency_list.sh` invalidates the cache when the
+  checked-in Bazel CI target patterns used by setup change
+- the broader same-platform restore key still gives a useful warm start
+  because these caches store downloaded dependency data, not per-run
+  build outputs
+
+The remote cache does not use the GitHub Actions cache key. Bazel computes its
+remote keys from action inputs and build configuration. Platform and race
+configuration differences therefore produce different keys. CI configures this
+cache only when all these conditions are true:
+
+- the workflow enables the remote cache
+- CI provides the remote-cache URL
+- CI provides the authorization header
+
+### Checked-in list of Bazel CI target patterns used to prepare the build dependency cache
+
+This setup is similar in spirit to `actions/setup-go`: before the later Bazel
+CI jobs run, prepare cache state for the build dependencies they are expected
+to need so those jobs do not each discover missing dependencies on their own.
+
+The setup action first restores the pinned Task binary and any previously
+saved Bazel dependency data, then configures Bazel to use the dependency
+cache. In the per-platform `setup` job it is run with `initial-setup: true`;
+in that mode it also checks Bazel metadata and runs `./scripts/run_task.sh
+bazel-cache-ci-build-dependencies`, which delegates to
+`./scripts/cache_bazel_ci_build_dependencies.sh` and uses the checked-in list
+in `./scripts/bazel_ci_dependency_list.sh`.
+
+That checked-in list names the Bazel target patterns whose build dependencies
+the later CI jobs are expected to need.
+
+The list should cover the targets that the Bazel CI reusable workflows run. It
+should not fetch every target that Bazel can reach. This ensures that required
+dependencies are available. It also excludes unrelated repositories and
+toolchains.
+
+A related design constraint is that this setup path must stay focused on
+external dependencies, not local workspace-module discovery. The omission of
+workspace-module `use_repo` bindings in `MODULE.bazel` keeps `bazel fetch`
+from walking machine-specific workspace state.
+
+### Enforcement
+
+All Bazel CI tasks that consume this cache state use
+`./scripts/run_bazel_ci_command.sh`. The Go test helper gives its source target
+patterns to this wrapper. The wrapper checks that the patterns are present in
+`bazel_ci_dependency_list.sh` when CI enables enforcement.
+
+That keeps the checked-in list aligned with the Bazel CI jobs we actually run.
+It makes it harder for a new or changed Bazel CI job to start depending on a
+different set of external build dependencies without also updating the list of
+target patterns used by setup to prepare the cache.
+
+### Changing this safely
+
+When modifying `setup-bazel`, `run_task.sh`, `run_bazel_ci_command.sh`,
+`bazel_ci_dependency_list.sh`, or the Bazel module wiring that supports them,
+preserve these invariants:
+
+- CI can launch `task` without assuming a preinstalled repo-specific wrapper
+- the `setup` job prepares the dependency state later Bazel CI jobs are
+  expected to consume
+- the checked-in dependency list matches the Bazel target patterns actually run
+  by the Bazel CI reusable workflows
+- cache-prefetch behavior stays focused on external repositories and does not
+  start depending on developer-specific workspace state
+- when enabled, remote caching requires a `grpcs://` cache URL and the
+  authorization header
+- the daily scheduled workflow disables remote caching
+- setup does not print the remote-cache authorization header
+
+Validate changes proportionally:
+
+- run each affected Bazel task through its normal entrypoint
+- include `task bazel-check-metadata` and `task bazel-cache-ci-build-dependencies`
+  when these tasks are relevant
+- run the relevant `task bazel-test-unit-*` and `task bazel-test-e2e-*` targets
+- confirm that the dependency list and cache preparation agree
+- if you change which Bazel CI commands or target patterns the workflow runs,
+  update `scripts/bazel_ci_dependency_list.sh` in the same change rather than
+  letting CI discover the mismatch later
+- if you change `MODULE.bazel` or `MODULE.bazel.lock`, rerun the normal Bazel
+  metadata workflow and confirm the setup path still reaches repo tools and
+  external repos without traversing unintended local workspace state
+
+The GitHub Actions Bazel workflow also defines a single aggregate job,
+`bazel-required`, that depends on the other jobs in the workflow via `needs`.
+Branch protection can require that one workflow-level job instead of tracking
+each underlying Bazel job separately. This reduces required-check maintenance
+to the workflow level.
+
+If the `setup` job fails its metadata check in CI, rebase or merge the target
+branch, run `task bazel-generate-metadata`, commit the resulting changes, and
+rerun CI.
+
+### Apple CommandLineTools
+
+On macOS, `.bazelrc` defaults to using the Apple CommandLineTools
+installed under `/Library/Developer/CommandLineTools`. This is the
+default location for the tools installed without Xcode, and the
+location used by GitHub Actions runners.
+
+For most usage, these defaults should be sufficient. If a machine uses
+Xcode or a non-default Apple developer toolchain location, the
+defaults can be overridden via `.bazelrc.local` which is optionally
+imported by `.bazelrc`. `.bazelrc.local` is intended to be generated
+via `task bazel-configure-local`, which runs
+`./scripts/generate_bazelrc_local.sh` under the repo's standard task
+entrypoint. The script uses `xcode-select -p` and `xcrun --sdk macosx
+--show-sdk-path` to determine the host's active Apple developer
+directory and macOS SDK and writes those values to `.bazelrc.local`.
+The script can also be run directly and is invoked automatically by
+direnv.
+
+Both entrypoints run inside the nix dev shell, whose `DEVELOPER_DIR`
+and `SDKROOT` would make `xcode-select` and `xcrun` report nix's SDK.
+The script clears them and calls those binaries by absolute path, so a
+hand-exported `DEVELOPER_DIR` is ignored — use `sudo xcode-select -s`.
+
+When invoked by direnv, generation is best-effort: failures are shown
+as warnings during shell entry but do not prevent entering the repo.
+When run directly, the script exits non-zero on discovery failures so
+manual setup problems remain actionable.
+
+### The macOS C compiler
+
+`.bazelrc` pins `--repo_env=CC=/usr/bin/clang`. Bazel resolves the
+compiler from `CC` in the client environment, which in the nix dev
+shell is nix's clang wrapper; that wrapper takes its sysroot from
+`NIX_CFLAGS_COMPILE`, which Bazel strips from action environments,
+failing the cgo stdlib build on a missing `resolv.h`. `DEVELOPER_DIR`
+and `SDKROOT` do not help — they select an SDK, not a compiler.
 
 ## Adding a New Go Module
 
@@ -602,17 +1021,11 @@ bazel build --config=release //main:avalanchego   # Release build (stamped)
 
 The following improvements are planned or under consideration:
 
-### Remote Caching and Execution
+### Remote Execution
 
-Remote caching would enable:
-- Cache sharing between CI runs
-- Faster builds for new team members
-- Cross-machine cache reuse
-
-`go_sdk.download()` enables remote execution since the Go toolchain is
-hermetic and reproducible.
-
-Implementation: Add BuildBuddy, Buildkite or similar remote cache service.
+CI uses remote caching. Remote execution remains a possible improvement.
+`go_sdk.download()` provides the hermetic Go toolchain that remote execution
+requires.
 
 ### CI Integration
 
@@ -632,7 +1045,9 @@ internal patch parser is strict about (unlike `git apply`).
 
 1. Edit the BUILD file in `.bazel/patches/build_files/<module>/`
 2. Run `task bazel-generate-patches` to regenerate `.patch` files
-3. Verify: `./scripts/run_bazel.sh build @<module>//<target>`
+3. Verify: `./scripts/nix_run.sh bazelisk build @<module>//<target>`
+   (or plain `bazelisk build @<module>//<target>` when the host already has the
+   required tools available)
 4. Commit both the BUILD file and the generated `.patch` file
 
 Patches that modify existing files (e.g., gnark-crypto's `no-sandbox`

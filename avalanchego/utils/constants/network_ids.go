@@ -99,19 +99,7 @@ var (
 		SongbirdID:   SongbirdHRP,
 		CostonID:     CostonHRP,
 	}
-	NetworkHRPToNetworkID = map[string]uint32{
-		MainnetHRP:    MainnetID,
-		CascadeHRP:    CascadeID,
-		DenaliHRP:     DenaliID,
-		EverestHRP:    EverestID,
-		UnitTestHRP:   UnitTestID,
-		LocalHRP:      LocalID,
-		FlareHRP:      FlareID,
-		CostwoHRP:     CostwoID,
-		LocalFlareHRP: LocalFlareID,
-		SongbirdHRP:   SongbirdID,
-		CostonHRP:     CostonID,
-	}
+
 	ProductionNetworkIDs = set.Of(FlareID, SongbirdID, CostwoID, CostonID)
 
 	ValidNetworkPrefix = "network-"

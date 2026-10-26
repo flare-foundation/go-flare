@@ -17,7 +17,7 @@ async function addValidator(nodeId: string, endTime: number, weight: number) {
     });
     const feeState = await ctx.pvmapi.getFeeState();
 
-    const tx = pvm.e.newAddPermissionlessValidatorTx(
+    const tx = pvm.newAddPermissionlessValidatorTx(
         {
             feeState,
             utxos,
@@ -40,6 +40,6 @@ async function addValidator(nodeId: string, endTime: number, weight: number) {
 
 runTest(() => addValidator(
     nodeID,
-    Math.ceil(Date.now() / 1000) + 14 * 24 * 60 * 60 + 5, // 14 days (+ 5 seconds) from now
+    Math.ceil(Date.now() / 1000) + 15 * 60 + 5, // 15 minutes (+ 5 seconds) from now
     10_000
 ))

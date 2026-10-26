@@ -10,13 +10,18 @@ import (
 	"time"
 
 	"github.com/ava-labs/libevm/common"
+	"github.com/ava-labs/libevm/core/rawdb"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ava-labs/avalanchego/utils"
+	"github.com/ava-labs/avalanchego/graft/evm/utils"
+	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/constants"
+	"github.com/ava-labs/avalanchego/utils/set"
+	"github.com/ava-labs/avalanchego/vms/evm/sync/customrawdb"
 )
 
 func TestUnmarshalConfig(t *testing.T) {
+	nodeID := ids.GenerateTestNodeID()
 	tests := []struct {
 		name        string
 		givenJSON   []byte
@@ -70,8 +75,8 @@ func TestUnmarshalConfig(t *testing.T) {
 		},
 		{
 			"state sync sources",
-			[]byte(`{"state-sync-ids": "NodeID-CaBYJ9kzHvrQFiYWowMkJGAQKGMJqZoat"}`),
-			Config{StateSyncIDs: "NodeID-CaBYJ9kzHvrQFiYWowMkJGAQKGMJqZoat"},
+			[]byte(fmt.Sprintf(`{"state-sync-ids": ["%s"]}`, nodeID)),
+			Config{StateSyncIDs: set.Of(nodeID)},
 			false,
 		},
 		{
@@ -169,6 +174,50 @@ func TestGetConfig(t *testing.T) {
 			config, _, err := GetConfig(tt.configJSON, tt.networkID)
 			require.NoError(t, err)
 			tt.expected(t, config)
+		})
+	}
+}
+
+// TestCommitInterval verifies that production networks reject non-default commit
+// intervals for non-Firewood state schemes, while Firewood is allowed to use
+// arbitrary commit intervals.
+func TestCommitInterval(t *testing.T) {
+	tests := []struct {
+		name       string
+		configJSON []byte
+		wantError  error
+	}{
+		{
+			name: "default state scheme with default commit interval",
+		},
+		{
+			name:       "default state scheme with non-default commit interval",
+			configJSON: fmt.Appendf(nil, `{"commit-interval": %d}`, defaultCommitInterval+1),
+			wantError:  errNonDefaultCommitInterval,
+		},
+		{
+			name:       "hashdb scheme with default commit interval",
+			configJSON: fmt.Appendf(nil, `{"state-scheme": "%s"}`, rawdb.HashScheme),
+		},
+		{
+			name:       "hashdb scheme with non-default commit interval",
+			configJSON: fmt.Appendf(nil, `{"state-scheme": "%s", "commit-interval": %d}`, rawdb.HashScheme, defaultCommitInterval+1),
+			wantError:  errNonDefaultCommitInterval,
+		},
+		{
+			name:       "firewood scheme with default commit interval",
+			configJSON: fmt.Appendf(nil, `{"state-scheme": "%s"}`, customrawdb.FirewoodScheme),
+		},
+		{
+			name:       "firewood scheme with non-default commit interval",
+			configJSON: fmt.Appendf(nil, `{"state-scheme": "%s", "commit-interval": %d}`, customrawdb.FirewoodScheme, defaultCommitInterval+1),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, err := GetConfig(tt.configJSON, constants.CostwoID)
+			require.ErrorIs(t, err, tt.wantError)
 		})
 	}
 }

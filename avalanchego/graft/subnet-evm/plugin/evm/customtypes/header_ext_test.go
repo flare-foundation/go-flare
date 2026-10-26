@@ -18,7 +18,7 @@ import (
 	"github.com/ava-labs/libevm/rlp"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ava-labs/avalanchego/utils"
+	"github.com/ava-labs/avalanchego/graft/evm/utils"
 	"github.com/ava-labs/avalanchego/vms/evm/acp226"
 )
 
@@ -143,7 +143,7 @@ func allFieldsSet[T interface {
 			fieldValue := v.Field(i)
 			if !field.IsExported() {
 				// Note: we need to check unexported fields especially for [Block].
-				if fieldValue.Kind() == reflect.Ptr {
+				if fieldValue.Kind() == reflect.Pointer {
 					require.Falsef(t, fieldValue.IsNil(), "field %q is nil", field.Name)
 				}
 				fieldValue = reflect.NewAt(fieldValue.Type(), unsafe.Pointer(fieldValue.UnsafeAddr())).Elem()
@@ -175,7 +175,7 @@ func allFieldsSet[T interface {
 			case []uint8, []*types.Header, types.Transactions, []*types.Transaction, types.Withdrawals, []*types.Withdrawal:
 				require.NotEmpty(t, f)
 			default:
-				require.Failf(t, "Field has unsupported type", "Field %q has unsupported type %T", field.Name, f)
+				t.Fatalf("Field %q has unsupported type %T", field.Name, f)
 			}
 		})
 	}

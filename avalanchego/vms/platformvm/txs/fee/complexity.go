@@ -18,9 +18,9 @@ import (
 	"github.com/ava-labs/avalanchego/vms/components/gas"
 	"github.com/ava-labs/avalanchego/vms/components/verify"
 	"github.com/ava-labs/avalanchego/vms/platformvm/fx"
+	"github.com/ava-labs/avalanchego/vms/platformvm/platform"
 	"github.com/ava-labs/avalanchego/vms/platformvm/signer"
 	"github.com/ava-labs/avalanchego/vms/platformvm/stakeable"
-	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
 	"github.com/ava-labs/avalanchego/vms/platformvm/warp"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 )
@@ -95,7 +95,7 @@ const (
 )
 
 var (
-	_ txs.Visitor = (*complexityVisitor)(nil)
+	_ platform.TxVisitor = (*complexityVisitor)(nil)
 
 	IntrinsicAddSubnetValidatorTxComplexities = gas.Dimensions{
 		gas.Bandwidth: IntrinsicBaseTxComplexities[gas.Bandwidth] +
@@ -222,7 +222,30 @@ var (
 		gas.DBRead:  1, // read staker
 		gas.DBWrite: 6, // write remaining balance utxo + weight diff + deactivated weight diff + public key diff + delete staker + write staker
 	}
-
+	IntrinsicAddAutoRenewedValidatorTxComplexities = gas.Dimensions{
+		gas.Bandwidth: IntrinsicBaseTxComplexities[gas.Bandwidth] +
+			wrappers.IntLen + // nodeID length
+			ids.NodeIDLen + // nodeID
+			wrappers.IntLen + // signer typeID
+			wrappers.IntLen + // num stake outs
+			wrappers.IntLen + // validator rewards typeID
+			wrappers.IntLen + // delegator rewards typeID
+			wrappers.IntLen + // validator authority typeID
+			wrappers.IntLen + // delegation shares
+			wrappers.IntLen + // auto compound reward shares
+			wrappers.LongLen, // period
+		gas.DBWrite: 3, // put staker + write weight diff + write pk diff
+	}
+	IntrinsicSetAutoRenewedValidatorConfigTxComplexities = gas.Dimensions{
+		gas.Bandwidth: IntrinsicBaseTxComplexities[gas.Bandwidth] +
+			ids.IDLen + // txID
+			wrappers.IntLen + // auth typeID
+			wrappers.IntLen + // authCredential typeID
+			wrappers.IntLen + // auto compound reward shares
+			wrappers.LongLen, // period
+		gas.DBRead:  1, // read tx
+		gas.DBWrite: 1, // update staker
+	}
 	errUnsupportedOutput = errors.New("unsupported output type")
 	errUnsupportedInput  = errors.New("unsupported input type")
 	errUnsupportedOwner  = errors.New("unsupported owner type")
@@ -230,7 +253,7 @@ var (
 	errUnsupportedSigner = errors.New("unsupported signer type")
 )
 
-func TxComplexity(txs ...txs.UnsignedTx) (gas.Dimensions, error) {
+func TxComplexity(txs ...platform.UnsignedTx) (gas.Dimensions, error) {
 	var (
 		c          complexityVisitor
 		complexity gas.Dimensions
@@ -350,7 +373,7 @@ func inputComplexity(in *avax.TransferableInput) (gas.Dimensions, error) {
 
 // ConvertSubnetToL1ValidatorComplexity returns the complexity the validators
 // add to a transaction.
-func ConvertSubnetToL1ValidatorComplexity(l1Validators ...*txs.ConvertSubnetToL1Validator) (gas.Dimensions, error) {
+func ConvertSubnetToL1ValidatorComplexity(l1Validators ...*platform.ConvertSubnetToL1Validator) (gas.Dimensions, error) {
 	var complexity gas.Dimensions
 	for _, l1Validator := range l1Validators {
 		l1ValidatorComplexity, err := convertSubnetToL1ValidatorComplexity(l1Validator)
@@ -366,7 +389,7 @@ func ConvertSubnetToL1ValidatorComplexity(l1Validators ...*txs.ConvertSubnetToL1
 	return complexity, nil
 }
 
-func convertSubnetToL1ValidatorComplexity(l1Validator *txs.ConvertSubnetToL1Validator) (gas.Dimensions, error) {
+func convertSubnetToL1ValidatorComplexity(l1Validator *platform.ConvertSubnetToL1Validator) (gas.Dimensions, error) {
 	complexity := gas.Dimensions{
 		gas.Bandwidth: intrinsicConvertSubnetToL1ValidatorBandwidth,
 		gas.DBWrite:   intrinsicConvertSubnetToL1ValidatorDBWrite,
@@ -497,27 +520,27 @@ type complexityVisitor struct {
 	output gas.Dimensions
 }
 
-func (*complexityVisitor) AddValidatorTx(*txs.AddValidatorTx) error {
+func (*complexityVisitor) AddValidatorTx(*platform.AddValidatorTx) error {
 	return ErrUnsupportedTx
 }
 
-func (*complexityVisitor) AddDelegatorTx(*txs.AddDelegatorTx) error {
+func (*complexityVisitor) AddDelegatorTx(*platform.AddDelegatorTx) error {
 	return ErrUnsupportedTx
 }
 
-func (*complexityVisitor) AdvanceTimeTx(*txs.AdvanceTimeTx) error {
+func (*complexityVisitor) AdvanceTimeTx(*platform.AdvanceTimeTx) error {
 	return ErrUnsupportedTx
 }
 
-func (*complexityVisitor) RewardValidatorTx(*txs.RewardValidatorTx) error {
+func (*complexityVisitor) RewardValidatorTx(*platform.RewardValidatorTx) error {
 	return ErrUnsupportedTx
 }
 
-func (*complexityVisitor) TransformSubnetTx(*txs.TransformSubnetTx) error {
+func (*complexityVisitor) TransformSubnetTx(*platform.TransformSubnetTx) error {
 	return ErrUnsupportedTx
 }
 
-func (c *complexityVisitor) AddSubnetValidatorTx(tx *txs.AddSubnetValidatorTx) error {
+func (c *complexityVisitor) AddSubnetValidatorTx(tx *platform.AddSubnetValidatorTx) error {
 	baseTxComplexity, err := baseTxComplexity(&tx.BaseTx)
 	if err != nil {
 		return err
@@ -533,7 +556,7 @@ func (c *complexityVisitor) AddSubnetValidatorTx(tx *txs.AddSubnetValidatorTx) e
 	return err
 }
 
-func (c *complexityVisitor) CreateChainTx(tx *txs.CreateChainTx) error {
+func (c *complexityVisitor) CreateChainTx(tx *platform.CreateChainTx) error {
 	bandwidth, err := math.Mul(uint64(len(tx.FxIDs)), ids.IDLen)
 	if err != nil {
 		return err
@@ -566,7 +589,7 @@ func (c *complexityVisitor) CreateChainTx(tx *txs.CreateChainTx) error {
 	return err
 }
 
-func (c *complexityVisitor) CreateSubnetTx(tx *txs.CreateSubnetTx) error {
+func (c *complexityVisitor) CreateSubnetTx(tx *platform.CreateSubnetTx) error {
 	baseTxComplexity, err := baseTxComplexity(&tx.BaseTx)
 	if err != nil {
 		return err
@@ -582,7 +605,7 @@ func (c *complexityVisitor) CreateSubnetTx(tx *txs.CreateSubnetTx) error {
 	return err
 }
 
-func (c *complexityVisitor) ImportTx(tx *txs.ImportTx) error {
+func (c *complexityVisitor) ImportTx(tx *platform.ImportTx) error {
 	baseTxComplexity, err := baseTxComplexity(&tx.BaseTx)
 	if err != nil {
 		return err
@@ -598,7 +621,7 @@ func (c *complexityVisitor) ImportTx(tx *txs.ImportTx) error {
 	return err
 }
 
-func (c *complexityVisitor) ExportTx(tx *txs.ExportTx) error {
+func (c *complexityVisitor) ExportTx(tx *platform.ExportTx) error {
 	baseTxComplexity, err := baseTxComplexity(&tx.BaseTx)
 	if err != nil {
 		return err
@@ -614,7 +637,7 @@ func (c *complexityVisitor) ExportTx(tx *txs.ExportTx) error {
 	return err
 }
 
-func (c *complexityVisitor) RemoveSubnetValidatorTx(tx *txs.RemoveSubnetValidatorTx) error {
+func (c *complexityVisitor) RemoveSubnetValidatorTx(tx *platform.RemoveSubnetValidatorTx) error {
 	baseTxComplexity, err := baseTxComplexity(&tx.BaseTx)
 	if err != nil {
 		return err
@@ -630,7 +653,7 @@ func (c *complexityVisitor) RemoveSubnetValidatorTx(tx *txs.RemoveSubnetValidato
 	return err
 }
 
-func (c *complexityVisitor) AddPermissionlessValidatorTx(tx *txs.AddPermissionlessValidatorTx) error {
+func (c *complexityVisitor) AddPermissionlessValidatorTx(tx *platform.AddPermissionlessValidatorTx) error {
 	baseTxComplexity, err := baseTxComplexity(&tx.BaseTx)
 	if err != nil {
 		return err
@@ -661,7 +684,7 @@ func (c *complexityVisitor) AddPermissionlessValidatorTx(tx *txs.AddPermissionle
 	return err
 }
 
-func (c *complexityVisitor) AddPermissionlessDelegatorTx(tx *txs.AddPermissionlessDelegatorTx) error {
+func (c *complexityVisitor) AddPermissionlessDelegatorTx(tx *platform.AddPermissionlessDelegatorTx) error {
 	baseTxComplexity, err := baseTxComplexity(&tx.BaseTx)
 	if err != nil {
 		return err
@@ -682,7 +705,7 @@ func (c *complexityVisitor) AddPermissionlessDelegatorTx(tx *txs.AddPermissionle
 	return err
 }
 
-func (c *complexityVisitor) TransferSubnetOwnershipTx(tx *txs.TransferSubnetOwnershipTx) error {
+func (c *complexityVisitor) TransferSubnetOwnershipTx(tx *platform.TransferSubnetOwnershipTx) error {
 	baseTxComplexity, err := baseTxComplexity(&tx.BaseTx)
 	if err != nil {
 		return err
@@ -703,7 +726,7 @@ func (c *complexityVisitor) TransferSubnetOwnershipTx(tx *txs.TransferSubnetOwne
 	return err
 }
 
-func (c *complexityVisitor) BaseTx(tx *txs.BaseTx) error {
+func (c *complexityVisitor) BaseTx(tx *platform.BaseTx) error {
 	baseTxComplexity, err := baseTxComplexity(tx)
 	if err != nil {
 		return err
@@ -712,7 +735,7 @@ func (c *complexityVisitor) BaseTx(tx *txs.BaseTx) error {
 	return err
 }
 
-func (c *complexityVisitor) ConvertSubnetToL1Tx(tx *txs.ConvertSubnetToL1Tx) error {
+func (c *complexityVisitor) ConvertSubnetToL1Tx(tx *platform.ConvertSubnetToL1Tx) error {
 	baseTxComplexity, err := baseTxComplexity(&tx.BaseTx)
 	if err != nil {
 		return err
@@ -736,7 +759,7 @@ func (c *complexityVisitor) ConvertSubnetToL1Tx(tx *txs.ConvertSubnetToL1Tx) err
 	return err
 }
 
-func (c *complexityVisitor) RegisterL1ValidatorTx(tx *txs.RegisterL1ValidatorTx) error {
+func (c *complexityVisitor) RegisterL1ValidatorTx(tx *platform.RegisterL1ValidatorTx) error {
 	baseTxComplexity, err := baseTxComplexity(&tx.BaseTx)
 	if err != nil {
 		return err
@@ -752,7 +775,7 @@ func (c *complexityVisitor) RegisterL1ValidatorTx(tx *txs.RegisterL1ValidatorTx)
 	return err
 }
 
-func (c *complexityVisitor) SetL1ValidatorWeightTx(tx *txs.SetL1ValidatorWeightTx) error {
+func (c *complexityVisitor) SetL1ValidatorWeightTx(tx *platform.SetL1ValidatorWeightTx) error {
 	baseTxComplexity, err := baseTxComplexity(&tx.BaseTx)
 	if err != nil {
 		return err
@@ -768,7 +791,7 @@ func (c *complexityVisitor) SetL1ValidatorWeightTx(tx *txs.SetL1ValidatorWeightT
 	return err
 }
 
-func (c *complexityVisitor) IncreaseL1ValidatorBalanceTx(tx *txs.IncreaseL1ValidatorBalanceTx) error {
+func (c *complexityVisitor) IncreaseL1ValidatorBalanceTx(tx *platform.IncreaseL1ValidatorBalanceTx) error {
 	baseTxComplexity, err := baseTxComplexity(&tx.BaseTx)
 	if err != nil {
 		return err
@@ -779,7 +802,7 @@ func (c *complexityVisitor) IncreaseL1ValidatorBalanceTx(tx *txs.IncreaseL1Valid
 	return err
 }
 
-func (c *complexityVisitor) DisableL1ValidatorTx(tx *txs.DisableL1ValidatorTx) error {
+func (c *complexityVisitor) DisableL1ValidatorTx(tx *platform.DisableL1ValidatorTx) error {
 	baseTxComplexity, err := baseTxComplexity(&tx.BaseTx)
 	if err != nil {
 		return err
@@ -795,7 +818,63 @@ func (c *complexityVisitor) DisableL1ValidatorTx(tx *txs.DisableL1ValidatorTx) e
 	return err
 }
 
-func baseTxComplexity(tx *txs.BaseTx) (gas.Dimensions, error) {
+func (c *complexityVisitor) AddAutoRenewedValidatorTx(tx *platform.AddAutoRenewedValidatorTx) error {
+	baseTxComplexity, err := baseTxComplexity(&tx.BaseTx)
+	if err != nil {
+		return err
+	}
+	signerComplexity, err := SignerComplexity(tx.Signer)
+	if err != nil {
+		return err
+	}
+	outputsComplexity, err := OutputComplexity(tx.Stake()...)
+	if err != nil {
+		return err
+	}
+	validatorOwnerComplexity, err := OwnerComplexity(tx.ValidationRewardsOwner())
+	if err != nil {
+		return err
+	}
+	delegatorOwnerComplexity, err := OwnerComplexity(tx.DelegationRewardsOwner())
+	if err != nil {
+		return err
+	}
+	validatorAuthorityComplexity, err := OwnerComplexity(tx.ValidatorAuthority)
+	if err != nil {
+		return err
+	}
+	c.output, err = IntrinsicAddAutoRenewedValidatorTxComplexities.Add(
+		&baseTxComplexity,
+		&signerComplexity,
+		&outputsComplexity,
+		&validatorOwnerComplexity,
+		&delegatorOwnerComplexity,
+		&validatorAuthorityComplexity,
+	)
+	return err
+}
+
+func (c *complexityVisitor) SetAutoRenewedValidatorConfigTx(tx *platform.SetAutoRenewedValidatorConfigTx) error {
+	baseTxComplexity, err := baseTxComplexity(&tx.BaseTx)
+	if err != nil {
+		return err
+	}
+	authComplexity, err := AuthComplexity(tx.Auth)
+	if err != nil {
+		return err
+	}
+	c.output, err = IntrinsicSetAutoRenewedValidatorConfigTxComplexities.Add(
+		&baseTxComplexity,
+		&authComplexity,
+	)
+	return err
+}
+
+func (*complexityVisitor) RewardAutoRenewedValidatorTx(*platform.RewardAutoRenewedValidatorTx) error {
+	return ErrUnsupportedTx
+}
+
+func baseTxComplexity(tx *platform.BaseTx) (gas.Dimensions, error) {
 	outputsComplexity, err := OutputComplexity(tx.Outs...)
 	if err != nil {
 		return gas.Dimensions{}, err

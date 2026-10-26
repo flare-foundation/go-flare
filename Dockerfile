@@ -1,5 +1,5 @@
 #checkov:skip=CKV_DOCKER_3: "Ensure that a user for the container has been created"
-FROM golang:1.25.11-trixie@sha256:56a4d6ead4365cd569ca388003bdce672e7ca7286513f96b44b03d3b5e79d26f AS build
+FROM golang:1.26.10-trixie@sha256:909771fef53e3dcb0950255f0c9a8b4728c3b841e61509c7b29b098de7ee02d4 AS build
 
 WORKDIR /app/
 
@@ -11,7 +11,7 @@ WORKDIR /app/avalanchego/
 
 RUN /app/avalanchego/scripts/build.sh
 
-FROM ubuntu:24.04
+FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
 
 WORKDIR /app
 
@@ -21,6 +21,7 @@ ENV HTTP_HOST=0.0.0.0 \
     PUBLIC_IP= \
     DB_DIR=/app/db \
     DB_TYPE=leveldb \
+    CHAIN_DATA_DIR=/app/db/chainData \
     BOOTSTRAP_IPS= \
     BOOTSTRAP_IDS= \
     CHAIN_CONFIG_DIR=/app/conf \
@@ -38,7 +39,7 @@ ENV HTTP_HOST=0.0.0.0 \
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates curl jq && \
     rm -rf /var/lib/apt/lists/* && \
-    mkdir -p /app/conf/coston /app/conf/C /app/logs /app/db
+    mkdir -p /app/conf/coston /app/conf/C /app/logs /app/db /app/db/chainData
 
 COPY --from=build /app/avalanchego/build /app/build
 COPY entrypoint.sh /app/entrypoint.sh

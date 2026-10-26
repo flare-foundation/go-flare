@@ -22,7 +22,7 @@ The three points of interest for mounting are:
 
 | Name | Default location |
 |---|:--|
-| Database | `/app/db` |
+| Database (including chain data) | `/app/db` |
 | Logging | `/app/logs` |
 | Configuration | `/app/conf` |
 
@@ -49,13 +49,14 @@ These are the environment variables you can edit and their default values:
 | `PUBLIC_IP` | _(empty)_ | The public IP of the service |
 | `DB_DIR` | `/app/db` | The database directory location |
 | `DB_TYPE` | `leveldb` | The database type to be used |
+| `CHAIN_DATA_DIR` | `/app/db/chainData` | The chain data directory. Since v1.15.1 (Helicon upgrade) the C-chain stores its execution results here, outside the database, so it must be persisted together with `DB_DIR`; the default keeps it inside the `/app/db` mount |
 | `BOOTSTRAP_IPS` | _(empty)_ | A list of bootstrap server ips; ref [--bootstrap-ips-string](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#--bootstrap-ips-string) |
 | `BOOTSTRAP_IDS` | _(empty)_ | A list of bootstrap server ids; ref [--bootstrap-ids-string](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#--bootstrap-ids-string) |
 | `CHAIN_CONFIG_DIR` | `/app/conf` | Configuration directory |
 | `LOG_DIR` | `/app/logs` | Logging directory |
 | `LOG_LEVEL` | `info` | Logging level set with AvalancheGo flag [`--log-level`](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#--log-level-string-verbo-debug-trace-info-warn-error-fatal-off). |
 | `NETWORK_ID` | `costwo` | The network id. The common ids are `flare \| costwo` |
-| `AUTOCONFIGURE_PUBLIC_IP` | `0` | Set to `1` to autoconfigure `PUBLIC_IP`, skipped if PUBLIC_IP is set |
+| `AUTOCONFIGURE_PUBLIC_IP` | `0` | Set to `1` to autoconfigure `PUBLIC_IP` from `https://<network>-bootstrap.flare.network/cdn-cgi/trace` (`flare`, `songbird`, `coston`, `coston2`; other networks use `flare-bootstrap`), skipped if PUBLIC_IP is set |
 | `AUTOCONFIGURE_BOOTSTRAP` | `0` | Set to `1` to autoconfigure `BOOTSTRAP_IPS` and `BOOTSTRAP_IDS` |
 | `AUTOCONFIGURE_BOOTSTRAP_ENDPOINT` | `https://coston2-bootstrap.flare.network/ext/info` | Endpoint used for [bootstrapping](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#bootstrapping) when `AUTOCONFIGURE_BOOTSTRAP` is enabled. Possible values are `https://coston2-bootstrap.flare.network/ext/info`, `https://flare-bootstrap.flare.network/ext/info`, `https://coston-bootstrap.flare.network/ext/info` or `https://songbird-bootstrap.flare.network/ext/info`. |
 | `AUTOCONFIGURE_FALLBACK_ENDPOINTS` | _(empty)_ | Comma-divided fallback bootstrap endpoints, used if `AUTOCONFIGURE_BOOTSTRAP_ENDPOINT` is not valid (not whitelisted / unreachable / etc), tested from first-to-last until one is valid |
@@ -68,14 +69,23 @@ These are the environment variables you can edit and their default values:
 
 The flare node can be configured by specifying your own configuration for the different chains but mainly the C (aka. Contract) chain. The specified configuration determines which capabilities the node has and it affects how the node has to be set up. We mainly distinguish between the three standard configurations described below.
 
+Since v1.15.1 (Helicon upgrade), the C-chain API allowlist is set with the `apis` option; the available names are listed in the [C-chain config reference](https://github.com/flare-foundation/go-flare/blob/main/avalanchego/vms/saevm/cchain/config.md#available-apis). Until Helicon activates on a network, its C-chain still runs the previous VM, which reads the `eth-apis` option, so the examples below set both. After the activation, `apis` takes precedence, `eth-apis` is ignored, and it will be removed in a later release. The `admin-api-enabled` and `admin-api-dir` options are no longer supported.
+
 ### External API configuration
 
 The external API configuration is set to only respond to API calls so it offloads the other internal nodes. What makes it external is the relatively small set of functions that it exposes which are meant for public use. The node with this configuration exposes the HTTP port (default: 9650) and does not need any publicly open ports to work. The images tagged with the suffix `api` have this configuration preloaded by default.
 
 ```sh
 {
-  "admin-api-enabled": false,
-  "admin-api-dir": "",
+  "apis": [
+    "avalanche",
+    "chain",
+    "net",
+    "price",
+    "subscription",
+    "tx",
+    "web3"
+  ],
   "eth-apis": [
     "eth",
     "eth-filter",
@@ -94,8 +104,18 @@ Similarly to the external API configuration, this one also responds to API calls
 
 ```sh
 {
-  "admin-api-enabled": false,
-  "admin-api-dir": "",
+  "apis": [
+    "avalanche",
+    "chain",
+    "db",
+    "net",
+    "price",
+    "subscription",
+    "trace",
+    "tx",
+    "txpool",
+    "web3"
+  ],
   "eth-apis": [
     "eth",
     "eth-filter",
@@ -121,8 +141,9 @@ The bootstrap configuration is meant for nodes that will accept and help provisi
 
 ```sh
 {
-  "admin-api-enabled": false,
-  "admin-api-dir": "",
+  "apis": [
+    "web3"
+  ],
   "eth-apis": [
     "web3"
   ]

@@ -263,7 +263,7 @@ func mint(evm EVMCaller, mintRequest *uint256.Int) error {
 	return nil
 }
 
-func atomicDaemonAndMint(evm EVMCaller, log log.Logger) {
+func AtomicDaemonAndMint(evm EVMCaller, log log.Logger) {
 	// Call the daemon
 	daemonSnapshot, mintRequest, daemonErr := daemon(evm)
 	// If no error...

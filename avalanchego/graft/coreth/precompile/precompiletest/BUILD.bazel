@@ -1,5 +1,10 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
+package(default_visibility = [
+    "//graft/coreth:__subpackages__",
+    "//graft/coreth:external_consumers",
+])
+
 go_library(
     name = "precompiletest",
     srcs = [
@@ -8,18 +13,19 @@ go_library(
         "test_predicate.go",
     ],
     importpath = "github.com/ava-labs/avalanchego/graft/coreth/precompile/precompiletest",
-    visibility = ["//visibility:public"],
     deps = [
         "//graft/coreth/core/extstate",
         "//graft/coreth/params/extras",
         "//graft/coreth/precompile/contract",
         "//graft/coreth/precompile/modules",
         "//graft/coreth/precompile/precompileconfig",
+        "//snow",
         "//snow/snowtest",
         "//vms/evm/predicate",
         "@com_github_ava_labs_libevm//common",
         "@com_github_ava_labs_libevm//core/rawdb",
         "@com_github_ava_labs_libevm//core/state",
+        "@com_github_ava_labs_libevm//core/vm",
         "@com_github_stretchr_testify//require",
         "@org_uber_go_mock//gomock",
     ],

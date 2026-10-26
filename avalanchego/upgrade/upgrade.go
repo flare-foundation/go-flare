@@ -42,7 +42,7 @@ var (
 		FortunaTime:               time.Date(2025, time.April, 8, 15, 0, 0, 0, time.UTC),
 		GraniteTime:               time.Date(2025, time.November, 19, 16, 0, 0, 0, time.UTC),
 		GraniteEpochDuration:      5 * time.Minute,
-		HeliconTime:               UnscheduledActivationTime,
+		HeliconTime:               time.Date(2026, time.September, 22, 15, 0, 0, 0, time.UTC),
 	}
 	// Fuji = Config{
 	// 	ApricotPhase1Time:            time.Date(2021, time.March, 26, 14, 0, 0, 0, time.UTC),
@@ -66,6 +66,7 @@ var (
 	//  FortunaTime :              UnscheduledActivationTime,
 	// 	GraniteTime:               time.Date(2025, time.October, 29, 15, 0, 0, 0, time.UTC),
 	// 	GraniteEpochDuration:      5 * time.Minute,
+	//  HeliconTime:               time.Date(2026, time.July, 28, 15, 0, 0, 0, time.UTC),
 	// }
 	Flare = Config{
 		ApricotPhase1Time:     ZeroTime,
@@ -120,7 +121,7 @@ var (
 		FortunaTime:           time.Date(2026, time.March, 24, 12, 0, 0, 0, time.UTC),
 		GraniteTime:           time.Date(2026, time.June, 16, 12, 0, 0, 0, time.UTC),
 		GraniteEpochDuration:  5 * time.Minute,
-		HeliconTime:           UnscheduledActivationTime,
+		HeliconTime:           time.Date(2026, time.November, 3, 12, 0, 0, 0, time.UTC),
 	}
 	Coston = Config{
 		ApricotPhase1Time:      ZeroTime,
@@ -159,7 +160,7 @@ var (
 		FortunaTime:                  ZeroTime,
 		GraniteTime:                  ZeroTime,
 		GraniteEpochDuration:         5 * time.Minute,
-		HeliconTime:                  UnscheduledActivationTime,
+		HeliconTime:                  ZeroTime,
 	}
 	Local = Config{
 		ApricotPhase1Time:            ZeroTime,
@@ -180,7 +181,7 @@ var (
 		FortunaTime:                  ZeroTime,
 		GraniteTime:                  ZeroTime,
 		GraniteEpochDuration:         5 * time.Minute,
-		HeliconTime:                  UnscheduledActivationTime,
+		HeliconTime:                  ZeroTime,
 	}
 	Default = Config{
 		ApricotPhase1Time:            InitiallyActiveTime,
@@ -200,7 +201,7 @@ var (
 		FortunaTime:                  InitiallyActiveTime,
 		GraniteTime:                  InitiallyActiveTime,
 		GraniteEpochDuration:         30 * time.Second,
-		HeliconTime:                  UnscheduledActivationTime,
+		HeliconTime:                  InitiallyActiveTime,
 	}
 
 	ErrInvalidUpgradeTimes = errors.New("invalid upgrade configuration")

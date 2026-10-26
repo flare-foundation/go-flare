@@ -2,9 +2,10 @@
 // See the file LICENSE for licensing terms.
 
 // Package granite defines the ACP-176 parameter set used on Flare-family
-// chains after the Granite upgrade. These values are live consensus
-// parameters on all Flare-family networks; changing them requires a
-// coordinated network upgrade. This is the only place that ACP-176
+// chains after the Granite upgrade. It equals the default acp176 parameter
+// set except for the two overrides defined below. These values are live
+// consensus parameters on all Flare-family networks; changing them requires
+// a coordinated network upgrade. This is the only place that ACP-176
 // parameters are defined for Granite.
 package granite
 
@@ -19,41 +20,21 @@ const (
 	// the default acp176 MinGasPrice = 1 Wei.
 	MinGasPrice = 500 * utils.GWei
 
-	// MinTargetPerSecond (P) is the target gas/sec at TargetExcess = 0.
-	// Equal to the default acp176 value
-	MinTargetPerSecond gas.Gas = 1_000_000
-	// MaxTargetExcessDiff (Q) caps the per-block change in TargetExcess.
-	// Equal to the default acp176 value
-	MaxTargetExcessDiff gas.Gas = 1 << 15
-	// TargetConversion (D) is the conversion constant used in the Target()
-	// formula.
-	// Equal to the default acp176 value (MaxTargetChangeRate * MaxTargetExcessDiff = 1024 * 32768).
-	// MaxTargetChangeRate is implicit as D / Q.
-	TargetConversion gas.Gas = 1024 * 32768
-
 	// TimeToFillCapacity is the seconds it takes to refill the gas capacity
 	// from zero to its maximum (C = R * TimeToFillCapacity).
 	// Diverges from the default acp176 value of 5.
 	TimeToFillCapacity gas.Gas = 4
-	// TargetToMax is the multiplier applied to the target rate to obtain the
-	// maximum gas rate per second (R = T * TargetToMax).
-	// Equal to the default acp176 value
-	TargetToMax gas.Gas = 2
-	// TargetToPriceUpdateConversion controls how fast the dynamic base fee
-	// reacts to excess gas: K = T * TargetToPriceUpdateConversion appears as
-	// the denominator in MinGasPrice * e^(Excess / K).
-	// Equal to the default acp176 value
-	TargetToPriceUpdateConversion gas.Gas = 87
 )
 
 // DefaultParams is the ACP-176 parameter set to use on Flare-family chains
-// after the Granite upgrade.
+// after the Granite upgrade. All fields other than MinGasPrice and
+// TimeToFillCapacity equal the default acp176 values.
 var DefaultParams = &acp176.Params{
-	MinTargetPerSecond:            MinTargetPerSecond,
-	TargetConversion:              TargetConversion,
-	MaxTargetExcessDiff:           MaxTargetExcessDiff,
+	MinTargetPerSecond:            acp176.MinTargetPerSecond,
+	TargetConversion:              acp176.TargetConversion,
+	MaxTargetExcessDiff:           acp176.MaxTargetExcessDiff,
 	MinGasPrice:                   MinGasPrice,
 	TimeToFillCapacity:            TimeToFillCapacity,
-	TargetToMax:                   TargetToMax,
-	TargetToPriceUpdateConversion: TargetToPriceUpdateConversion,
+	TargetToMax:                   acp176.TargetToMax,
+	TargetToPriceUpdateConversion: acp176.TargetToPriceUpdateConversion,
 }

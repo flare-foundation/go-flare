@@ -58,7 +58,6 @@ linters:
     - durationcheck
     # - embeddedstructfieldcheck
     - errcheck
-    - errorlint
     - forbidigo
     - goconst
     - gocheckcompilerdirectives
@@ -105,11 +104,6 @@ linters:
             # in lint.sh to produce warnings instead of errors.
             - pkg: io/ioutil
               desc: io/ioutil is deprecated. Use package io or os instead.
-    errorlint:
-      # Check for plain type assertions and type switches.
-      asserts: false
-      # Check for plain error comparisons.
-      comparison: false
     forbidigo:
       # Forbid the following identifiers (list of regexp).
       forbid:
@@ -121,10 +115,18 @@ linters:
         - pattern: require\.ErrorContains$(# ErrorIs should be used instead)?
         - pattern: require\.EqualValues$(# Equal should be used instead)?
         - pattern: require\.NotEqualValues$(# NotEqual should be used instead)?
-        - pattern: ^(t|b|tb|f)\.(Fatal|Fatalf|Error|Errorf)$(# the assert and require libraries should be used instead)?
+        - pattern: require\.Fail$(# t.Fatal should be used instead)?
+        - pattern: require\.FailNow$(# t.Fatal should be used instead)?
         - pattern: ^sort\.(Slice|Strings)$(# the slices package should be used instead)?
       # Exclude godoc examples from forbidigo checks.
       exclude-godoc-examples: false
+    goconst:
+      # goconst counts occurrences in _test.go files, but combines them with
+      # the default 3 occurrences in production files, causing a lint error
+      # even though goconst is ignored for all test files by the regex in the
+      # exclusion rules.
+      # TODO(JonathanOppenheimer): Remove this exclusion.
+      ignore-tests: true
     gosec:
       excludes:
         - G107 # Url provided to HTTP request as taint input https://securego.io/docs/rules/g107
@@ -145,6 +147,11 @@ linters:
         # https://github.com/mgechev/revive/blob/master/RULES_DESCRIPTIONS.md#bool-literal-in-expr
         - name: bool-literal-in-expr
           disabled: false
+        # https://github.com/mgechev/revive/blob/master/RULES_DESCRIPTIONS.md#context-as-argument
+        - name: context-as-argument
+          disabled: false
+          arguments:
+            - allowTypesBefore: "*testing.T,*testing.B,*testing.F,testing.TB"
         # https://github.com/mgechev/revive/blob/master/RULES_DESCRIPTIONS.md#early-return
         - name: early-return
           disabled: false
@@ -197,6 +204,8 @@ linters:
         # https://github.com/mgechev/revive/blob/master/RULES_DESCRIPTIONS.md#unused-parameter
         - name: unused-parameter
           disabled: false
+          arguments:
+            - allowRegex: "^ctx$"
         # https://github.com/mgechev/revive/blob/master/RULES_DESCRIPTIONS.md#unused-receiver
         - name: unused-receiver
           disabled: false
@@ -232,13 +241,13 @@ linters:
         - go-require
         - float-compare
     usetesting:
-      os-create-temp:     true # Disallow `os.CreateTemp("", ...)`
-      os-mkdir-temp:      true # Disallow `os.MkdirTemp()`
-      os-setenv:          true # Disallow `os.Setenv()`
-      os-temp-dir:        true # Disallow `os.TempDir()`
-      os-chdir:           true # Disallow `os.Chdir()`
+      os-create-temp: true # Disallow `os.CreateTemp("", ...)`
+      os-mkdir-temp: true # Disallow `os.MkdirTemp()`
+      os-setenv: true # Disallow `os.Setenv()`
+      os-temp-dir: true # Disallow `os.TempDir()`
+      os-chdir: true # Disallow `os.Chdir()`
       context-background: true # Disallow `context.Background()`
-      context-todo:       true # Disallow `context.TODO()`
+      context-todo: true # Disallow `context.TODO()`
     unused:
       # Mark all struct fields that have been written to as used.
       # Default: true
@@ -264,5 +273,7 @@ linters:
       # 4. Exclude any file suffixed with _test.go.
       - path: "(^tests/)|(^(.*/)*test_[^/]*\\.go$)|(.*test/.*)|(.*_test\\.go$)"
         linters:
+          # TODO(JonathanOppenheimer): Remove these exclusion.
+          - goconst
           - gosec
           - prealloc

@@ -49,6 +49,9 @@ import (
 	"github.com/ava-labs/libevm/crypto"
 	"github.com/ava-labs/libevm/eth/tracers/logger"
 	"github.com/ava-labs/libevm/ethdb"
+	"github.com/ava-labs/libevm/triedb"
+	"github.com/stretchr/testify/require"
+
 	ethparams "github.com/ava-labs/libevm/params"
 )
 
@@ -130,7 +133,8 @@ func testArchiveBlockChainSnapsDisabled(t *testing.T, scheme string) {
 			TriePrefetcherParallelism: 4,
 			Pruning:                   false, // Archive mode
 			StateHistory:              32,    // Required for Firewood's minimum Revision count
-			SnapshotLimit:             0,     // Disable snapshots
+			CommitInterval:            16,
+			SnapshotLimit:             0, // Disable snapshots
 			AcceptorQueueLimit:        64,
 			StateScheme:               scheme,
 			ChainDataDir:              dataPath,
@@ -426,17 +430,155 @@ func TestBlockChainOfflinePruningUngracefulShutdown(t *testing.T) {
 	}
 }
 
-// TestPruningToNonPruning tests that opening a previously pruned database as a
-// non-pruned database is successful.
-func TestPruningToNonPruning(t *testing.T) {
-	for _, scheme := range schemes {
-		t.Run(scheme, func(t *testing.T) {
-			testPruningToNonPruning(t, scheme)
+// TestArchiveUngracefulShutdown ensures that if the blockchain
+// crashes without emptying the acceptor queue, all states will be persisted
+// after startup.
+func TestArchiveUngracefulShutdown(t *testing.T) {
+	for _, s := range schemes {
+		t.Run(s, func(t *testing.T) {
+			testArchiveUngracefulShutdown(t, s)
 		})
 	}
 }
 
-// testPruningToNonPruning tests that opening a previously pruned database as a
+func testArchiveUngracefulShutdown(t *testing.T, scheme string) {
+	var (
+		key1, _   = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		key2, _   = crypto.HexToECDSA("8a1f9a8f95be41cd7ccb6168179afb4504aefe388d1e14474d32c45c72ce7b7a")
+		addr1     = crypto.PubkeyToAddress(key1.PublicKey)
+		addr2     = crypto.PubkeyToAddress(key2.PublicKey)
+		chainDB   = rawdb.NewMemoryDatabase()
+		numStates = uint64(5)
+	)
+
+	gspec := &Genesis{
+		Config: params.WithExtra(
+			&params.ChainConfig{HomesteadBlock: new(big.Int)},
+			&extras.ChainConfig{
+				AvalancheContext: extras.AvalancheContext{
+					SnowCtx: &snow.Context{NetworkID: constants.MainnetID},
+				},
+			},
+		),
+		Alloc: types.GenesisAlloc{addr1: {Balance: big.NewInt(1000000)}},
+	}
+
+	chainDataDir := t.TempDir()
+	config := &CacheConfig{
+		TrieCleanLimit:            256,
+		TrieDirtyLimit:            256,
+		TrieDirtyCommitTarget:     20,
+		TriePrefetcherParallelism: 4,
+		Pruning:                   false, // archival
+		CommitInterval:            1,
+		StateHistory:              2, // Minimum allowable by Firewood
+		AcceptorQueueLimit:        64,
+		StateScheme:               scheme,
+		ChainDataDir:              chainDataDir,
+	}
+
+	blockchain, err := createBlockChain(chainDB, config, gspec, common.Hash{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Generate (2 * numStates) blocks.
+	signer := types.HomesteadSigner{}
+	_, blocks, _, err := GenerateChainWithGenesis(gspec, blockchain.engine, 2*int(numStates), 10, func(i int, gen *BlockGen) {
+		tx, _ := types.SignTx(types.NewTransaction(gen.TxNonce(addr1), addr2, big.NewInt(10000), ethparams.TxGas, nil, nil), signer, key1)
+		gen.AddTx(tx)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := blockchain.InsertChain(blocks); err != nil {
+		t.Fatal(err)
+	}
+	for _, b := range blocks[:numStates] {
+		if err := blockchain.Accept(b); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Close the acceptor queue prior to committing the rest of the blocks.
+	// This simulates a crash when the acceptor queue is non-empty, since those
+	// operations will not be completed.
+	blockchain.stopAcceptor()
+	for _, b := range blocks[numStates:] {
+		if err := blockchain.Accept(b); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Completely close chain, startup again, ensure all states are available.
+	blockchain.Stop()
+
+	blockchain, err = createBlockChain(chainDB, blockchain.cacheConfig, gspec, blocks[len(blocks)-1].Hash())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, b := range blocks {
+		if !blockchain.HasState(b.Root()) {
+			t.Fatalf("missing state for block %d", b.NumberU64())
+		}
+	}
+	blockchain.Stop()
+}
+
+func TestFirewoodGenesisPersisted(t *testing.T) {
+	var (
+		key, _  = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		addr    = crypto.PubkeyToAddress(key.PublicKey)
+		chainDB = rawdb.NewMemoryDatabase()
+		gspec   = &Genesis{
+			// Flare: the gas-limit schedule consulted by the chain maker
+			// (customheader.GasLimit) requires a SnowCtx, as in the other
+			// tests of this file.
+			Config: params.WithExtra(
+				&params.ChainConfig{HomesteadBlock: new(big.Int)},
+				&extras.ChainConfig{
+					AvalancheContext: extras.AvalancheContext{
+						SnowCtx: &snow.Context{NetworkID: constants.MainnetID},
+					},
+				},
+			),
+			Alloc: types.GenesisAlloc{addr: {Balance: big.NewInt(1000000)}},
+		}
+		config = DefaultCacheConfigWithScheme(customrawdb.FirewoodScheme)
+	)
+	config.Pruning = false
+	config.CommitInterval = 16 // Firewood defers persistence when this is not 1
+	config.ChainDataDir = t.TempDir()
+
+	blockchain, err := createBlockChain(chainDB, config, gspec, common.Hash{})
+	require.NoError(t, err, "createBlockChain()")
+
+	// Accept fewer blocks than the commit interval so that genesis is not the
+	// latest revision when Firewood is closed.
+	signer := types.HomesteadSigner{}
+	_, blocks, _, err := GenerateChainWithGenesis(gspec, blockchain.engine, 3, 10, func(_ int, gen *BlockGen) {
+		tx, err := types.SignTx(types.NewTransaction(gen.TxNonce(addr), common.Address{1}, big.NewInt(10000), ethparams.TxGas, nil, nil), signer, key)
+		require.NoError(t, err)
+		gen.AddTx(tx)
+	})
+	require.NoError(t, err)
+	_, err = blockchain.InsertChain(blocks)
+	require.NoError(t, err, "InsertChain()")
+	for _, b := range blocks {
+		require.NoError(t, blockchain.Accept(b), "Accept()")
+	}
+	blockchain.Stop()
+
+	tdb := triedb.NewDatabase(chainDB, config.triedbConfig())
+	defer func() {
+		require.NoErrorf(t, tdb.Close(), "%T.Close", tdb)
+	}()
+	_, err = tdb.Reader(gspec.ToBlock().Root())
+	require.NoError(t, err, "genesis state not persisted")
+}
+
+// TestPruningToNonPruning tests that opening a previously pruned database as a
 // non-pruned database is successful.
 //
 // This test checks the following invariants:
@@ -444,7 +586,7 @@ func TestPruningToNonPruning(t *testing.T) {
 // the last accepted block) upon restart.
 // 2. Verify that a pruned => archival node has the state for all blocks
 // accepted during archival mode upon restart.
-func testPruningToNonPruning(t *testing.T, scheme string) {
+func TestPruningToNonPruning(t *testing.T) {
 	var (
 		key1, _   = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
 		key2, _   = crypto.HexToECDSA("8a1f9a8f95be41cd7ccb6168179afb4504aefe388d1e14474d32c45c72ce7b7a")
@@ -476,7 +618,7 @@ func testPruningToNonPruning(t *testing.T, scheme string) {
 		CommitInterval:            4096,
 		StateHistory:              numStates,
 		AcceptorQueueLimit:        64,
-		StateScheme:               scheme,
+		StateScheme:               rawdb.HashScheme,
 		ChainDataDir:              chainDataDir,
 	}
 
@@ -537,7 +679,7 @@ func testPruningToNonPruning(t *testing.T, scheme string) {
 		TriePrefetcherParallelism: 4,
 		Pruning:                   false, // Archive mode
 		AcceptorQueueLimit:        64,
-		StateScheme:               scheme,
+		StateScheme:               rawdb.HashScheme,
 		StateHistory:              32,
 		ChainDataDir:              chainDataDir,
 	}
@@ -1313,7 +1455,7 @@ func TestEIP3651(t *testing.T) {
 	// Note this differs from go-ethereum where the miner receives the gasUsed * block baseFee,
 	// as our handling of the coinbase payment is different.
 	// Note we use block.GasUsed() here as there is only one tx.
-	actual := state.GetBalance(common.HexToAddress("0x000000000000000000000000000000000000dEaD")).ToBig()
+	actual := state.GetBalance(block.Coinbase()).ToBig()
 	tx := block.Transactions()[0]
 	gasPrice := new(big.Int).Add(block.BaseFee(), tx.EffectiveGasTipValue(block.BaseFee()))
 	expected := new(big.Int).SetUint64(block.GasUsed() * gasPrice.Uint64())
@@ -1328,4 +1470,61 @@ func TestEIP3651(t *testing.T) {
 	if actual.Cmp(expected) != 0 {
 		t.Fatalf("sender balance incorrect: expected %d, got %d", expected, actual)
 	}
+}
+
+func TestLegacyMarkersRepairedOnStartup(t *testing.T) {
+	key, _ := crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+	addr := crypto.PubkeyToAddress(key.PublicKey)
+	db := rawdb.NewMemoryDatabase()
+	gspec := &Genesis{
+		// Flare: network classification (customheader.GasLimit's Songbird
+		// schedule) requires a SnowCtx, as in the other tests of this file.
+		Config: params.WithExtra(
+			&params.ChainConfig{HomesteadBlock: new(big.Int)},
+			&extras.ChainConfig{
+				AvalancheContext: extras.AvalancheContext{
+					SnowCtx: &snow.Context{NetworkID: constants.MainnetID},
+				},
+			},
+		),
+		Alloc: types.GenesisAlloc{addr: {Balance: big.NewInt(1000000)}},
+	}
+
+	blockchain, err := createBlockChain(db, pruningConfig, gspec, common.Hash{})
+	require.NoError(t, err, "createBlockChain()")
+
+	_, chain, _, err := GenerateChainWithGenesis(gspec, blockchain.engine, 3, 10, func(int, *BlockGen) {})
+	require.NoError(t, err, "GenerateChainWithGenesis()")
+
+	_, err = blockchain.InsertChain(chain)
+	require.NoErrorf(t, err, "%T.InsertChain()", blockchain)
+	lastAccepted := chain[1]
+	for _, b := range chain[:2] {
+		require.NoErrorf(t, blockchain.Accept(b), "%T.Accept()", blockchain)
+	}
+	blockchain.DrainAcceptorQueue()
+	genesisHash := blockchain.genesisBlock.Hash()
+	lastAcceptedHash := lastAccepted.Hash()
+	lastVerifiedHash := chain[len(chain)-1].Hash()
+	blockchain.Stop()
+
+	require.Equal(t, lastAcceptedHash, rawdb.ReadFinalizedBlockHash(db), "finalized block hash after normal shutdown")
+	require.Equal(t, lastVerifiedHash, rawdb.ReadHeadFastBlockHash(db), "head fast block hash after normal shutdown")
+
+	// Emulate legacy markers
+	legacyFinalizedBlockKey := []byte("LastFinalized") // mirrors the unexported [rawdb] schema key
+	require.NoErrorf(t, db.Delete(legacyFinalizedBlockKey), "%T.Delete(%q)", db, legacyFinalizedBlockKey)
+	require.Equal(t, common.Hash{}, rawdb.ReadFinalizedBlockHash(db), "finalized block hash after simulating a legacy database")
+	rawdb.WriteHeadFastBlockHash(db, genesisHash)
+
+	restarted, err := createBlockChain(db, pruningConfig, gspec, lastAcceptedHash)
+	require.NoError(t, err, "createBlockChain() on restart")
+	defer restarted.Stop()
+
+	require.Equal(t, lastAcceptedHash, rawdb.ReadFinalizedBlockHash(db), "repaired finalized block hash")
+	require.Equal(t, lastAcceptedHash, rawdb.ReadHeadFastBlockHash(db), "repaired head fast block hash")
+
+	// The repair must use the last accepted block, whose state [BlockChain.Stop]
+	// commits, because the block settled from must have its state on disk.
+	require.True(t, restarted.HasState(lastAccepted.Root()), "state of repaired marker block is on disk")
 }

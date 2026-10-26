@@ -21,6 +21,7 @@ func (vm *blockVM) BuildBlockWithContext(ctx context.Context, blockCtx *block.Co
 
 	ctx, span := vm.tracer.Start(ctx, vm.buildBlockWithContextTag, oteltrace.WithAttributes(
 		attribute.Int64("pChainHeight", int64(blockCtx.PChainHeight)),
+		attribute.Int64("proposerPChainHeight", int64(blockCtx.ProposerPChainHeight)),
 	))
 	defer span.End()
 

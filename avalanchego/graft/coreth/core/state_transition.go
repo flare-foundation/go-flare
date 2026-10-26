@@ -38,6 +38,7 @@ import (
 	"github.com/ava-labs/avalanchego/vms/evm/predicate"
 	"github.com/ava-labs/libevm/common"
 	cmath "github.com/ava-labs/libevm/common/math"
+	ethcore "github.com/ava-labs/libevm/core"
 	"github.com/ava-labs/libevm/core/types"
 	"github.com/ava-labs/libevm/core/vm"
 	"github.com/ava-labs/libevm/crypto/kzg4844"
@@ -483,7 +484,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	)
 
 	// Check clauses 4-5, subtract intrinsic gas if everything is correct
-	gas, err := IntrinsicGas(msg.Data, msg.AccessList, contractCreation, rules)
+	gas, err := ethcore.IntrinsicGas(msg.Data, msg.AccessList, contractCreation, rules)
 	if err != nil {
 		return nil, err
 	}
@@ -522,7 +523,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	chainID = st.evm.ChainConfig().ChainID
 	timestamp = st.evm.Context.Time
 
-	burnAddress, nominalGasPrice, isFlare, isSongbird, err := stateTransitionVariants.GetValue(chainID)(st)
+	burnAddress, nominalGasPrice, isFlare, isSongbird, err := StateTransitionVariants.GetValue(chainID)(st.evm.Context.Coinbase)
 	if err != nil {
 		return nil, err
 	}
@@ -568,7 +569,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	// Call the daemon if there is no vm error
 	if vmerr == nil && (isSongbird || isFlare) {
 		log := log.Root()
-		atomicDaemonAndMint(st, log)
+		AtomicDaemonAndMint(st, log)
 	}
 
 	if err := st.evm.ExecutionInvalidated(); err != nil {

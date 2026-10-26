@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gorilla/rpc/v2"
@@ -22,6 +23,7 @@ import (
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/snow/consensus/snowman"
 	"github.com/ava-labs/avalanchego/snow/engine/common"
+	"github.com/ava-labs/avalanchego/snow/pchain"
 	"github.com/ava-labs/avalanchego/snow/uptime"
 	"github.com/ava-labs/avalanchego/snow/validators"
 	"github.com/ava-labs/avalanchego/utils"
@@ -31,13 +33,13 @@ import (
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 	"github.com/ava-labs/avalanchego/version"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
-	"github.com/ava-labs/avalanchego/vms/platformvm/block"
 	"github.com/ava-labs/avalanchego/vms/platformvm/config"
 	"github.com/ava-labs/avalanchego/vms/platformvm/fx"
+	"github.com/ava-labs/avalanchego/vms/platformvm/genesis"
 	"github.com/ava-labs/avalanchego/vms/platformvm/network"
-	"github.com/ava-labs/avalanchego/vms/platformvm/reward"
+	"github.com/ava-labs/avalanchego/vms/platformvm/pchainreader"
+	"github.com/ava-labs/avalanchego/vms/platformvm/platform"
 	"github.com/ava-labs/avalanchego/vms/platformvm/state"
-	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
 	"github.com/ava-labs/avalanchego/vms/platformvm/utxo"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 	"github.com/ava-labs/avalanchego/vms/txs/mempool"
@@ -57,6 +59,7 @@ var (
 	_ snowmanblock.SetPreferenceWithContextChainVM = (*VM)(nil)
 	_ secp256k1fx.VM                               = (*VM)(nil)
 	_ validators.State                             = (*VM)(nil)
+	_ pchain.ReaderProvider                        = (*VM)(nil)
 )
 
 type VM struct {
@@ -77,6 +80,9 @@ type VM struct {
 	db  database.Database
 
 	state *state.State
+	// genesisUTXOs are the genesis UTXOs (TxID == ids.Empty), kept so the
+	// P-chain reader can resolve their owners; they have no producing tx.
+	genesisUTXOs []*avax.UTXO
 
 	fx            fx.Fx
 	codecRegistry codec.Registry
@@ -133,8 +139,6 @@ func (vm *VM) Initialize(
 		return err
 	}
 
-	rewards := reward.NewCalculator(vm.RewardConfig)
-
 	vm.state, err = state.New(
 		vm.db,
 		genesisBytes,
@@ -144,10 +148,20 @@ func (vm *VM) Initialize(
 		execConfig,
 		vm.ctx,
 		vm.metrics,
-		rewards,
+		vm.RewardConfig,
 	)
 	if err != nil {
 		return err
+	}
+
+	genesisState, err := genesis.Parse(genesisBytes)
+	if err != nil {
+		return fmt.Errorf("parsing genesis: %w", err)
+	}
+	vm.genesisUTXOs = make([]*avax.UTXO, 0, len(genesisState.UTXOs))
+	for _, utxo := range genesisState.UTXOs {
+		genesisUTXO := utxo.UTXO
+		vm.genesisUTXOs = append(vm.genesisUTXOs, &genesisUTXO)
 	}
 
 	validatorManager := pvalidators.NewManager(vm.Internal, vm.state, vm.metrics, &vm.clock)
@@ -163,7 +177,6 @@ func (vm *VM) Initialize(
 		Fx:           vm.fx,
 		FlowChecker:  utxoVerifier,
 		Uptimes:      vm.uptimeManager,
-		Rewards:      rewards,
 		Bootstrapped: &vm.bootstrapped,
 	}
 
@@ -331,9 +344,9 @@ func (vm *VM) createSubnet(subnetID ids.ID) error {
 		return err
 	}
 	for _, chain := range chains {
-		tx, ok := chain.Unsigned.(*txs.CreateChainTx)
+		tx, ok := chain.Unsigned.(*platform.CreateChainTx)
 		if !ok {
-			return fmt.Errorf("expected tx type *txs.CreateChainTx but got %T", chain.Unsigned)
+			return fmt.Errorf("expected tx type *platform.CreateChainTx but got %T", chain.Unsigned)
 		}
 		vm.Internal.CreateChain(chain.ID(), tx)
 	}
@@ -414,7 +427,7 @@ func (vm *VM) Shutdown(context.Context) error {
 func (vm *VM) ParseBlock(_ context.Context, b []byte) (snowman.Block, error) {
 	// Note: blocks to be parsed are not verified, so we must used blocks.Codec
 	// rather than blocks.GenesisCodec
-	statelessBlk, err := block.Parse(block.Codec, b)
+	statelessBlk, err := platform.ParseBlock(platform.Codec, b)
 	if err != nil {
 		return nil, err
 	}
@@ -502,7 +515,49 @@ func (vm *VM) GetBlockIDAtHeight(_ context.Context, height uint64) (ids.ID, erro
 	return vm.state.GetBlockIDAtHeight(height)
 }
 
-func (vm *VM) issueTxFromRPC(tx *txs.Tx) error {
+// NewPChainReader implements pchain.ReaderProvider. Every access to the
+// P-chain state through the returned reader holds lock (the P-chain context
+// lock when wired by chains/manager), one call at a time.
+//
+// The chain manager calls this while creating the P-chain, before Initialize,
+// so the reader must not touch the VM here: vmStore dereferences the state on
+// every call and the genesis UTXOs are read on first use. Other chains, the
+// only users, are created after the P-chain finished bootstrapping.
+func (vm *VM) NewPChainReader(lock sync.Locker) pchain.Reader {
+	return pchainreader.New(
+		pchainreader.NewLockedStore(lock, vmStore{vm: vm}),
+		func() []*avax.UTXO { return vm.genesisUTXOs },
+		vm.Internal.UpgradeConfig,
+	)
+}
+
+// vmStore adapts the VM's state to pchainreader.Store, resolving vm.state at
+// call time (it is nil until Initialize).
+type vmStore struct {
+	vm *VM
+}
+
+func (s vmStore) GetLastAccepted() ids.ID {
+	return s.vm.state.GetLastAccepted()
+}
+
+func (s vmStore) GetBlockIDAtHeight(height uint64) (ids.ID, error) {
+	return s.vm.state.GetBlockIDAtHeight(height)
+}
+
+func (s vmStore) GetBlockBytes(blockID ids.ID) ([]byte, error) {
+	return s.vm.state.GetBlockBytes(blockID)
+}
+
+func (s vmStore) GetTxBytes(txID ids.ID) ([]byte, error) {
+	return s.vm.state.GetTxBytes(txID)
+}
+
+func (s vmStore) GetRewardUTXOs(txID ids.ID) ([]*avax.UTXO, error) {
+	return s.vm.state.GetRewardUTXOs(txID)
+}
+
+func (vm *VM) issueTxFromRPC(tx *platform.Tx) error {
 	err := vm.Network.IssueTxFromRPC(tx)
 	if err != nil && !errors.Is(err, mempool.ErrDuplicateTx) {
 		vm.ctx.Log.Debug("failed to add tx to mempool",

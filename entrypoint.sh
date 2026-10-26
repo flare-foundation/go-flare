@@ -7,7 +7,13 @@ then
 	if [ -z "$PUBLIC_IP" ];
 	then
 		echo "Autoconfiguring public IP"
-		PUBLIC_IP=$(curl -s -m 10 https://flare.network/cdn-cgi/trace | grep 'ip=' | cut -d'=' -f2)
+		case "${NETWORK_ID,,}" in
+			songbird|coston) __TRACE_URL="https://${NETWORK_ID,,}-bootstrap.flare.network/cdn-cgi/trace" ;;
+			costwo) __TRACE_URL="https://coston2-bootstrap.flare.network/cdn-cgi/trace" ;;
+			*) __TRACE_URL="https://flare-bootstrap.flare.network/cdn-cgi/trace" ;;
+		esac
+		echo "  Using $__TRACE_URL"
+		PUBLIC_IP=$(curl -s -m 10 "$__TRACE_URL" | grep 'ip=' | cut -d'=' -f2)
 		echo "  Got public address '${PUBLIC_IP}'" 
 	else
 		echo "/!\\ AUTOCONFIGURE_PUBLIC_IP is enabled, but PUBLIC_IP is already set to '$PUBLIC_IP'! Skipping autoconfigure and using current PUBLIC_IP value!"
@@ -76,6 +82,7 @@ exec /app/build/avalanchego \
 	--public-ip="$PUBLIC_IP" \
 	--db-dir="$DB_DIR" \
 	--db-type="$DB_TYPE" \
+	--chain-data-dir="$CHAIN_DATA_DIR" \
 	--bootstrap-ips="$BOOTSTRAP_IPS" \
 	--bootstrap-ids="$BOOTSTRAP_IDS" \
 	--bootstrap-beacon-connection-timeout="$BOOTSTRAP_BEACON_CONNECTION_TIMEOUT" \

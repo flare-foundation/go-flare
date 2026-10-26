@@ -41,6 +41,7 @@ import (
 	"github.com/ava-labs/avalanchego/snow/networking/router"
 	"github.com/ava-labs/avalanchego/snow/networking/sender"
 	"github.com/ava-labs/avalanchego/snow/networking/timeout"
+	"github.com/ava-labs/avalanchego/snow/pchain"
 	"github.com/ava-labs/avalanchego/snow/validators"
 	"github.com/ava-labs/avalanchego/staking"
 	"github.com/ava-labs/avalanchego/subnets"
@@ -49,6 +50,7 @@ import (
 	"github.com/ava-labs/avalanchego/utils/buffer"
 	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/crypto/bls"
+	"github.com/ava-labs/avalanchego/utils/lock"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/metric"
 	"github.com/ava-labs/avalanchego/utils/perms"
@@ -193,7 +195,7 @@ type ManagerConfig struct {
 	Tracer                    trace.Tracer
 	Log                       logging.Logger
 	LogFactory                logging.Factory
-	VMManager                 vms.Manager // Manage mappings from vm ID --> vm
+	VMManager                 *vms.Manager // Manage mappings from vm ID --> vm
 	BlockAcceptorGroup        snow.AcceptorGroup
 	TxAcceptorGroup           snow.AcceptorGroup
 	VertexAcceptorGroup       snow.AcceptorGroup
@@ -208,10 +210,10 @@ type ManagerConfig struct {
 	Server                    server.Server // Handles HTTP API calls
 	AtomicMemory              *atomic.Memory
 	AVAXAssetID               ids.ID
-	XChainID                  ids.ID          // ID of the X-Chain,
-	CChainID                  ids.ID          // ID of the C-Chain,
-	CriticalChains            set.Set[ids.ID] // Chains that can't exit gracefully
-	TimeoutManager            timeout.Manager // Manages request timeouts when sending messages to other validators
+	XChainID                  ids.ID           // ID of the X-Chain,
+	CChainID                  ids.ID           // ID of the C-Chain,
+	CriticalChains            set.Set[ids.ID]  // Chains that can't exit gracefully
+	TimeoutManager            *timeout.Manager // Manages request timeouts when sending messages to other validators
 	Health                    health.Registerer
 	ProposerMinBlockDelay     time.Duration
 	SubnetConfigs             map[ids.ID]subnets.Config // ID -> SubnetConfig
@@ -253,6 +255,8 @@ type manager struct {
 	ids.Aliaser
 	ManagerConfig
 
+	pChainProgress *lock.ProgressSubscription[uint64]
+
 	// Those notified when a chain is created
 	registrants []Registrant
 
@@ -272,6 +276,8 @@ type manager struct {
 
 	// snowman++ related interface to allow validators retrieval
 	validatorState validators.State
+	// Flare: read access to accepted P-chain blocks for other chains
+	pchainReader pchain.Reader
 
 	avalancheGatherer    metrics.MultiGatherer            // chainID
 	handlerGatherer      metrics.MultiGatherer            // chainID
@@ -513,6 +519,7 @@ func (m *manager) buildChain(chainParams ChainParameters, sb subnets.Subnet) (*c
 			WarpSigner: warp.NewSigner(m.StakingBLSKey, m.NetworkID, chainParams.ID),
 
 			ValidatorState: m.validatorState,
+			PChainReader:   m.pchainReader,
 			ChainDataDir:   chainDataDir,
 		},
 		PrimaryAlias:   primaryAlias,
@@ -1114,6 +1121,8 @@ func (m *manager) createSnowmanChain(
 		messageSender = sender.Trace(messageSender, m.Tracer)
 	}
 
+	var pchainProgressUpdater smeng.PChainProgressUpdater
+
 	var bootstrapFunc func()
 	// If [m.validatorState] is nil then we are creating the P-Chain. Since the
 	// P-Chain is the first chain to be created, we can use it to initialize
@@ -1152,6 +1161,17 @@ func (m *manager) createSnowmanChain(
 			ctx.ValidatorState = validators.NewNoValidatorsState(ctx.ValidatorState)
 		}
 		m.validatorState = valState
+
+		// Flare: expose accepted P-chain blocks and staking transactions to
+		// the other chains (C-chain P-chain gateway precompile). The reader
+		// takes the P-chain lock around every state access.
+		if provider, ok := vm.(pchain.ReaderProvider); ok {
+			m.pchainReader = provider.NewPChainReader(&ctx.Lock)
+		} else {
+			m.Log.Warn("P-chain VM does not provide a P-chain reader",
+				zap.String("vmType", fmt.Sprintf("%T", vm)),
+			)
+		}
 
 		// Set this func only for platform
 		//
@@ -1241,6 +1261,16 @@ func (m *manager) createSnowmanChain(
 		messageSender,
 	); err != nil {
 		return nil, err
+	}
+
+	if ctx.ChainID == constants.PlatformChainID {
+		lastAcceptedHeight, err := getLastAcceptedHeight(vm)
+		if err != nil {
+			return nil, fmt.Errorf("error while getting last accepted height: %w", err)
+		}
+
+		m.pChainProgress = lock.NewProgressSubscription(lastAcceptedHeight)
+		pchainProgressUpdater = m.pChainProgress
 	}
 
 	bootstrapWeight := beacons.TotalWeight(ctx.SubnetID)
@@ -1347,15 +1377,16 @@ func (m *manager) createSnowmanChain(
 	// Create engine, bootstrapper and state-syncer in this order,
 	// to make sure start callbacks are duly initialized
 	engineConfig := smeng.Config{
-		Ctx:                 ctx,
-		AllGetsServer:       snowGetHandler,
-		VM:                  vm,
-		Sender:              messageSender,
-		Validators:          vdrs,
-		ConnectedValidators: connectedValidators,
-		Params:              consensusParams,
-		Consensus:           consensus,
-		PartialSync:         m.PartialSyncPrimaryNetwork && ctx.ChainID == constants.PlatformChainID,
+		Ctx:                   ctx,
+		AllGetsServer:         snowGetHandler,
+		VM:                    vm,
+		Sender:                messageSender,
+		Validators:            vdrs,
+		ConnectedValidators:   connectedValidators,
+		Params:                consensusParams,
+		Consensus:             consensus,
+		PartialSync:           m.PartialSyncPrimaryNetwork && ctx.ChainID == constants.PlatformChainID,
+		PChainProgressUpdater: pchainProgressUpdater,
 	}
 	var engine common.Engine
 	engine, err = smeng.New(engineConfig)
@@ -1596,4 +1627,18 @@ func (m *manager) getOrMakeVMGatherer(vmID ids.ID) (metrics.MultiGatherer, error
 	}
 	m.vmGatherer[vmID] = vmGatherer
 	return vmGatherer, nil
+}
+
+func getLastAcceptedHeight(vm block.ChainVM) (uint64, error) {
+	lastAcceptedBlock, err := vm.LastAccepted(context.Background())
+	if err != nil {
+		return 0, fmt.Errorf("error while determining last accepted block ID: %w", err)
+	}
+
+	lastBlock, err := vm.GetBlock(context.Background(), lastAcceptedBlock)
+	if err != nil {
+		return 0, fmt.Errorf("error while fetching last accepted block %x: %w", lastAcceptedBlock, err)
+	}
+
+	return lastBlock.Height(), nil
 }

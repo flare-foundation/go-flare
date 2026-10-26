@@ -15,6 +15,7 @@ go_library(
         "//chains/atomic",
         "//ids",
         "//proto/pb/p2p",
+        "//snow/pchain",
         "//snow/validators",
         "//upgrade",
         "//utils",

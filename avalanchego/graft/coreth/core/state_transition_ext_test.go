@@ -98,7 +98,7 @@ func TestStateTransitionPrioritizedContract(t *testing.T) {
 		balanceAfter := st.state.GetBalance(st.msg.From)
 
 		// max fee (funds above which are returned) depends on the chain used
-		_, limit, _, _, _ := stateTransitionVariants.GetValue(config.ChainID)(st)
+		_, limit, _, _, _ := StateTransitionVariants.GetValue(config.ChainID)(st.evm.Context.Coinbase)
 		maxFee := new(uint256.Int).Mul(uint256.NewInt(ethparams.TxGas), uint256.NewInt(limit))
 		diff := new(uint256.Int).Sub(balanceBefore, balanceAfter)
 

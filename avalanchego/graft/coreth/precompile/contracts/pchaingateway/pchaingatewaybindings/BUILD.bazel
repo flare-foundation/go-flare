@@ -1,0 +1,11 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "pchaingatewaybindings",
+    srcs = ["compile.go"],
+    importpath = "github.com/ava-labs/avalanchego/graft/coreth/precompile/contracts/pchaingateway/pchaingatewaybindings",
+    visibility = [
+        "//graft/coreth:__subpackages__",
+        "//graft/coreth:external_consumers",
+    ],
+)

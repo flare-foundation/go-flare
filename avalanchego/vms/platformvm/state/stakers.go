@@ -5,18 +5,18 @@ package state
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/google/btree"
 
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/iterator"
-
-	safemath "github.com/ava-labs/avalanchego/utils/math"
 )
 
-var ErrAddingStakerAfterDeletion = errors.New("attempted to add a staker after deleting it")
+var (
+	ErrAddingStakerAfterDeletion = errors.New("attempted to add a staker after deleting it")
+	errUnexpectedStaker          = errors.New("unexpected staker")
+)
 
 // StakerAdditionAfterDeletionLegality specifies whether a staker can be added after being deleted in the same diff.
 // Pre Helicon it is forbidden, and post Helicon it is allowed.
@@ -33,45 +33,55 @@ type Stakers interface {
 }
 
 type CurrentStakers interface {
-	// GetCurrentValidator returns the [staker] describing the validator on
-	// [subnetID] with [nodeID]. If the validator does not exist,
-	// [database.ErrNotFound] is returned.
+	// GetCurrentValidator returns the Staker describing the validator on subnetID with nodeID.
+	// [database.ErrNotFound] is returned if the validator is not in the validator set.
 	GetCurrentValidator(subnetID ids.ID, nodeID ids.NodeID) (*Staker, error)
 
-	// PutCurrentValidator adds the [staker] describing a validator to the
-	// staker set.
+	// PutCurrentValidator adds the Staker to the validator set.
 	//
-	// Invariant: [staker] is not currently a CurrentValidator
+	// This returns an error if staker is already in the validator set.
 	PutCurrentValidator(staker *Staker) error
 
-	// DeleteCurrentValidator removes the [staker] describing a validator from
-	// the staker set.
+	// DeleteCurrentValidator removes the Staker from the validator set.
 	//
-	// Invariant: [staker] is currently a CurrentValidator
-	DeleteCurrentValidator(staker *Staker)
+	// This returns an error if staker is not already in the validator set or if there are delegators
+	// for staker still present.
+	DeleteCurrentValidator(staker *Staker) error
 
-	// SetStakingInfo updates the mutable staking info for [nodeID] on [subnetID].
+	// SetStakingInfo updates the mutable staking info for nodeID on subnetID.
+	//
+	// This returns an error if the validator is not in the validator set.
 	SetStakingInfo(subnetID ids.ID, nodeID ids.NodeID, stakingInfo StakingInfo) error
 
-	// GetStakingInfo returns the mutable staking info for [nodeID] on [subnetID].
+	// GetStakingInfo returns the mutable staking info for nodeID on subnetID.
+	//
+	// This returns an error if the validator is not in the validator set.
 	GetStakingInfo(subnetID ids.ID, nodeID ids.NodeID) (StakingInfo, error)
 
 	// GetCurrentDelegatorIterator returns the delegators associated with the
-	// validator on [subnetID] with [nodeID]. Delegators are sorted by their
-	// removal from current staker set.
+	// validator on subnetID with nodeID. Delegators are sorted by their
+	// removal from current staker set (i.e. Staker.NextTime).
+	//
+	// This returns an empty iterator if the validator is not in the validator set.
 	GetCurrentDelegatorIterator(subnetID ids.ID, nodeID ids.NodeID) (iterator.Iterator[*Staker], error)
 
-	// PutCurrentDelegator adds the [staker] describing a delegator to the
+	// PutCurrentDelegator adds the staker describing a delegator to the
 	// staker set.
 	//
-	// Invariant: [staker] is not currently a CurrentDelegator
-	PutCurrentDelegator(staker *Staker)
+	// This returns an error if the validator is not in the validator set.
+	//
+	// Invariant: staker is not currently a CurrentDelegator
+	// TODO error if the delegator is already present
+	PutCurrentDelegator(staker *Staker) error
 
-	// DeleteCurrentDelegator removes the [staker] describing a delegator from
+	// DeleteCurrentDelegator removes the staker describing a delegator from
 	// the staker set.
 	//
-	// Invariant: [staker] is currently a CurrentDelegator
-	DeleteCurrentDelegator(staker *Staker)
+	// This returns an error if the validator is not in the validator set.
+	//
+	// Invariant: staker is currently a CurrentDelegator
+	// TODO error if the delegator was not present
+	DeleteCurrentDelegator(staker *Staker) error
 
 	// GetCurrentStakerIterator returns stakers in order of their removal from
 	// the current staker set.
@@ -114,8 +124,6 @@ type baseStakers struct {
 	// subnetID --> nodeID --> current state for the validator of the subnet
 	validators map[ids.ID]map[ids.NodeID]*baseStaker
 	stakers    *btree.BTreeG[*Staker]
-	// subnetID --> nodeID --> diff for that validator since the last db write
-	validatorDiffs map[ids.ID]map[ids.NodeID]*diffValidator
 }
 
 type baseStaker struct {
@@ -125,9 +133,8 @@ type baseStaker struct {
 
 func newBaseStakers() *baseStakers {
 	return &baseStakers{
-		validators:     make(map[ids.ID]map[ids.NodeID]*baseStaker),
-		stakers:        btree.NewG(defaultTreeDegree, (*Staker).Less),
-		validatorDiffs: make(map[ids.ID]map[ids.NodeID]*diffValidator),
+		validators: make(map[ids.ID]map[ids.NodeID]*baseStaker),
+		stakers:    btree.NewG(defaultTreeDegree, (*Staker).Less),
 	}
 }
 
@@ -150,9 +157,6 @@ func (v *baseStakers) PutValidator(staker *Staker) {
 	validator := v.getOrCreateValidator(staker.SubnetID, staker.NodeID)
 	validator.validator = staker
 
-	validatorDiff := v.getOrCreateValidatorDiff(staker.SubnetID, staker.NodeID)
-	validatorDiff.added = staker
-
 	v.stakers.ReplaceOrInsert(staker)
 }
 
@@ -160,10 +164,6 @@ func (v *baseStakers) DeleteValidator(staker *Staker) {
 	validator := v.getOrCreateValidator(staker.SubnetID, staker.NodeID)
 	validator.validator = nil
 	v.pruneValidator(staker.SubnetID, staker.NodeID)
-
-	validatorDiff := v.getOrCreateValidatorDiff(staker.SubnetID, staker.NodeID)
-	validatorDiff.added = nil
-	validatorDiff.removed = staker
 
 	v.stakers.Delete(staker)
 }
@@ -187,12 +187,6 @@ func (v *baseStakers) PutDelegator(staker *Staker) {
 	}
 	validator.delegators.ReplaceOrInsert(staker)
 
-	validatorDiff := v.getOrCreateValidatorDiff(staker.SubnetID, staker.NodeID)
-	if validatorDiff.addedDelegators == nil {
-		validatorDiff.addedDelegators = btree.NewG(defaultTreeDegree, (*Staker).Less)
-	}
-	validatorDiff.addedDelegators.ReplaceOrInsert(staker)
-
 	v.stakers.ReplaceOrInsert(staker)
 }
 
@@ -202,12 +196,6 @@ func (v *baseStakers) DeleteDelegator(staker *Staker) {
 		validator.delegators.Delete(staker)
 	}
 	v.pruneValidator(staker.SubnetID, staker.NodeID)
-
-	validatorDiff := v.getOrCreateValidatorDiff(staker.SubnetID, staker.NodeID)
-	if validatorDiff.deletedDelegators == nil {
-		validatorDiff.deletedDelegators = make(map[ids.ID]*Staker)
-	}
-	validatorDiff.deletedDelegators[staker.TxID] = staker
 
 	v.stakers.Delete(staker)
 }
@@ -247,20 +235,6 @@ func (v *baseStakers) pruneValidator(subnetID ids.ID, nodeID ids.NodeID) {
 	}
 }
 
-func (v *baseStakers) getOrCreateValidatorDiff(subnetID ids.ID, nodeID ids.NodeID) *diffValidator {
-	subnetValidatorDiffs, ok := v.validatorDiffs[subnetID]
-	if !ok {
-		subnetValidatorDiffs = make(map[ids.NodeID]*diffValidator)
-		v.validatorDiffs[subnetID] = subnetValidatorDiffs
-	}
-	validatorDiff, ok := subnetValidatorDiffs[nodeID]
-	if !ok {
-		validatorDiff = &diffValidator{}
-		subnetValidatorDiffs[nodeID] = validatorDiff
-	}
-	return validatorDiff
-}
-
 type diffStakers struct {
 	// isAdditionAfterDeletionAllowed specifies whether a staker can be added after being deleted in the same diff.
 	// This is done to preserve the pre-Helicon invariant that a staker cannot be added after being deleted,
@@ -281,54 +255,6 @@ type diffValidator struct {
 	removed           *Staker
 	addedDelegators   *btree.BTreeG[*Staker]
 	deletedDelegators map[ids.ID]*Staker
-}
-
-// weightChanges returns the total weight added to and removed from this
-// validator by this diff. The added weight includes the added validator and all
-// added delegators. The removed weight includes the removed validator and all
-// deleted delegators.
-func (d *diffValidator) weightChanges() (addedWeight uint64, removedWeight uint64, err error) {
-	if d.added != nil {
-		addedWeight = d.added.Weight
-	}
-
-	addedDelegatorIterator := iterator.FromTree(d.addedDelegators)
-	defer addedDelegatorIterator.Release()
-
-	for addedDelegatorIterator.Next() {
-		addedWeight, err = safemath.Add(addedWeight, addedDelegatorIterator.Value().Weight)
-		if err != nil {
-			return 0, 0, fmt.Errorf("failed to calculate added weight: %w", err)
-		}
-	}
-
-	if d.removed != nil {
-		removedWeight = d.removed.Weight
-	}
-	for _, staker := range d.deletedDelegators {
-		removedWeight, err = safemath.Add(removedWeight, staker.Weight)
-		if err != nil {
-			return 0, 0, fmt.Errorf("failed to calculate removed weight: %w", err)
-		}
-	}
-
-	return addedWeight, removedWeight, nil
-}
-
-func (d *diffValidator) WeightDiff() (ValidatorWeightDiff, error) {
-	addedWeight, removedWeight, err := d.weightChanges()
-	if err != nil {
-		return ValidatorWeightDiff{}, err
-	}
-
-	var weightDiff ValidatorWeightDiff
-	if err := weightDiff.Add(addedWeight); err != nil {
-		return ValidatorWeightDiff{}, fmt.Errorf("failed to increase node weight diff: %w", err)
-	}
-	if err := weightDiff.Sub(removedWeight); err != nil {
-		return ValidatorWeightDiff{}, fmt.Errorf("failed to decrease node weight diff: %w", err)
-	}
-	return weightDiff, nil
 }
 
 // GetValidator attempts to fetch the validator with the given subnetID and

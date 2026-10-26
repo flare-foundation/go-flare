@@ -16,21 +16,89 @@ import (
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/components/verify"
+	"github.com/ava-labs/avalanchego/vms/platformvm/platform"
 	"github.com/ava-labs/avalanchego/vms/platformvm/stakeable"
-	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 
 	safemath "github.com/ava-labs/avalanchego/utils/math"
 )
 
-var _ txs.UnsignedTx = (*dummyUnsignedTx)(nil)
+var _ platform.UnsignedTx = (*dummyUnsignedTx)(nil)
 
 type dummyUnsignedTx struct {
-	txs.BaseTx
+	platform.BaseTx
 }
 
-func (*dummyUnsignedTx) Visit(txs.Visitor) error {
+func (*dummyUnsignedTx) Visit(platform.TxVisitor) error {
 	return nil
+}
+
+func TestGetInputOutputs(t *testing.T) {
+	// TODO: add other TX types
+
+	baseIn := &avax.TransferableInput{
+		Asset: avax.Asset{ID: ids.GenerateTestID()},
+	}
+	baseOut := &avax.TransferableOutput{
+		Asset: avax.Asset{ID: ids.GenerateTestID()},
+	}
+	stakeOut := &avax.TransferableOutput{
+		Asset: avax.Asset{ID: ids.GenerateTestID()},
+	}
+
+	tests := []struct {
+		name             string
+		tx               platform.UnsignedTx
+		wantInputs       []*avax.TransferableInput
+		wantOutputs      []*avax.TransferableOutput
+		wantProducedAVAX uint64
+		wantErr          error
+	}{
+		{
+			name: "add_auto-renewed_validator",
+			tx: &platform.AddAutoRenewedValidatorTx{
+				BaseTx: platform.BaseTx{
+					BaseTx: avax.BaseTx{
+						Ins:  []*avax.TransferableInput{baseIn},
+						Outs: []*avax.TransferableOutput{baseOut},
+					},
+				},
+				StakeOuts: []*avax.TransferableOutput{stakeOut},
+			},
+			wantInputs:  []*avax.TransferableInput{baseIn},
+			wantOutputs: []*avax.TransferableOutput{baseOut, stakeOut},
+		},
+		{
+			name: "set_auto-renewed_validator_config",
+			tx: &platform.SetAutoRenewedValidatorConfigTx{
+				BaseTx: platform.BaseTx{
+					BaseTx: avax.BaseTx{
+						Ins:  []*avax.TransferableInput{baseIn},
+						Outs: []*avax.TransferableOutput{baseOut},
+					},
+				},
+			},
+			wantInputs:  []*avax.TransferableInput{baseIn},
+			wantOutputs: []*avax.TransferableOutput{baseOut},
+		},
+		{
+			name:    "reward_auto-renewed_validator",
+			tx:      &platform.RewardAutoRenewedValidatorTx{},
+			wantErr: ErrUnsupportedTxType,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			require := require.New(t)
+
+			gotInputs, gotOutputs, gotProducedAVAX, gotErr := GetInputOutputs(test.tx)
+			require.ErrorIs(gotErr, test.wantErr)
+			require.Equal(test.wantInputs, gotInputs)
+			require.Equal(test.wantOutputs, gotOutputs)
+			require.Equal(test.wantProducedAVAX, gotProducedAVAX)
+		})
+	}
 }
 
 func TestVerifySpendUTXOs(t *testing.T) {
@@ -51,7 +119,7 @@ func TestVerifySpendUTXOs(t *testing.T) {
 	now := time.Unix(1607133207, 0)
 
 	unsignedTx := dummyUnsignedTx{
-		BaseTx: txs.BaseTx{},
+		BaseTx: platform.BaseTx{},
 	}
 	unsignedTx.SetBytes([]byte{0})
 

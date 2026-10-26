@@ -23,6 +23,7 @@ import (
 	"github.com/ava-labs/avalanchego/graft/evm/message"
 	"github.com/ava-labs/avalanchego/graft/evm/sync/code"
 	"github.com/ava-labs/avalanchego/graft/evm/sync/evmstate"
+	"github.com/ava-labs/avalanchego/graft/evm/sync/leaf"
 	"github.com/ava-labs/avalanchego/graft/evm/sync/types"
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/network/p2p"
@@ -121,15 +122,16 @@ type ClientConfig struct {
 	Enabled            bool
 	SkipResume         bool
 
-	// LeafsRequestType specifies the wire format for leafs requests.
-	// Must be set explicitly by the caller.
-	LeafsRequestType message.LeafsRequestType
+	// LeafFetcher is the transport the state syncer reads leaves over. Required,
+	// so the caller names its wire protocol rather than inheriting a default.
+	LeafFetcher leaf.Fetcher
 }
 
 type client struct {
 	config           *ClientConfig
 	resumableSummary message.Syncable
 	cancel           context.CancelFunc
+	codeQueue        *code.Queue
 	wg               sync.WaitGroup
 	err              error
 }
@@ -286,6 +288,9 @@ func (c *client) Shutdown() error {
 	if c.cancel != nil {
 		c.cancel()
 	}
+	if c.codeQueue != nil {
+		c.codeQueue.Shutdown()
+	}
 	c.wg.Wait() // wait for the background goroutine to exit
 	return nil
 }
@@ -390,10 +395,11 @@ func (c *client) newSyncerRegistry(summary message.Syncable) (*SyncerRegistry, e
 		return nil, fmt.Errorf("failed to create block syncer: %w", err)
 	}
 
-	codeQueue, err := code.NewQueue(c.config.ChainDB, c.config.StateSyncDone)
+	codeQueue, err := code.NewQueue(c.config.ChainDB)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create code queue: %w", err)
 	}
+	c.codeQueue = codeQueue
 
 	codeSyncer, err := code.NewSyncer(c.config.Client, c.config.ChainDB, codeQueue.CodeHashes())
 	if err != nil {
@@ -415,18 +421,17 @@ func (c *client) newSyncerRegistry(summary message.Syncable) (*SyncerRegistry, e
 			tdb.Firewood,
 			summary.GetBlockRoot(),
 			codeQueue,
-			c.config.Client.AddClient(p2p.FirewoodRangeProofHandlerID),
-			c.config.Client.AddClient(p2p.FirewoodChangeProofHandlerID),
+			c.config.Client.AddClient(p2p.FirewoodProofHandlerID),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create firewood syncer: %w", err)
 		}
 	} else {
 		stateSyncer, err = evmstate.NewSyncer(
-			c.config.Client, c.config.ChainDB,
+			c.config.SnowCtx.Log,
+			c.config.LeafFetcher, c.config.ChainDB,
 			summary.GetBlockRoot(),
 			codeQueue, c.config.RequestSize,
-			c.config.LeafsRequestType,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create EVM state syncer: %w", err)

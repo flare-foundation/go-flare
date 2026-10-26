@@ -19,7 +19,7 @@ import (
 	"github.com/ava-labs/avalanchego/vms/avm"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/platformvm"
-	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
+	"github.com/ava-labs/avalanchego/vms/platformvm/platform"
 	"github.com/ava-labs/avalanchego/wallet/chain/c"
 	"github.com/ava-labs/avalanchego/wallet/chain/p"
 	"github.com/ava-labs/avalanchego/wallet/chain/x"
@@ -41,6 +41,7 @@ const (
 var (
 	_ UTXOClient = (*platformvm.Client)(nil)
 	_ UTXOClient = (*avm.Client)(nil)
+	_ UTXOClient = (*client.Client)(nil)
 )
 
 type UTXOClient interface {
@@ -60,7 +61,7 @@ type AVAXState struct {
 	PCTX    *pbuilder.Context
 	XClient *avm.Client
 	XCTX    *xbuilder.Context
-	CClient client.Client
+	CClient *client.Client
 	CCTX    *c.Context
 	UTXOs   walletcommon.UTXOs
 }
@@ -103,7 +104,7 @@ func FetchState(
 		{
 			id:     constants.PlatformChainID,
 			client: pClient,
-			codec:  txs.Codec,
+			codec:  platform.Codec,
 		},
 		{
 			id:     xCTX.BlockchainID,
@@ -167,7 +168,7 @@ func FetchPState(
 		ctx,
 		utxos,
 		chainClient,
-		txs.Codec,
+		platform.Codec,
 		constants.PlatformChainID,
 		constants.PlatformChainID,
 		addrList,

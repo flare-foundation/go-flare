@@ -17,14 +17,28 @@ import (
 type Context struct {
 	// PChainHeight is the height that this block will use to verify its state.
 	// In the proposervm, blocks verify the proposer based on the P-chain height
-	// recorded in the parent block. However, the P-chain height provided here
-	// is the P-chain height encoded into this block.
+	// recorded in the parent block.
 	//
-	// Pre-Etna this value matched the parent block's P-chain height.
+	// Post-Granite this is the ACP-181 epoch P-chain height, which is pinned
+	// for the whole epoch and used by warp predicate verification. Between
+	// Etna and Granite it was the P-chain height encoded into this block, and
+	// pre-Etna it matched the parent block's P-chain height.
 	//
 	// Because PreForkBlocks and PostForkOptions do not verify their execution
 	// against the P-chain's state, this context is undefined for those blocks.
 	PChainHeight uint64 `canoto:"uint,1" json:"pChainHeight"`
+
+	// ProposerPChainHeight is the P-chain height sealed into the proposervm
+	// block that wraps this block: chosen by the proposer (at least ~30s old
+	// via GetMinimumHeight), monotonic across blocks, never below
+	// PChainHeight, and already accepted by the local P-chain when the block
+	// is verified in normal operation. It advances with every block, unlike
+	// the epoch-pinned PChainHeight.
+	//
+	// Flare addition: the SAE C-chain commits it into the block header to
+	// bound the P-chain gateway precompile's reads. Undefined for
+	// PreForkBlocks and PostForkOptions.
+	ProposerPChainHeight uint64 `canoto:"uint,2" json:"proposerPChainHeight"`
 
 	canotoData canotoData_Context
 }

@@ -23,13 +23,15 @@ include:
       job_name_suffix: "-avalanchego"
       go_project_dir: "avalanchego"
       tags: ["flarenetwork-lg-cpu"]
-      go_version: "1.25.11"
+      go_version: "1.26.10"
+      cobertura_go_version: "1.26.10"
       go_test_command: "useradd -m testuser && chown -R testuser:testuser /builds $GOPATH $GOCACHE && su testuser -c 'go test -covermode=atomic -coverprofile=coverage.out $(go list ./... | grep -v /tests/)'"
   - component: gitlab.com/flarenetwork/ci-components-private/test-go@2
     inputs:
       job_name_suffix: "-coreth"
       go_project_dir: "avalanchego/graft/coreth"
       tags: ["flarenetwork-lg-cpu"]
-      go_version: "1.25.11"
+      go_version: "1.26.10"
+      cobertura_go_version: "1.26.10"
       go_test_command: "go test -covermode=atomic -coverprofile=coverage.out ./..."
   - template: Jobs/Secret-Detection.latest.gitlab-ci.yml

@@ -11,6 +11,7 @@ import (
 	"github.com/ava-labs/libevm/common"
 	"github.com/ava-labs/libevm/core/rawdb"
 	"github.com/ava-labs/libevm/core/state"
+	"github.com/ava-labs/libevm/core/vm"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/ava-labs/avalanchego/graft/coreth/precompile/contract"
 	"github.com/ava-labs/avalanchego/graft/coreth/precompile/modules"
 	"github.com/ava-labs/avalanchego/graft/coreth/precompile/precompileconfig"
+	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/snow/snowtest"
 	"github.com/ava-labs/avalanchego/vms/evm/predicate"
 )
@@ -58,6 +60,12 @@ type PrecompileTest struct {
 	ChainConfig precompileconfig.ChainConfig
 	// Rules is the rules to use for the precompile's block context
 	Rules extras.AvalancheRules
+	// SnowContext, if set, is returned by GetSnowContext instead of the
+	// default snowtest context (Flare: lets tests inject a P-chain reader).
+	SnowContext *snow.Context
+	// PrecompileEnv, if set, is returned by GetPrecompileEnv (Flare: lets
+	// tests observe InvalidateExecution).
+	PrecompileEnv vm.PrecompileEnvironment
 }
 
 type PrecompileRunparams struct {
@@ -166,13 +174,19 @@ func (test PrecompileTest) setup(t testing.TB, module modules.Module, state *tes
 	} else {
 		blockContext.EXPECT().Number().Return(big.NewInt(0)).AnyTimes()
 	}
-	snowContext := snowtest.Context(t, snowtest.CChainID)
+	snowContext := test.SnowContext
+	if snowContext == nil {
+		snowContext = snowtest.Context(t, snowtest.CChainID)
+	}
 
 	accessibleState := contract.NewMockAccessibleState(ctrl)
 	accessibleState.EXPECT().GetStateDB().Return(state).AnyTimes()
 	accessibleState.EXPECT().GetBlockContext().Return(blockContext).AnyTimes()
 	accessibleState.EXPECT().GetSnowContext().Return(snowContext).AnyTimes()
 	accessibleState.EXPECT().GetRules().Return(test.Rules).AnyTimes()
+	if test.PrecompileEnv != nil {
+		accessibleState.EXPECT().GetPrecompileEnv().Return(test.PrecompileEnv).AnyTimes()
+	}
 
 	if test.Config != nil {
 		require.NoError(t, module.Configure(chainConfig, test.Config, state, blockContext))

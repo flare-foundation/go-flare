@@ -1,6 +1,11 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
 load("//.bazel:defs.bzl", "graft_go_test")
 
+package(default_visibility = [
+    "//graft/coreth:__subpackages__",
+    "//graft/coreth:external_consumers",
+])
+
 go_library(
     name = "config",
     srcs = [
@@ -9,11 +14,13 @@ go_library(
         "default_config.go",
     ],
     importpath = "github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/config",
-    visibility = ["//visibility:public"],
     deps = [
         "//graft/evm/utils",
+        "//ids",
         "//utils/constants",
+        "//utils/set",
         "//vms/components/gas",
+        "//vms/evm/sync/customrawdb",
         "@com_github_ava_labs_libevm//common",
         "@com_github_ava_labs_libevm//common/hexutil",
         "@com_github_spf13_cast//:cast",
@@ -25,9 +32,13 @@ graft_go_test(
     srcs = ["config_test.go"],
     embed = [":config"],
     deps = [
-        "//utils",
+        "//graft/evm/utils",
+        "//ids",
         "//utils/constants",
+        "//utils/set",
+        "//vms/evm/sync/customrawdb",
         "@com_github_ava_labs_libevm//common",
+        "@com_github_ava_labs_libevm//core/rawdb",
         "@com_github_stretchr_testify//require",
     ],
 )

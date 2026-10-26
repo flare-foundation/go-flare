@@ -13,12 +13,15 @@ import (
 	"unsafe"
 
 	"github.com/ava-labs/libevm/common"
+	"github.com/ava-labs/libevm/common/hexutil"
 	"github.com/ava-labs/libevm/core/types"
+	"github.com/ava-labs/libevm/crypto"
 	"github.com/ava-labs/libevm/rlp"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ava-labs/avalanchego/utils"
+	"github.com/ava-labs/avalanchego/graft/evm/utils"
 	"github.com/ava-labs/avalanchego/vms/evm/acp226"
+	"github.com/ava-labs/avalanchego/vms/saevm/cchain/dynamic"
 )
 
 func TestHeaderRLP(t *testing.T) {
@@ -26,19 +29,63 @@ func TestHeaderRLP(t *testing.T) {
 
 	got := testHeaderEncodeDecode(t, rlp.EncodeToBytes, rlp.DecodeBytes)
 
-	// Golden data from original coreth implementation, before integration of
-	// libevm. WARNING: changing these values can break backwards compatibility
-	// with extreme consequences as block-hash calculation may break.
-	const (
-		wantHex     = "f90236a00100000000000000000000000000000000000000000000000000000000000000a00200000000000000000000000000000000000000000000000000000000000000940300000000000000000000000000000000000000a00400000000000000000000000000000000000000000000000000000000000000a00500000000000000000000000000000000000000000000000000000000000000a00600000000000000000000000000000000000000000000000000000000000000b901000700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008090a0b0c0da00e00000000000000000000000000000000000000000000000000000000000000880f00000000000000a015000000000000000000000000000000000000000000000000000000000000001016171213a014000000000000000000000000000000000000000000000000000000000000001819"
-		wantHashHex = "be13d7b6f1242dd87477eee76a46f9fa58311bf459e0d49cac6862b187b3fe9c"
-	)
+	// Golden data derived from the original coreth implementation (see
+	// [wantHexWithoutPChainHeight]) extended by the Flare [HeaderExtra.PChainHeight]
+	// field: the list length prefix grows by one byte and the value (32 = 0x20)
+	// is appended as the last optional field. WARNING: changing these values can
+	// break backwards compatibility with extreme consequences as block-hash
+	// calculation may break.
+	const wantHex = "f9023da00100000000000000000000000000000000000000000000000000000000000000a00200000000000000000000000000000000000000000000000000000000000000940300000000000000000000000000000000000000a00400000000000000000000000000000000000000000000000000000000000000a00500000000000000000000000000000000000000000000000000000000000000a00600000000000000000000000000000000000000000000000000000000000000b901000700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008090a0b0c0da00e00000000000000000000000000000000000000000000000000000000000000880f00000000000000a015000000000000000000000000000000000000000000000000000000000000001016171213a0140000000000000000000000000000000000000000000000000000000000000018191a1b1c1d1e1f20"
 
 	require.Equal(t, wantHex, hex.EncodeToString(got), "Header RLP")
 
 	header, _ := headerWithNonZeroFields()
-	gotHashHex := header.Hash().Hex()
-	require.Equal(t, "0x"+wantHashHex, gotHashHex, "Header.Hash()")
+	wantHash := crypto.Keccak256Hash(common.FromHex(wantHex))
+	require.Equal(t, wantHash, header.Hash(), "Header.Hash()")
+}
+
+// wantHexWithoutPChainHeight is the golden RLP encoding of [headerWithNonZeroFields]
+// before the Flare [HeaderExtra.PChainHeight] field existed (i.e. the encoding of
+// every header produced before Helicon). It MUST stay reproducible: legacy
+// coreth blocks and every pre-Helicon header carry a nil PChainHeight, and
+// their hashes must not change.
+const wantHexWithoutPChainHeight = "f9023ca00100000000000000000000000000000000000000000000000000000000000000a00200000000000000000000000000000000000000000000000000000000000000940300000000000000000000000000000000000000a00400000000000000000000000000000000000000000000000000000000000000a00500000000000000000000000000000000000000000000000000000000000000a00600000000000000000000000000000000000000000000000000000000000000b901000700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008090a0b0c0da00e00000000000000000000000000000000000000000000000000000000000000880f00000000000000a015000000000000000000000000000000000000000000000000000000000000001016171213a0140000000000000000000000000000000000000000000000000000000000000018191a1b1c1d1e1f"
+
+func TestHeaderRLPLegacyCompat(t *testing.T) {
+	t.Parallel()
+
+	header, extra := headerWithNonZeroFields()
+	extra.PChainHeight = nil
+
+	got, err := rlp.EncodeToBytes(header)
+	require.NoError(t, err, "encode")
+	require.Equal(t, wantHexWithoutPChainHeight, hex.EncodeToString(got), "Header RLP without PChainHeight")
+
+	wantHash := crypto.Keccak256Hash(common.FromHex(wantHexWithoutPChainHeight))
+	require.Equal(t, wantHash, header.Hash(), "Header.Hash() without PChainHeight")
+
+	// A nil PChainHeight must also survive a round trip as nil (not zero).
+	gotHeader := new(types.Header)
+	require.NoError(t, rlp.DecodeBytes(got, gotHeader), "decode")
+	require.Nil(t, GetHeaderExtra(gotHeader).PChainHeight)
+}
+
+func TestPostRPCMarshalPChainHeight(t *testing.T) {
+	t.Parallel()
+
+	header, extra := headerWithNonZeroFields()
+
+	set := make(map[string]any)
+	extra.PostRPCMarshal(header, set)
+	require.Contains(t, set, "pChainHeight")
+	require.Equal(t, hexutil.Uint64(32), set["pChainHeight"])
+
+	extra.PChainHeight = nil
+	unset := make(map[string]any)
+	extra.PostRPCMarshal(header, unset)
+	require.NotContains(t, unset, "pChainHeight")
+	// The pre-existing SAE fields are unaffected by the nil PChainHeight.
+	require.Contains(t, unset, "settledHeight")
 }
 
 func TestHeaderJSON(t *testing.T) {
@@ -112,11 +159,18 @@ func headerWithNonZeroFields() (*types.Header, *HeaderExtra) {
 		ParentBeaconRoot: &common.Hash{20},
 	}
 	extra := &HeaderExtra{
-		ExtDataHash:      common.Hash{21},
-		ExtDataGasUsed:   big.NewInt(22),
-		BlockGasCost:     big.NewInt(23),
-		TimeMilliseconds: utils.PointerTo[uint64](24),
-		MinDelayExcess:   utils.PointerTo(acp226.DelayExcess(25)),
+		ExtDataHash:         common.Hash{21},
+		ExtDataGasUsed:      big.NewInt(22),
+		BlockGasCost:        big.NewInt(23),
+		TimeMilliseconds:    utils.PointerTo[uint64](24),
+		MinDelayExcess:      utils.PointerTo(acp226.DelayExcess(25)),
+		TargetExponent:      utils.PointerTo(dynamic.TargetExponent(26)),
+		MinPriceExponent:    utils.PointerTo(dynamic.PriceExponent(27)),
+		SettledHeight:       utils.PointerTo[uint64](28),
+		SettledGasUnix:      utils.PointerTo[uint64](29),
+		SettledGasNumerator: utils.PointerTo[uint64](30),
+		SettledExcess:       utils.PointerTo[uint64](31),
+		PChainHeight:        utils.PointerTo[uint64](32),
 	}
 	return WithHeaderExtra(header, extra), extra
 }
@@ -139,7 +193,7 @@ func allFieldsSet[T interface {
 			fieldValue := v.Field(i)
 			if !field.IsExported() {
 				// Note: we need to check unexported fields especially for [Block].
-				if fieldValue.Kind() == reflect.Ptr {
+				if fieldValue.Kind() == reflect.Pointer {
 					require.Falsef(t, fieldValue.IsNil(), "field %q is nil", field.Name)
 				}
 				fieldValue = reflect.NewAt(fieldValue.Type(), unsafe.Pointer(fieldValue.UnsafeAddr())).Elem()
@@ -170,10 +224,14 @@ func allFieldsSet[T interface {
 				assertNonZero(t, f)
 			case *acp226.DelayExcess:
 				assertNonZero(t, f)
+			case *dynamic.TargetExponent:
+				assertNonZero(t, f)
+			case *dynamic.PriceExponent:
+				assertNonZero(t, f)
 			case []uint8, []*types.Header, types.Transactions, []*types.Transaction, types.Withdrawals, []*types.Withdrawal:
 				require.NotEmpty(t, f)
 			default:
-				require.Failf(t, "Field has unsupported type", "Field %q has unsupported type %T", field.Name, f)
+				t.Fatalf("Field %q has unsupported type %T", field.Name, f)
 			}
 		})
 	}
@@ -181,7 +239,8 @@ func allFieldsSet[T interface {
 
 func assertNonZero[T interface {
 	common.Hash | common.Address | types.BlockNonce | uint32 | uint64 | types.Bloom |
-		*big.Int | *common.Hash | *uint64 | *[]uint8 | *types.Header | *acp226.DelayExcess
+		*big.Int | *common.Hash | *uint64 | *[]uint8 | *types.Header |
+		*acp226.DelayExcess | *dynamic.TargetExponent | *dynamic.PriceExponent
 }](t *testing.T, v T) {
 	t.Helper()
 	require.NotZero(t, v)

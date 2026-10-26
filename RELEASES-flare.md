@@ -2,6 +2,33 @@
 
 Here are listed specific changes to the code for the Flare and Songbird networks. For a comprehensive list of general changes, see [here](./avalanchego/RELEASES.md) for the AvalancheGo project — which, since v1.14.x, also contains Coreth (grafted in at `avalanchego/graft/coreth`).
 
+## v1.15.1-coston2
+
+This is a **pre-release for the Coston2 network only**. It updates the Flare and Songbird codebase to AvalancheGo v1.15.1 (Helicon upgrade). The node refuses to start on the Flare and Songbird networks (`mainnet is not supported`); the activation times for the Coston, Songbird and Flare networks will be scheduled in the final release.
+
+The changes go into effect
+ * November 3, 2026 at 12 PM UTC for the Coston2 network.
+
+Coston2 nodes should be updated to this version before this time.
+
+### Helicon upgrade
+
+See the [AvalancheGo v1.15.0 and v1.15.1 release notes](./avalanchego/RELEASES.md) for the complete list of API, configuration and metrics changes.
+
+### Flare-specific changes
+
+ * A new read-only **P-chain gateway precompile** at `0x0300000000000000000000000000000000000000` lets C-chain contracts read accepted P-chain data during execution: the P-chain height, blocks, transactions with their inputs and outputs, and stake owners. See its [documentation](./avalanchego/graft/coreth/precompile/contracts/pchaingateway/README.md).
+ * The daemon contract call, the burning of transaction fees and the fee refunds for prioritized contracts are preserved under the new asynchronous execution. The state connector handling, inactive since the Durango upgrade, is removed.
+ * For the Coston2 network, the minimum validator staking duration is reduced from 60 days to 7 days and the minimum delegation duration from 14 days to 24 hours after the activation.
+
+### Note:
+
+ * After the activation, the C-chain ignores a number of configuration options and logs a warning for each of them, `eth-apis` is deprecated in favor of `apis`, and `state-sync-enabled` defaults to `true`. The `commit-interval` option must be left at its default (4096). See the [C-chain config reference](./avalanchego/vms/saevm/cchain/config.md).
+ * The `admin`, `warp` and `personal` API namespaces, the `eth_accounts`, `eth_coinbase` and `eth_etherbase` RPCs and several `debug` RPCs are removed.
+ * The C-chain config option `api-max-duration` accepts only a duration string (for example `"30s"`) after the activation; a numeric value (nanoseconds) is rejected and the node fails to start. Update the value before the activation, the string form is also accepted by the current VM.
+ * The C-chain keeps its execution results in the chain data directory (`--chain-data-dir`, default `<data-dir>/chainData`), outside the node database. This directory must be on persistent storage together with the database directory; a node that loses it cannot start and has to be resynced. The Docker images now expose it as the `CHAIN_DATA_DIR` environment variable, defaulting to `/app/db/chainData` inside the database volume, so a mount at `/app/db` persists both.
+ * Building from source now requires Go 1.26.10 or later.
+
 ## v1.14.2
 
 This release updates the Flare and Songbird codebase to AvalancheGo v1.14.2.

@@ -27,7 +27,8 @@ var (
 	_ block.WithVerifyContext = ContextEnabledBlockMock{}
 
 	blockContext = &block.Context{
-		PChainHeight: 1,
+		PChainHeight:         1,
+		ProposerPChainHeight: 2,
 	}
 
 	blkID    = ids.ID{1}

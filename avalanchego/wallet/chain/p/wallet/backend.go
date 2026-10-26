@@ -13,7 +13,7 @@ import (
 	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/platformvm/fx"
-	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
+	"github.com/ava-labs/avalanchego/vms/platformvm/platform"
 	"github.com/ava-labs/avalanchego/wallet/chain/p/builder"
 	"github.com/ava-labs/avalanchego/wallet/chain/p/signer"
 	"github.com/ava-labs/avalanchego/wallet/subnet/primary/common"
@@ -26,14 +26,14 @@ type Backend interface {
 	builder.Backend
 	signer.Backend
 
-	AcceptTx(ctx context.Context, tx *txs.Tx) error
+	AcceptTx(ctx context.Context, tx *platform.Tx) error
 }
 
 type backend struct {
 	common.ChainUTXOs
 
 	ownersLock sync.RWMutex
-	owners     map[ids.ID]fx.Owner // subnetID or validationID -> owner
+	owners     map[ids.ID]fx.Owner // subnetID, validationID, or auto-renewed validator txID -> owner
 }
 
 func NewBackend(utxos common.ChainUTXOs, owners map[ids.ID]fx.Owner) Backend {
@@ -43,7 +43,7 @@ func NewBackend(utxos common.ChainUTXOs, owners map[ids.ID]fx.Owner) Backend {
 	}
 }
 
-func (b *backend) AcceptTx(ctx context.Context, tx *txs.Tx) error {
+func (b *backend) AcceptTx(ctx context.Context, tx *platform.Tx) error {
 	txID := tx.ID()
 	err := tx.Unsigned.Visit(&backendVisitor{
 		b:    b,

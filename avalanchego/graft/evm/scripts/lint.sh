@@ -51,7 +51,7 @@ source "$SCRIPT_DIR/lint_setup.sh"
 # by default, "./scripts/lint.sh" runs all lint tests
 # to run only "license_header" test
 # TESTS='license_header' ./scripts/lint.sh
-TESTS=${TESTS:-"golangci_lint avalanche_golangci_lint warn_testify_assert license_header require_error_is_no_funcs_as_params single_import interface_compliance_nil require_no_error_inline_func import_testing_only_in_tests"}
+TESTS=${TESTS:-"golangci_lint avalanche_golangci_lint warn_testify_assert license_header single_import interface_compliance_nil require_no_error_inline_func import_testing_only_in_tests"}
 
 function test_golangci_lint {
   "$RUN_TOOL" golangci-lint run --config ../.golangci.yml
@@ -100,13 +100,6 @@ function test_license_header {
 
 function test_single_import {
   if grep -R -zo -P 'import \(\n\t".*"\n\)' "${AVALANCHE_FILES[@]}"; then
-    echo ""
-    return 1
-  fi
-}
-
-function test_require_error_is_no_funcs_as_params {
-  if grep -R -zo -P 'require.ErrorIs\(.+?\)[^\n]*\)\n' "${AVALANCHE_FILES[@]}"; then
     echo ""
     return 1
   fi
@@ -164,8 +157,7 @@ function test_import_testing_only_in_tests {
   # Files in /tests/ are already excluded by the `find ... ! -path`
   INTENDED_FOR_TESTING="${IN_TEST_PKG}"
 
-  # -3 suppresses files that have test logic and have the "test" build tag
-  # -2 suppresses files that are tagged despite not having detectable test logic
+  # Report files with test-only dependencies outside a test package.
   UNTAGGED=$(comm -23 <(echo "${HAVE_TEST_LOGIC}" | sort -u) <(echo "${INTENDED_FOR_TESTING}" | sort -u))
   if [ -z "${UNTAGGED}" ]; then
     return 0

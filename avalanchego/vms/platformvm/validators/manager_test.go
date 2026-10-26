@@ -19,10 +19,10 @@ import (
 	"github.com/ava-labs/avalanchego/utils/crypto/bls"
 	"github.com/ava-labs/avalanchego/utils/crypto/bls/signer/localsigner"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
-	"github.com/ava-labs/avalanchego/vms/platformvm/block"
 	"github.com/ava-labs/avalanchego/vms/platformvm/config"
 	"github.com/ava-labs/avalanchego/vms/platformvm/genesis/genesistest"
 	"github.com/ava-labs/avalanchego/vms/platformvm/metrics"
+	"github.com/ava-labs/avalanchego/vms/platformvm/platform"
 	"github.com/ava-labs/avalanchego/vms/platformvm/state"
 	"github.com/ava-labs/avalanchego/vms/platformvm/state/statetest"
 
@@ -75,7 +75,7 @@ func TestGetValidatorSet_AfterEtna(t *testing.T) {
 
 	// Add a subnet staker during the Etna upgrade
 	{
-		blk, err := block.NewBanffStandardBlock(upgradeTime, s.GetLastAccepted(), 1, nil)
+		blk, err := platform.NewBanffStandardBlock(upgradeTime, s.GetLastAccepted(), 1, nil)
 		require.NoError(err)
 
 		s.SetHeight(blk.Height())
@@ -91,7 +91,7 @@ func TestGetValidatorSet_AfterEtna(t *testing.T) {
 
 	// Remove a subnet staker
 	{
-		blk, err := block.NewBanffStandardBlock(s.GetTimestamp(), s.GetLastAccepted(), 2, nil)
+		blk, err := platform.NewBanffStandardBlock(s.GetTimestamp(), s.GetLastAccepted(), 2, nil)
 		require.NoError(err)
 
 		s.SetHeight(blk.Height())
@@ -99,7 +99,7 @@ func TestGetValidatorSet_AfterEtna(t *testing.T) {
 		s.AddStatelessBlock(blk)
 		s.SetLastAccepted(blk.ID())
 
-		s.DeleteCurrentValidator(subnetStaker)
+		require.NoError(s.DeleteCurrentValidator(subnetStaker))
 
 		require.NoError(s.Commit())
 	}
@@ -188,7 +188,7 @@ func TestGetWarpValidatorSets(t *testing.T) {
 		t.Helper()
 
 		lastHeight++
-		blk, err := block.NewBanffStandardBlock(s.GetTimestamp(), s.GetLastAccepted(), lastHeight, nil)
+		blk, err := platform.NewBanffStandardBlock(s.GetTimestamp(), s.GetLastAccepted(), lastHeight, nil)
 		require.NoError(err)
 
 		s.SetHeight(blk.Height())
@@ -200,7 +200,7 @@ func TestGetWarpValidatorSets(t *testing.T) {
 			require.NoError(s.PutCurrentValidator(v))
 		}
 		for _, v := range removedStakers {
-			s.DeleteCurrentValidator(v)
+			require.NoError(s.DeleteCurrentValidator(v))
 		}
 		require.NoError(s.Commit())
 	}

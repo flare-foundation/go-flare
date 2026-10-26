@@ -17,13 +17,16 @@ import (
 	"github.com/ava-labs/avalanchego/graft/coreth/nativeasset"
 	"github.com/ava-labs/avalanchego/graft/coreth/params/extras"
 	"github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/customheader"
+	"github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/customtypes"
 	"github.com/ava-labs/avalanchego/graft/coreth/precompile/contract"
 	"github.com/ava-labs/avalanchego/graft/coreth/precompile/modules"
 	"github.com/ava-labs/avalanchego/graft/coreth/precompile/precompileconfig"
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/utils/set"
 	"github.com/ava-labs/avalanchego/vms/evm/predicate"
+	"github.com/ava-labs/avalanchego/vms/saevm/hook"
 
+	evmprecompileconfig "github.com/ava-labs/avalanchego/graft/evm/precompileconfig"
 	ethparams "github.com/ava-labs/libevm/params"
 )
 
@@ -49,9 +52,38 @@ func (RulesExtra) CanExecuteTransaction(_ common.Address, _ *common.Address, _ l
 	return nil
 }
 
-// MinimumGasConsumption is a no-op.
-func (RulesExtra) MinimumGasConsumption(x uint64) uint64 {
-	return (ethparams.NOOPHooks{}).MinimumGasConsumption(x)
+func (r RulesExtra) ShouldRefundGas() bool {
+	return !r.IsApricotPhase1
+}
+
+// MinimumGasConsumption returns the ACP-194 gas-charged floor (ceil(limit/2)).
+func (r RulesExtra) MinimumGasConsumption(limit uint64) uint64 {
+	if extras.Rules(r).IsHelicon {
+		return hook.MinimumGasConsumption(limit)
+	}
+	return (ethparams.NOOPHooks{}).MinimumGasConsumption(limit)
+}
+
+// ShouldCreditBaseFeeToCoinbase returns true to credit the base fee to the
+// coinbase (the blackhole address on the C-Chain). The C-Chain has
+// historically credited the full fee (base + priority) to the blackhole
+// address, but by default libevm's state transition only credits the priority
+// fee and discards the base fee.
+func (RulesExtra) ShouldCreditBaseFeeToCoinbase() bool {
+	return true
+}
+
+// AccessListGas computes the intrinsic gas for an access list.
+// When predicaters exist, it calculates gas per-tuple, delegating to predicate
+// contracts for addresses that have them. Otherwise, it returns override=false
+// to use the default calculation.
+func (r RulesExtra) AccessListGas(accessList libevm.AccessList) (uint64, bool, error) {
+	rules := extras.Rules(r)
+	if !rules.PredicatersExist() {
+		return 0, false, nil
+	}
+	gas, err := evmprecompileconfig.AccessListGasWithPredicates(rules.AvalancheRules, rules.Predicaters, accessList)
+	return gas, true, err
 }
 
 var PrecompiledContractsApricotPhase2 = map[common.Address]vm.PrecompiledContract{
@@ -136,6 +168,9 @@ func makePrecompile(contract contract.StatefulPrecompiledContract) libevm.Precom
 				number:           env.BlockNumber(),
 				time:             env.BlockTime(),
 				predicateResults: predicateResults,
+				// Flare: the header value copy shares the extras payload, so
+				// this is the P-chain height committed by the SAE builder.
+				pChainHeight: customtypes.GetHeaderExtra(&header).PChainHeight,
 			},
 		}
 
@@ -208,6 +243,7 @@ type precompileBlockContext struct {
 	number           *big.Int
 	time             uint64
 	predicateResults predicate.BlockResults
+	pChainHeight     *uint64 // Flare: HeaderExtra.PChainHeight
 }
 
 func (p *precompileBlockContext) Number() *big.Int {
@@ -220,4 +256,12 @@ func (p *precompileBlockContext) Timestamp() uint64 {
 
 func (p *precompileBlockContext) GetPredicateResults(txHash common.Hash, precompileAddress common.Address) set.Bits {
 	return p.predicateResults.Get(txHash, precompileAddress)
+}
+
+// PChainHeight returns the P-chain height committed in the block header, if any.
+func (p *precompileBlockContext) PChainHeight() (uint64, bool) {
+	if p.pChainHeight == nil {
+		return 0, false
+	}
+	return *p.pChainHeight, true
 }

@@ -4,22 +4,32 @@ printf "\x1b[34mLocalflare 5-Node Deployment\x1b[0m\n\n"
 export WEB3_API=debug
 export COMPLETE_GET_VALIDATORS="true"
 
-if ! echo $1 | grep -e "--existing" -q; then
-  rm -rf $LAUNCH_DIR/logs/local
-  mkdir -p $LAUNCH_DIR/logs/local
-  rm -rf $LAUNCH_DIR/db/local
-  mkdir -p $LAUNCH_DIR/db/local
-  mkdir -p $LAUNCH_DIR/logs/local/node1
-  mkdir -p $LAUNCH_DIR/logs/local/node2
-  mkdir -p $LAUNCH_DIR/logs/local/node3
-  mkdir -p $LAUNCH_DIR/logs/local/node4
-  mkdir -p $LAUNCH_DIR/logs/local/node5
-  mkdir -p $LAUNCH_DIR/db/local/node1
-  mkdir -p $LAUNCH_DIR/db/local/node2
-  mkdir -p $LAUNCH_DIR/db/local/node3
-  mkdir -p $LAUNCH_DIR/db/local/node4
-  mkdir -p $LAUNCH_DIR/db/local/node5
-fi
+case "${1:-}" in
+  "") ;;
+  --clean)
+    rm -rf "$LAUNCH_DIR/db/node1"
+    rm -rf "$LAUNCH_DIR/db/node2"
+    rm -rf "$LAUNCH_DIR/db/node3"
+    rm -rf "$LAUNCH_DIR/db/node4"
+    rm -rf "$LAUNCH_DIR/db/node5"
+    ;;
+  *)
+    printf "Usage: %s [--clean]\n" "$0" >&2
+    exit 2
+    ;;
+esac
+
+rm -rf "$LAUNCH_DIR/logs/local"
+mkdir -p "$LAUNCH_DIR/logs/local/node1"
+mkdir -p "$LAUNCH_DIR/logs/local/node2"
+mkdir -p "$LAUNCH_DIR/logs/local/node3"
+mkdir -p "$LAUNCH_DIR/logs/local/node4"
+mkdir -p "$LAUNCH_DIR/logs/local/node5"
+mkdir -p "$LAUNCH_DIR/db/node1"
+mkdir -p "$LAUNCH_DIR/db/node2"
+mkdir -p "$LAUNCH_DIR/db/node3"
+mkdir -p "$LAUNCH_DIR/db/node4"
+mkdir -p "$LAUNCH_DIR/db/node5"
 
 # NODE 1
 printf "Launching Node 1 at 127.0.0.1:9650\n"
@@ -27,7 +37,9 @@ nohup ./build/avalanchego \
   --public-ip=127.0.0.1 \
   --http-port=9650 \
   --staking-port=9651 \
+  --data-dir=db/node1 \
   --db-dir=db/node1 \
+  --chain-config-dir="$LAUNCH_DIR/configs/chains" \
   --network-id=localflare \
   --index-enabled=true \
   --staking-tls-cert-file=$LAUNCH_DIR/staking/local/staker1.crt \
@@ -44,7 +56,9 @@ nohup ./build/avalanchego \
   --public-ip=127.0.0.1 \
   --http-port=9652 \
   --staking-port=9653 \
+  --data-dir=db/node2 \
   --db-dir=db/node2 \
+  --chain-config-dir="$LAUNCH_DIR/configs/chains" \
   --network-id=localflare \
   --index-enabled=true \
   --bootstrap-ips=127.0.0.1:9651 \
@@ -62,7 +76,9 @@ nohup ./build/avalanchego \
   --public-ip=127.0.0.1 \
   --http-port=9654 \
   --staking-port=9655 \
+  --data-dir=db/node3 \
   --db-dir=db/node3 \
+  --chain-config-dir="$LAUNCH_DIR/configs/chains" \
   --network-id=localflare \
   --bootstrap-ips=127.0.0.1:9651 \
   --bootstrap-ids=NodeID-7Xhw2mDxuDS44j42TCB6U5579esbSt3Lg \
@@ -79,7 +95,9 @@ nohup ./build/avalanchego \
   --public-ip=127.0.0.1 \
   --http-port=9656 \
   --staking-port=9657 \
+  --data-dir=db/node4 \
   --db-dir=db/node4 \
+  --chain-config-dir="$LAUNCH_DIR/configs/chains" \
   --network-id=localflare \
   --bootstrap-ips=127.0.0.1:9651 \
   --bootstrap-ids=NodeID-7Xhw2mDxuDS44j42TCB6U5579esbSt3Lg \
@@ -96,7 +114,9 @@ nohup ./build/avalanchego \
   --public-ip=127.0.0.1 \
   --http-port=9658 \
   --staking-port=9659 \
+  --data-dir=db/node5 \
   --db-dir=db/node5 \
+  --chain-config-dir="$LAUNCH_DIR/configs/chains" \
   --network-id=localflare \
   --bootstrap-ips=127.0.0.1:9651 \
   --bootstrap-ids=NodeID-7Xhw2mDxuDS44j42TCB6U5579esbSt3Lg \

@@ -28,6 +28,7 @@ func (vm *blockVM) SetPreferenceWithContext(ctx context.Context, blkID ids.ID, b
 		option = oteltrace.WithAttributes(
 			attribute.Stringer("blkID", blkID),
 			attribute.Int64("pChainHeight", int64(blockCtx.PChainHeight)),
+			attribute.Int64("proposerPChainHeight", int64(blockCtx.ProposerPChainHeight)),
 		)
 	}
 

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/ava-labs/avalanchego/vms/platformvm"
-	"github.com/ava-labs/avalanchego/vms/platformvm/txs"
+	"github.com/ava-labs/avalanchego/vms/platformvm/platform"
 	"github.com/ava-labs/avalanchego/wallet/chain/p/builder"
 	"github.com/ava-labs/avalanchego/wallet/chain/p/wallet"
 	"github.com/ava-labs/avalanchego/wallet/subnet/primary/common"
@@ -31,7 +31,7 @@ type Client struct {
 }
 
 func (c *Client) IssueTx(
-	tx *txs.Tx,
+	tx *platform.Tx,
 	options ...common.Option,
 ) error {
 	ops := common.NewOptions(options)
@@ -55,7 +55,7 @@ func (c *Client) IssueTx(
 		return c.backend.AcceptTx(ctx, tx)
 	}
 
-	if err := platformvm.AwaitTxAccepted(c.client, ctx, txID, ops.PollFrequency()); err != nil {
+	if err := c.client.AwaitTxAccepted(ctx, txID, ops.PollFrequency()); err != nil {
 		return err
 	}
 

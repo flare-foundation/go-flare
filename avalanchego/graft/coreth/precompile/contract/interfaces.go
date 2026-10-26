@@ -73,6 +73,10 @@ type BlockContext interface {
 	// GetPredicateResults returns the result of verifying the predicates of the
 	// given transaction, precompile address pair.
 	GetPredicateResults(txHash common.Hash, precompileAddress common.Address) set.Bits
+	// PChainHeight returns the P-chain height committed in the block header
+	// (Flare, HeaderExtra.PChainHeight) and whether it is present. It bounds
+	// the P-chain gateway precompile's reads.
+	PChainHeight() (uint64, bool)
 }
 
 type Configurator interface {

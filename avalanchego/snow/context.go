@@ -11,6 +11,7 @@ import (
 	"github.com/ava-labs/avalanchego/api/metrics"
 	"github.com/ava-labs/avalanchego/chains/atomic"
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/snow/pchain"
 	"github.com/ava-labs/avalanchego/snow/validators"
 	"github.com/ava-labs/avalanchego/upgrade"
 	"github.com/ava-labs/avalanchego/utils"
@@ -57,6 +58,10 @@ type Context struct {
 
 	// snowman++ attributes
 	ValidatorState validators.State // interface for P-Chain validators
+	// PChainReader exposes accepted P-chain blocks and staking transactions
+	// to other in-process chains (Flare P-chain gateway precompile). It is
+	// nil for the P-chain itself and for plugin (rpcchainvm) VMs.
+	PChainReader pchain.Reader
 	// Chain-specific directory where arbitrary data can be written
 	ChainDataDir string
 }

@@ -112,6 +112,20 @@ func getFlareInflationSettings(currentTimestamp time.Time, config *config.Intern
 
 func getCostwoInflationSettings(currentTimestamp time.Time, config *config.Internal) InflationSettings {
 	switch {
+	case config.UpgradeConfig.IsHeliconActivated(currentTimestamp):
+		// Phase 4 (Helicon): shorter minimum validator and delegation durations
+		return InflationSettings{
+			MinValidatorStake:        1 * units.MegaAvax,
+			MaxValidatorStake:        200 * units.MegaAvax,
+			MinDelegatorStake:        50 * units.KiloAvax,
+			MinDelegationFee:         200_000,
+			MinStakeDuration:         7 * 24 * time.Hour,
+			MinDelegateDuration:      24 * time.Hour,
+			MaxStakeDuration:         365 * 24 * time.Hour,
+			MinFutureStartTimeOffset: MaxFutureStartTime,
+			MaxValidatorWeightFactor: 15,
+			MinStakeStartTime:        time.Date(2023, time.September, 7, 0, 0, 0, 0, time.UTC),
+		}
 	case config.UpgradeConfig.IsGraniteActivated(currentTimestamp):
 		// Phase 3 (Granite)
 		return InflationSettings{
@@ -180,8 +194,8 @@ func getLocalFlareInflationSettings(currentTimestamp time.Time, _ *config.Intern
 			MaxValidatorStake:        9_000 * units.MegaAvax,
 			MinDelegatorStake:        10 * units.KiloAvax,
 			MinDelegationFee:         0,
-			MinStakeDuration:         1 * time.Hour,
-			MinDelegateDuration:      30 * time.Minute,
+			MinStakeDuration:         15 * time.Minute,
+			MinDelegateDuration:      10 * time.Minute,
 			MaxStakeDuration:         365 * 24 * time.Hour,
 			MinFutureStartTimeOffset: MaxFutureStartTime,
 			MaxValidatorWeightFactor: MaxValidatorWeightFactor,
@@ -251,13 +265,20 @@ func getLocalInflationSettings(currentTimestamp time.Time, config *config.Intern
 	}
 }
 
-func getDefaultInflationSettings(_ time.Time, config *config.Internal) InflationSettings {
+func getDefaultInflationSettings(currentTimestamp time.Time, config *config.Internal) InflationSettings {
+	// Post-Helicon, upstream lowers the primary network validator minimum
+	// stake duration to [config.HeliconMinStakeDuration]. Delegators keep
+	// [config.MinStakeDuration].
+	minStakeDuration := config.MinStakeDuration
+	if config.UpgradeConfig.IsHeliconActivated(currentTimestamp) {
+		minStakeDuration = config.HeliconMinStakeDuration
+	}
 	return InflationSettings{
 		MinValidatorStake:        config.MinValidatorStake,
 		MaxValidatorStake:        config.MaxValidatorStake,
 		MinDelegatorStake:        config.MinDelegatorStake,
 		MinDelegationFee:         config.MinDelegationFee,
-		MinStakeDuration:         config.MinStakeDuration,
+		MinStakeDuration:         minStakeDuration,
 		MinDelegateDuration:      config.MinStakeDuration,
 		MaxStakeDuration:         config.MaxStakeDuration,
 		MinFutureStartTimeOffset: MaxFutureStartTime,
