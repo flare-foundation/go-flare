@@ -24,14 +24,22 @@ import (
 
 // corethVMGoleakOptions ignores the goroutines the Coreth VM leaves behind
 // after [block.ChainVM.Shutdown]: its gas price oracle ranges over
-// subscription channels that are never closed, and the ephemeral keystore's
-// account manager and file watcher are never stopped (coreth's own tests do
+// subscription channels that are never closed, the ephemeral keystore's
+// account manager and file watcher are never stopped, and the tx gossip
+// subscription can be orphaned by a shutdown race (coreth's own VM tests do
 // not run goleak). Nothing in the SAE VM starts these, so ignoring them cannot
 // hide a leak in the code under test here.
 func corethVMGoleakOptions() []goleak.Option {
 	return []goleak.Option{
 		goleak.IgnoreTopFunction("github.com/ava-labs/avalanchego/graft/coreth/eth/gasprice.NewOracle.func1"),
 		goleak.IgnoreTopFunction("github.com/ava-labs/avalanchego/graft/coreth/eth/gasprice.newFeeInfoProvider.func1"),
+		// initBlockBuilding subscribes GossipEthTxPool to the tx pool from a
+		// goroutine. When Shutdown closes the pool first, SubscriptionScope.Track
+		// returns nil without unsubscribing the joined subscription, so its two
+		// goroutines (the joiner and its per-subpool waiter) block forever. Seen
+		// in CI under CPU starvation; reproducible with GOMAXPROCS=1 -cpu 1.
+		goleak.IgnoreTopFunction("github.com/ava-labs/avalanchego/graft/coreth/core/txpool.(*TxPool).SubscribeTransactions.JoinSubscriptions.func1"),
+		goleak.IgnoreTopFunction("github.com/ava-labs/avalanchego/graft/coreth/core/txpool.(*TxPool).SubscribeTransactions.JoinSubscriptions.func1.2"),
 		goleak.IgnoreTopFunction("github.com/ava-labs/libevm/accounts.(*Manager).update"),
 		goleak.IgnoreTopFunction("github.com/ava-labs/libevm/accounts/keystore.(*KeyStore).updater"),
 		goleak.IgnoreTopFunction("github.com/ava-labs/libevm/accounts/keystore.(*watcher).loop"),
