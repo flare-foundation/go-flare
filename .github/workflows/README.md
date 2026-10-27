@@ -23,7 +23,7 @@ The Go build flags that make this possible are:
 
 **Hash-Pinned GitHub Actions**
 
-Where possible, GitHub Action and reusable workflow references in the pipeline are pinned to a full commit SHA rather than a mutable tag (e.g. `actions/checkout@f43a0e5ff2bd`... instead of @v3). This prevents a compromised or modified upstream action from silently altering the build, a common supply chain attack vector.
+Where possible, GitHub Action and reusable workflow references in the pipeline are pinned to a full commit SHA rather than a mutable tag (e.g. `actions/checkout@3d3c42e5aac5`... instead of @v7). This prevents a compromised or modified upstream action from silently altering the build, a common supply chain attack vector.
 
 **SLSA3 Provenance Attestation**
 

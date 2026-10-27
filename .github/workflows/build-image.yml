@@ -1,0 +1,126 @@
+name: build-image
+
+on:
+  workflow_call:
+    inputs:
+      dockerfile:
+        description: Path to the Dockerfile to build
+        type: string
+        required: true
+      image-tag:
+        description: Image tag to push (e.g. dev, v1.15.1)
+        type: string
+        required: true
+      tag-suffix:
+        description: Suffix appended to the image tag (e.g. -dless)
+        type: string
+        default: ""
+      use-docker-hub:
+        description: Also push to and sign on Docker Hub
+        type: boolean
+        default: true
+    secrets:
+      DOCKER_HUB_UID:
+        required: false
+      DOCKER_HUB_PAT:
+        required: false
+      DOCKER_HUB_REPO:
+        required: false
+
+permissions: {}
+
+jobs:
+  build:
+    name: Build, sign & attest
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
+      TAG: ${{ inputs.image-tag }}${{ inputs.tag-suffix }}
+      DOCKER_HUB_REPO: ${{ secrets.DOCKER_HUB_REPO }}
+      SIGNER_IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/build-image.yml@${{ github.ref }}
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+    - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+    - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+    - name: Login to ghcr.io
+      uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Login to docker.io
+      if: ${{ inputs.use-docker-hub }}
+      uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+      with:
+        username: ${{ secrets.DOCKER_HUB_UID }}
+        password: ${{ secrets.DOCKER_HUB_PAT }}
+
+    - name: Build and push image
+      id: build
+      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      with:
+        context: .
+        file: ${{ inputs.dockerfile }}
+        platforms: linux/amd64,linux/arm64
+        provenance: mode=max
+        sbom: true
+        push: true
+        tags: |
+          ${{ env.IMAGE }}:${{ env.TAG }}
+          ${{ inputs.use-docker-hub && format('{0}:{1}', secrets.DOCKER_HUB_REPO, env.TAG) || '' }}
+
+    - name: Install Cosign
+      uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+
+    - name: Sign and verify ghcr image
+      env:
+        DIGEST: ${{ steps.build.outputs.digest }}
+      run: |
+        cosign sign --yes "${IMAGE}@${DIGEST}"
+        cosign verify \
+          --certificate-identity="${SIGNER_IDENTITY}" \
+          --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+          "${IMAGE}@${DIGEST}"
+
+    - name: Sign and verify docker hub image
+      if: ${{ inputs.use-docker-hub }}
+      env:
+        DIGEST: ${{ steps.build.outputs.digest }}
+      run: |
+        cosign sign --yes "${DOCKER_HUB_REPO}@${DIGEST}"
+        cosign verify \
+          --certificate-identity="${SIGNER_IDENTITY}" \
+          --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+          "${DOCKER_HUB_REPO}@${DIGEST}"
+
+    - name: Attest provenance
+      uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+      with:
+        subject-name: ${{ env.IMAGE }}
+        subject-digest: ${{ steps.build.outputs.digest }}
+        push-to-registry: true
+
+    - name: Extract SBOM
+      env:
+        DIGEST: ${{ steps.build.outputs.digest }}
+      run: |
+        docker buildx imagetools inspect "${IMAGE}@${DIGEST}" \
+          --format '{{ json (index .SBOM "linux/amd64").SPDX }}' > sbom.spdx.json
+
+    - name: Attest SBOM
+      uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+      with:
+        subject-name: ${{ env.IMAGE }}
+        subject-digest: ${{ steps.build.outputs.digest }}
+        sbom-path: sbom.spdx.json
+        push-to-registry: true

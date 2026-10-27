@@ -47,30 +47,72 @@ See `tests/README.md` for testing details
 
 ## Container image
 
-Public container images are hosted on [Docker HUB](https://hub.docker.com/r/flarefoundation/go-flare) and [Github Packages](https://github.com/orgs/flare-foundation/packages?repo_name=go-flare);
+Public container images are hosted on [Docker Hub](https://hub.docker.com/r/flarefoundation/go-flare) and [GitHub Packages](https://github.com/orgs/flare-foundation/packages?repo_name=go-flare):
 
 ```
 docker.io/flarefoundation/go-flare
 ghcr.io/flare-foundation/go-flare
 ```
 
-Images are signed using [Cosign](https://github.com/sigstore/cosign) with the GitHub OIDC provider. To verify the image, run this command:
+Each tag is published in a standard variant and a distroless variant (`<TAG>-dless`), both for `linux/amd64` and `linux/arm64`.
+
+### Verify the cosign signature
+
+Images are signed using [Cosign](https://github.com/sigstore/cosign) with the GitHub OIDC provider. Images are signed by the reusable `build-image.yml` workflow; images published before it was introduced were signed by `build-container.yml`, so the regexp below accepts both. To verify the image, run this command:
 
 ```bash
 cosign verify \
-  --certificate-identity-regexp="^https://github\.com/flare-foundation/go-flare/\.github/workflows/build-container\.yml@" \
+  --certificate-identity-regexp="^https://github\.com/flare-foundation/go-flare/\.github/workflows/(build-image|build-container)\.yml@" \
   --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
   ghcr.io/flare-foundation/go-flare:<TAG>
 
 cosign verify \
-  --certificate-identity-regexp="^https://github\.com/flare-foundation/go-flare/\.github/workflows/build-container\.yml@" \
+  --certificate-identity-regexp="^https://github\.com/flare-foundation/go-flare/\.github/workflows/(build-image|build-container)\.yml@" \
   --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
   docker.io/flarefoundation/go-flare:<TAG>
 ```
+
+### Inspect provenance and SBOM
+
+Images are built with BuildKit [SLSA provenance](https://slsa.dev/) (`mode=max`) and an [SPDX](https://spdx.dev/) SBOM attached to the image index. Both can be inspected with `docker buildx imagetools`:
+
+```bash
+# provenance: build origin, source repository, commit, workflow
+docker buildx imagetools inspect ghcr.io/flare-foundation/go-flare:<TAG> \
+  --format '{{ json (index .Provenance "linux/amd64") }}' | jq
+
+# SBOM: list of packages
+docker buildx imagetools inspect ghcr.io/flare-foundation/go-flare:<TAG> \
+  --format '{{ json (index .SBOM "linux/amd64").SPDX.packages }}' | jq
+```
+
+### Verify GitHub artifact attestations
+
+Provenance and SBOM are also published as signed [GitHub artifact attestations](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations) and pushed to `ghcr.io` alongside the image. Browse all attestations for this repository: <https://github.com/flare-foundation/go-flare/attestations>
+
+Verification requires [GitHub CLI](https://cli.github.com/) 2.49 or later:
+
+```bash
+# --signer-workflow only accepts attestations signed by the reusable build workflow
+# (.github/workflows/build-image.yml), which is what makes the provenance SLSA Build L3.
+
+# build provenance
+gh attestation verify oci://ghcr.io/flare-foundation/go-flare:<TAG> \
+  --owner flare-foundation \
+  --signer-workflow flare-foundation/go-flare/.github/workflows/build-image.yml
+
+# SBOM
+gh attestation verify oci://ghcr.io/flare-foundation/go-flare:<TAG> \
+  --owner flare-foundation \
+  --signer-workflow flare-foundation/go-flare/.github/workflows/build-image.yml \
+  --predicate-type https://spdx.dev/Document/v2.3
+```
+
+Docker Hub images share the same digest, so the same commands work with `oci://docker.io/flarefoundation/go-flare:<TAG>`.
 
 ### Container builds in CI
 
 CI builds on each:
 
-- push on `main` branch, pushes image tagged as "dev"
-- creation of a tag, pushes images tagged as the tag itself
+- push on `main` (or `feature/**`) branch, pushes images tagged as `dev` and `dev-dless`
+- creation of a `v*` tag, pushes images tagged as the tag itself and `<TAG>-dless`

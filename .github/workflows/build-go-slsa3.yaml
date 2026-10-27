@@ -32,7 +32,7 @@ jobs:
       slsa-token: ${{ steps.setup.outputs.slsa-token }}
     steps:
       - name: Checkout
-        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -64,18 +64,18 @@ jobs:
       attestations-artifact-name: ${{ inputs.build_artifact_name }}-attestations
     steps:
       - name: Download attestations
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ${{ needs.slsa-run.outputs.attestations-download-name }}
           path: attestations
 
       - name: Upload with clean name
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ inputs.build_artifact_name }}-attestations
           path: attestations/
 
       - name: Delete original
-        uses: geekyeggo/delete-artifact@f275313e70c08f6120db482d7a6b98377786765b  # v5
+        uses: geekyeggo/delete-artifact@176a747ab7e287e3ff4787bf8a148716375ca118 # v6.0.0
         with:
           name: ${{ needs.slsa-run.outputs.attestations-download-name }}
