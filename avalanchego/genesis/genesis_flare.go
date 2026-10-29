@@ -51,19 +51,21 @@ var (
 				ExcessConversionConstant: 1_246_488_515, // Double every day
 			},
 		},
+		// See GetStakingConfig for how these values apply on the Flare networks.
 		StakingConfig: StakingConfig{
-			UptimeRequirement: .8, // 80%
-			MinValidatorStake: 1 * units.Avax,
-			MaxValidatorStake: 10000 * units.Avax,
-			MinDelegatorStake: 0,
-			MinDelegationFee:  0,
-			MinStakeDuration:  24 * time.Hour,
-			MaxStakeDuration:  365 * 24 * time.Hour,
+			UptimeRequirement:       .8, // 80%
+			MinValidatorStake:       1 * units.MegaAvax,
+			MaxValidatorStake:       300 * units.MegaAvax,
+			MinDelegatorStake:       50 * units.KiloAvax,
+			MinDelegationFee:        200_000, // 20%
+			MinStakeDuration:        24 * time.Hour,
+			MaxStakeDuration:        365 * 24 * time.Hour,
+			HeliconMinStakeDuration: 1 * time.Hour,
 			RewardConfig: reward.Config{
 				MaxConsumptionRate: .12 * reward.PercentDenominator,
 				MinConsumptionRate: .10 * reward.PercentDenominator,
 				MintingPeriod:      365 * 24 * time.Hour,
-				SupplyCap:          0 * units.MegaAvax,
+				SupplyCap:          720 * units.MegaAvax,
 			},
 		},
 	}

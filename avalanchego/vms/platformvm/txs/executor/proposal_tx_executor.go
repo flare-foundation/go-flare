@@ -794,13 +794,24 @@ func (e *proposalTxExecutor) restakeAutoRenewedValidatorOnCommit(
 	restakingValidationRewards, _ := reward.Split(validator.PotentialReward, stakingInfo.AutoCompoundRewardShares)
 	restakingDelegateeRewards, _ := reward.Split(stakingInfo.DelegateeReward, stakingInfo.AutoCompoundRewardShares)
 
-	// Restaking grows the validator's weight, which must never exceed
-	// MaxValidatorStake. If the restaked rewards wouldn't fit, only the remaining
-	// capacity is restaked (split proportionally between validation and delegatee
-	// rewards) and the rest is withdrawn below.
-	restakingCapacity, err := safemath.Sub(e.backend.Config.MaxValidatorStake, validator.Weight)
+	// Restaking grows the validator's weight, which must never exceed the
+	// maximum validator stake. If the restaked rewards wouldn't fit, only the
+	// remaining capacity is restaked (split proportionally between validation
+	// and delegatee rewards) and the rest is withdrawn below.
+	//
+	// Flare: the maximum is the per-network, time-phased limit of
+	// inflation_settings.go (through getValidatorRules), not
+	// backend.Config.MaxValidatorStake, which upstream reads here and which on
+	// the Flare networks is unrelated to the primary network's rules. A
+	// validator at or above the maximum has no restaking capacity; this reward
+	// tx is mandatory, so that case must not fail.
+	validatorRules, err := getValidatorRules(e.onCommitState.GetTimestamp(), e.backend, e.onCommitState, validator.SubnetID)
 	if err != nil {
 		return err
+	}
+	var restakingCapacity uint64
+	if validator.Weight < validatorRules.maxValidatorStake {
+		restakingCapacity = validatorRules.maxValidatorStake - validator.Weight
 	}
 
 	totalRestakingRewards, err := safemath.Add(restakingValidationRewards, restakingDelegateeRewards)

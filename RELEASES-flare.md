@@ -28,6 +28,7 @@ See the [AvalancheGo v1.15.0 and v1.15.1 release notes](./avalanchego/RELEASES.m
  * The C-chain config option `api-max-duration` accepts only a duration string (for example `"30s"`) after the activation; a numeric value (nanoseconds) is rejected and the node fails to start. Update the value before the activation, the string form is also accepted by the current VM.
  * The C-chain keeps its execution results in the chain data directory (`--chain-data-dir`, default `<data-dir>/chainData`), outside the node database. This directory must be on persistent storage together with the database directory; a node that loses it cannot start and has to be resynced. The Docker images now expose it as the `CHAIN_DATA_DIR` environment variable, defaulting to `/app/db/chainData` inside the database volume, so a mount at `/app/db` persists both.
  * Building from source now requires Go 1.26.10 or later.
+ * The staking parameter flags (`--min-validator-stake`, `--max-validator-stake`, `--min-delegator-stake`, `--min-delegation-fee`, `--min-stake-duration`, `--helicon-min-stake-duration`, `--max-stake-duration`, `--uptime-requirement` and the `--stake-*` reward flags) are ignored on the Flare, Songbird, Coston and Coston2 networks, as they are on Avalanche mainnet; only local and custom networks honor them. The built-in values equal the previous defaults where they take effect, so nodes that did not set these flags behave as before. The primary network's staking limits are unchanged and remain those built into the node for each network.
 
 ## v1.14.2
 

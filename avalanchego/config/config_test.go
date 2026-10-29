@@ -947,6 +947,74 @@ func TestGetStakingConfig_Helicon(t *testing.T) {
 	}
 }
 
+// TestGetStakingConfigPublicNetworksIgnoreFlags checks that the public networks
+// take their staking parameters from the genesis params and ignore the staking
+// flags, like Avalanche Mainnet does upstream, so that a node flag can never
+// make nodes disagree on a consensus parameter. Local networks keep honoring
+// the flags.
+func TestGetStakingConfigPublicNetworksIgnoreFlags(t *testing.T) {
+	const (
+		maxValidatorStake uint64 = 123_000_000_000_000 // above the default minimum
+		minStakeDuration         = 3 * time.Hour
+	)
+	tests := []struct {
+		networkID uint32
+		locked    bool
+	}{
+		{networkID: constants.MainnetID, locked: true},
+		{networkID: constants.FlareID, locked: true},
+		{networkID: constants.SongbirdID, locked: true},
+		{networkID: constants.CostwoID, locked: true},
+		{networkID: constants.CostonID, locked: true},
+		{networkID: constants.LocalFlareID},
+		{networkID: constants.LocalID},
+	}
+	for _, tt := range tests {
+		t.Run(constants.NetworkName(tt.networkID), func(t *testing.T) {
+			require := require.New(t)
+			v := setupViperFlags()
+			v.Set(DataDirKey, t.TempDir())
+			v.Set(MaxValidatorStakeKey, maxValidatorStake)
+			v.Set(MinStakeDurationKey, minStakeDuration)
+
+			config, err := getStakingConfig(v, tt.networkID)
+			require.NoError(err)
+			if tt.locked {
+				require.Equal(genesis.GetStakingConfig(tt.networkID), config.StakingConfig)
+				return
+			}
+			require.Equal(maxValidatorStake, config.MaxValidatorStake)
+			require.Equal(minStakeDuration, config.MinStakeDuration)
+		})
+	}
+}
+
+func TestGetStakingConfigPublicNetworksPreserveDefaults(t *testing.T) {
+	v := setupViperFlags()
+	v.Set(DataDirKey, t.TempDir())
+
+	// The custom-network path still reads the same flag defaults that all
+	// four public networks used before their staking flags were ignored.
+	previous, err := getStakingConfig(v, constants.UnitTestID)
+	require.NoError(t, err)
+
+	for _, networkID := range []uint32{constants.FlareID, constants.SongbirdID, constants.CostwoID, constants.CostonID} {
+		t.Run(constants.NetworkName(networkID), func(t *testing.T) {
+			current, err := getStakingConfig(v, networkID)
+			require.NoError(t, err)
+
+			// Primary-network stake amounts and fees come from inflation rules.
+			// Every other staking parameter must retain its previous default.
+			want := previous.StakingConfig
+			want.MinValidatorStake = current.MinValidatorStake
+			want.MaxValidatorStake = current.MaxValidatorStake
+			want.MinDelegatorStake = current.MinDelegatorStake
+			want.MinDelegationFee = current.MinDelegationFee
+			require.Equal(t, want, current.StakingConfig)
+		})
+	}
+}
+
 func TestGetDiskSpaceConfig(t *testing.T) {
 	tests := []struct {
 		name        string
