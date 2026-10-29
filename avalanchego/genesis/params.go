@@ -76,6 +76,20 @@ func GetTxFeeConfig(networkID uint32) TxFeeConfig {
 	}
 }
 
+// GetStakingConfig returns the staking parameters of the given network.
+//
+// Flare: config.getStakingConfig uses these for the public networks
+// (constants.ProductionNetworkIDs and Avalanche Mainnet), where the staking
+// flags are ignored; local and custom networks take the flags, which default
+// to LocalParams. On the Flare networks the primary network's stake limits and
+// durations are the time-phased rules in
+// vms/platformvm/txs/executor/inflation_settings.go, not these values: the
+// stake limits here only mirror the latest phase of those rules and are kept
+// in step with them. UptimeRequirement and the stake durations do apply
+// directly (reward votes, permissioned subnet validators, TransformSubnetTx)
+// and equal the LocalParams values every node ran with while the flags were
+// still honored on these networks, so fixing them changed no behavior.
+// RewardConfig also retains the former flag defaults; staking rewards are zero.
 func GetStakingConfig(networkID uint32) StakingConfig {
 	switch networkID {
 	case constants.MainnetID:

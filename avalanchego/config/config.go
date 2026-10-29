@@ -796,7 +796,11 @@ func getStakingConfig(v *viper.Viper, networkID uint32) (node.StakingConfig, err
 	if err != nil {
 		return node.StakingConfig{}, err
 	}
-	if networkID != constants.MainnetID {
+	// The staking flags are honored on local and custom networks only. The
+	// public networks (Avalanche Mainnet and the Flare/Songbird networks in
+	// constants.ProductionNetworkIDs) use fixed per-network values, so that a
+	// node flag can never make nodes disagree on a consensus parameter.
+	if networkID != constants.MainnetID && !constants.ProductionNetworkIDs.Contains(networkID) {
 		config.UptimeRequirement = v.GetFloat64(UptimeRequirementKey)
 		config.MinValidatorStake = v.GetUint64(MinValidatorStakeKey)
 		config.MaxValidatorStake = v.GetUint64(MaxValidatorStakeKey)
@@ -832,6 +836,9 @@ func getStakingConfig(v *viper.Viper, networkID uint32) (node.StakingConfig, err
 			return node.StakingConfig{}, errStakeMintingPeriodBelowMin
 		}
 	} else {
+		// See genesis.GetStakingConfig for how these values apply on the Flare
+		// networks, whose primary network rules live in
+		// vms/platformvm/txs/executor/inflation_settings.go.
 		config.StakingConfig = genesis.GetStakingConfig(networkID)
 	}
 	return config, nil
