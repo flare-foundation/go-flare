@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ava-labs/libevm/accounts"
+	"github.com/ava-labs/libevm/common"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ava-labs/avalanchego/ids"
@@ -67,6 +68,46 @@ func TestRecoverSigner(t *testing.T) {
 			again, err := hashes.RecoverSigner(tt.cache, tt.sig, tt.expected)
 			require.NoError(err)
 			require.Equal(pk.Bytes(), again.Bytes())
+		})
+	}
+}
+
+func TestRecoverEthSigner(t *testing.T) {
+	keys := secp256k1.TestKeys()
+	signer, other := keys[0], keys[1]
+	hashes := NewSigningHashes(txBytes)
+	plainSig, err := signer.SignHash(hashes.Plain)
+	require.NoError(t, err)
+	ethSig, err := signer.SignHash(hashes.EthPrefixed)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name     string
+		cache    *secp256k1.RecoverCache
+		sig      []byte
+		expected common.Address
+		wantErr  error
+	}{
+		{name: "plain signature", sig: plainSig, expected: signer.EthAddress()},
+		{name: "eth-prefixed signature", sig: ethSig, expected: signer.EthAddress()},
+		{name: "plain signature, cached", cache: secp256k1.NewRecoverCache(4), sig: plainSig, expected: signer.EthAddress()},
+		{name: "eth-prefixed signature, cached", cache: secp256k1.NewRecoverCache(4), sig: ethSig, expected: signer.EthAddress()},
+		{name: "plain signature of another key", sig: plainSig, expected: other.EthAddress(), wantErr: ErrWrongSig},
+		{name: "eth-prefixed signature of another key", sig: ethSig, expected: other.EthAddress(), wantErr: ErrWrongSig},
+		{name: "malformed signature", sig: make([]byte, secp256k1.SignatureLen), expected: signer.EthAddress(), wantErr: secp256k1.ErrInvalidSig},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require := require.New(t)
+
+			pk, err := hashes.RecoverEthSigner(tt.cache, tt.sig, tt.expected)
+			require.ErrorIs(err, tt.wantErr)
+			if tt.wantErr != nil {
+				require.Nil(pk)
+				return
+			}
+			require.Equal(signer.EthAddress(), pk.EthAddress())
+			require.Equal(signer.Address(), pk.Address())
 		})
 	}
 }

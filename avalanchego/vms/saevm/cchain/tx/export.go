@@ -24,6 +24,7 @@ import (
 	"github.com/ava-labs/avalanchego/utils/wrappers"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/saevm/hook"
+	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 
 	chainsatomic "github.com/ava-labs/avalanchego/chains/atomic"
 )
@@ -180,6 +181,13 @@ func (e *Export) verifyCredentials(_ chainsatomic.SharedMemory, creds []Credenti
 	if err != nil {
 		return fmt.Errorf("%w: %w", errConvertingToFxTx, err)
 	}
+	// Flare: an input may be signed under either accepted scheme — the plain
+	// sha256 of the unsigned bytes (Avalanche) or the EIP-191-prefixed hash of
+	// its hex encoding (Ethereum signing tools) — exactly as coreth's
+	// pre-Helicon verifier (plugin/evm/atomic/vm/tx_semantic_verifier.go) has
+	// accepted since Banff. Helicon postdates Banff on every network, so no
+	// fork gate is needed here.
+	hashes := secp256k1fx.NewSigningHashes(fxTx.Bytes())
 	for i, in := range e.Ins {
 		// TODO(StephenButtolph): Parallelize signature verification. This is
 		// non-trivial, because transactions frequently contain duplicate
@@ -188,12 +196,11 @@ func (e *Export) verifyCredentials(_ chainsatomic.SharedMemory, creds []Credenti
 		if len(cred.Sigs) != 1 {
 			return fmt.Errorf("%w (%d): want 1, got %d", errIncorrectNumSignatures, i, len(cred.Sigs))
 		}
-		pk, err := sigCache.RecoverPublicKey(fxTx.Bytes(), cred.Sigs[0][:])
-		if err != nil {
+		switch _, err := hashes.RecoverEthSigner(sigCache, cred.Sigs[0][:], in.Address); {
+		case errors.Is(err, secp256k1fx.ErrWrongSig):
+			return fmt.Errorf("%w (%d): want %s", errAddressMismatch, i, in.Address)
+		case err != nil:
 			return fmt.Errorf("%w (%d): %w", errRecoveringPublicKey, i, err)
-		}
-		if addr := pk.EthAddress(); in.Address != addr {
-			return fmt.Errorf("%w (%d): want %s, got %s", errAddressMismatch, i, in.Address, addr)
 		}
 	}
 	return nil

@@ -78,7 +78,8 @@ go work sync
 ### Eth-Style Signatures (`vms/secp256k1fx/fx.go`)
 - `VerifyCredentials()` tries two verification methods: standard Avalanche (no prefix) and Ethereum-style (`accounts.TextHash`)
 - Allows P-chain transactions signed with standard Ethereum tools
-- The two-scheme recovery lives in `vms/secp256k1fx/signing.go` (`SigningHashes`, `RecoverSigner`): `VerifyCredentials` calls it, and the P-chain gateway's `getStakeOwner` reuses it to derive the stake owner's C-chain address — keep them shared on merge
+- The two-scheme recovery lives in `vms/secp256k1fx/signing.go` (`SigningHashes`, `RecoverSigner`, `RecoverEthSigner`): `VerifyCredentials` calls it, and the P-chain gateway's `getStakeOwner` reuses it to derive the stake owner's C-chain address — keep them shared on merge
+- **C-chain atomic txs, both eras.** Imports go through `VerifyCredentials` (coreth's `tx_semantic_verifier.go` and the SAE `vms/saevm/cchain/tx/import.go` both call `Fx.VerifyTransfer`) and inherit the two schemes. Exports identify the signer by EVM address and have their own check in each era: coreth's `graft/coreth/plugin/evm/atomic/vm/tx_semantic_verifier.go` (pre-Helicon, inline, eth-prefixed accepted since Banff) and the SAE `vms/saevm/cchain/tx/export.go` `verifyCredentials` (Helicon and later, `SigningHashes.RecoverEthSigner`, ungated because Helicon postdates Banff on every network). **Upstream's SAE export verifier only tries the plain hash** — the v1.15.0/v1.15.1 merges shipped it as-is, so eth-signed C-chain exports were rejected on Coston2 from Helicon (2026-11-03) until the port on 2026-11-05. On every merge re-check that `export.go` still calls `RecoverEthSigner`; `vms/saevm/cchain/tx/export_flare_test.go` `TestVerifyCredentialsEthSignature` fails against the upstream version
 
 ### big.Int Weight Calculations
 - Validator weight aggregates use `*big.Int` instead of `uint64` to prevent overflow (Flare has more tokens than Avalanche):
@@ -170,7 +171,7 @@ In avalanchego:
 - `vms/platformvm/txs/executor/proposal_tx_executor.go` - `restakeAutoRenewedValidatorOnCommit` takes the maximum validator stake from `getValidatorRules` and clamps weight ≥ max to zero restaking capacity; upstream reads `Config.MaxValidatorStake` and underflows (see "Staking Parameters")
 - `config/config.go` `getStakingConfig` + the `StakingConfig` blocks of `genesis/genesis_{flare,costwo,songbird,coston}.go` - staking flags are ignored on the public Flare/Songbird networks (see "Staking Parameters")
 - `vms/platformvm/reward/calculator.go` - Reward calculations (0 rewards)
-- `vms/secp256k1fx/fx.go` + `signing.go` - eth-style prefix support (`SigningHashes`/`RecoverSigner`, shared with the P-chain gateway)
+- `vms/secp256k1fx/fx.go` + `signing.go` - eth-style prefix support (`SigningHashes`/`RecoverSigner`/`RecoverEthSigner`, shared with the P-chain gateway and the SAE export verifier)
 - `upgrade/upgrade.go` - Flare-specific fork times
 - `vms/evm/acp176/acp176.go` - Keep the extended `Params` struct (with `TimeToFillCapacity`, `TargetToMax`, `TargetToPriceUpdateConversion`) and the `*With` methods reading from `p.*` instead of package constants
 - `scripts/git_commit.sh` - Flare patch: derives the build commit via `git -C "${AVALANCHE_PATH}"` discovery instead of upstream's hardcoded `--git-dir="${AVALANCHE_PATH}/.git"`. avalanchego is nested in the go-flare repo (the `.git` is at the repo root; there is no `avalanchego/.git`), so the upstream form makes `build.sh` fail with "not a git repository".
@@ -183,6 +184,7 @@ In avalanchego:
 - `snow/pchain/`, `snow/context.go` (`PChainReader`), `chains/manager.go` (P-chain reader wiring), `vms/platformvm/pchainreader/`, `vms/platformvm/vm.go` (`NewPChainReader`), `vms/platformvm/state/state.go` (`GetBlockBytes`/`GetTxBytes` raw-bytes accessors) - **P-chain gateway** reader (see the section above)
 - `vms/saevm/hook/hook.go` (`ExecutionGate`), `vms/saevm/saexec/saexec.go` + `execution.go` (executor context, gate call) - P-chain gateway execution barrier; keep the `hook.ExecutionGate` type assertion in `Executor.execute`
 - `vms/saevm/cchain/hooks.go` (`PChainHeight` commit in `BuildBlock`, `AwaitExecutionPrerequisites`, Helicon activation in `StartExecutingBlock`) and `vms/saevm/cchain/genesis.go` (`pchaingateway` `PrecompileUpgrade` + genesis activation)
+- `vms/saevm/cchain/tx/export.go` - Eth-style signature prefix support for post-Helicon export txs (`secp256k1fx.SigningHashes.RecoverEthSigner`; upstream only tries the plain hash — see Eth-Style Signatures above; test `export_flare_test.go`)
 - `snow/engine/snowman/block/block_context_vm.go` (`Context.ProposerPChainHeight`, canoto-generated), `vms/proposervm/block.go` + `vm.go` (fill it at build/verify/set-preference), `vms/tracedvm` attributes, `proto/vm/vm.proto` `proposer_p_chain_height` (+ regenerated `proto/pb/vm/vm.pb.go`) and `vms/rpcchainvm/vm_client.go`/`vm_server.go` conversions — P-chain gateway per-block bound
 - `vms/transitionvm/vm.go` `copyContext` must copy `PChainReader` (it lists every `snow.Context` field explicitly; `copy_context_flare_test.go` fails on any field left out) — the SAE C-chain runs on that copied context
 - Any file with "Flare", "Songbird", "Coston" specific code
@@ -202,7 +204,7 @@ In coreth (`graft/coreth/`):
 - `graft/coreth/params/extras/config.go` - `SnowCtx` in `ChainConfig`, `IsSongbirdCode`/`IsFlareFamilyCode`, `ACP176Params()` (Granite params on Flare-family networks)
 - `graft/coreth/params/extras/network_upgrades.go` - Flare-specific network upgrade timing, `SongbirdTransitionTimestamp`
 - `graft/coreth/plugin/evm/atomic/export_tx.go` - Export tx logic
-- `graft/coreth/plugin/evm/atomic/vm/tx_semantic_verifier.go` - Eth-style signature prefix support (`accounts.TextHash`) for export txs
+- `graft/coreth/plugin/evm/atomic/vm/tx_semantic_verifier.go` - Eth-style signature prefix support (`accounts.TextHash`) for export txs (pre-Helicon; the SAE counterpart is `vms/saevm/cchain/tx/export.go`)
 - `graft/coreth/plugin/evm/atomic/vm/vm.go` - Atomic transaction functions (`verifyTxAtTip`, `verifyTx`, `verifyTxs`, `GetAtomicUTXOs`) — moved here from `plugin/evm/vm.go`
 - `graft/coreth/plugin/evm/upgrade/sgbt/` - Songbird transition gas-limit parameters
 - `graft/coreth/plugin/evm/upgrade/granite/params.go` - Flare-family ACP-176 parameter set; keep all seven fields in `DefaultParams`

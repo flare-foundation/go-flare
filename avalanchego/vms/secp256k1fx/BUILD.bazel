@@ -69,6 +69,7 @@ go_test(
         "//utils/logging",
         "//vms/components/verify",
         "@com_github_ava_labs_libevm//accounts",
+        "@com_github_ava_labs_libevm//common",
         "@com_github_stretchr_testify//require",
     ],
 )
