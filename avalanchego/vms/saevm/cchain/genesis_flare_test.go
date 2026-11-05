@@ -5,9 +5,12 @@ package cchain
 
 import (
 	"context"
+	"math/big"
 	"testing"
 
 	"github.com/ava-labs/libevm/common"
+	"github.com/ava-labs/libevm/core/rawdb"
+	"github.com/ava-labs/libevm/core/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 
@@ -19,6 +22,7 @@ import (
 	"github.com/ava-labs/avalanchego/utils/logging"
 
 	avalanchegenesis "github.com/ava-labs/avalanchego/genesis"
+	corethparams "github.com/ava-labs/avalanchego/graft/coreth/params"
 	corethfactory "github.com/ava-labs/avalanchego/graft/coreth/plugin/factory"
 )
 
@@ -113,6 +117,103 @@ func TestGenesisMatchesCoreth(t *testing.T) {
 
 			require.Equalf(t, want.Hash(), common.Hash(lastAcceptedID),
 				"Coreth genesis hash differs from the SAE genesis hash (SAE state root %s)", want.Root())
+		})
+	}
+}
+
+// TestFlareForkBlocks pins the Berlin (AP2) and London (AP3) activation
+// heights that [parseGenesis] derives for the Flare and Songbird networks and
+// checks them against coreth's [corethparams.SetEthUpgrades], which pins them
+// in the chain config the pre-Helicon node stores. Songbird and Coston
+// activated AP3 mid-chain. The transition VM starts the SAE VM on coreth's
+// database, where [verifyAndWriteBlock] checks the derived config against the
+// stored one, so a mismatch stops the C-chain at Helicon.
+func TestFlareForkBlocks(t *testing.T) {
+	tests := []struct {
+		name        string
+		upgrades    upgrade.Config
+		genesis     string
+		wantChainID int64
+		wantBerlin  int64
+		wantLondon  int64
+	}{
+		{
+			name:        "flare",
+			upgrades:    upgrade.Flare,
+			genesis:     avalanchegenesis.FlareConfig.CChainGenesis,
+			wantChainID: 14,
+		},
+		{
+			name:        "songbird",
+			upgrades:    upgrade.Songbird,
+			genesis:     avalanchegenesis.SongbirdConfig.CChainGenesis,
+			wantChainID: 19,
+			wantLondon:  12_349_716,
+		},
+		{
+			name:        "costwo",
+			upgrades:    upgrade.Costwo,
+			genesis:     avalanchegenesis.CostwoConfig.CChainGenesis,
+			wantChainID: 114,
+		},
+		{
+			name:        "coston",
+			upgrades:    upgrade.Coston,
+			genesis:     avalanchegenesis.CostonConfig.CChainGenesis,
+			wantChainID: 16,
+			wantLondon:  55_188,
+		},
+		{
+			name:        "localflare",
+			upgrades:    upgrade.LocalFlare,
+			genesis:     avalanchegenesis.LocalFlareConfig.CChainGenesis,
+			wantChainID: 162,
+		},
+		{
+			name:        "local",
+			upgrades:    upgrade.Local,
+			genesis:     avalanchegenesis.LocalConfig.CChainGenesis,
+			wantChainID: 4294967295,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			require := require.New(t)
+			ctx := &snow.Context{NetworkUpgrades: test.upgrades}
+			g, err := parseGenesis(ctx, []byte(test.genesis))
+			require.NoError(err)
+			require.Equal(big.NewInt(test.wantChainID), g.Config.ChainID)
+			require.Equal(big.NewInt(test.wantBerlin), g.Config.BerlinBlock, "BerlinBlock")
+			require.Equal(big.NewInt(test.wantLondon), g.Config.LondonBlock, "LondonBlock")
+
+			// Coreth's view of the same chain. For the Flare and Songbird
+			// chain IDs SetEthUpgrades depends on the chain ID only.
+			coreth := corethparams.Copy(g.Config)
+			require.NoError(corethparams.SetEthUpgrades(&coreth))
+			require.Zerof(coreth.BerlinBlock.Cmp(g.Config.BerlinBlock), "BerlinBlock: coreth SetEthUpgrades %v, SAE %v", coreth.BerlinBlock, g.Config.BerlinBlock)
+			require.Zerof(coreth.LondonBlock.Cmp(g.Config.LondonBlock), "LondonBlock: coreth SetEthUpgrades %v, SAE %v", coreth.LondonBlock, g.Config.LondonBlock)
+
+			// The Helicon hand-over: the SAE VM starts on the database coreth
+			// wrote, and verifyAndWriteBlock checks the derived config against
+			// the stored one at the head block. Model the stored config as the
+			// SAE config after SetEthUpgrades (TestGenesisMatchesCoreth covers
+			// the rest of the derivation) and check at a head past every block
+			// fork and every scheduled timestamp fork.
+			db := rawdb.NewMemoryDatabase()
+			require.NoError(g.verifyAndWriteBlock(db))
+			block, err := g.block()
+			require.NoError(err)
+			rawdb.WriteChainConfig(db, block.Hash(), &coreth)
+			head := &types.Header{
+				Number: big.NewInt(1 << 62),
+				Time:   uint64(upgrade.UnscheduledActivationTime.Unix()) - 1,
+			}
+			rawdb.WriteHeader(db, head)
+			rawdb.WriteHeadHeaderHash(db, head.Hash())
+
+			g, err = parseGenesis(ctx, []byte(test.genesis))
+			require.NoError(err)
+			require.NoError(g.verifyAndWriteBlock(db), "verifyAndWriteBlock on coreth's database")
 		})
 	}
 }

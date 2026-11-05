@@ -146,6 +146,19 @@ var (
 	fujiChainID    = big.NewInt(43113)
 )
 
+// Flare: Songbird and Coston activated Apricot Phase 3 (London) mid-chain;
+// every other Flare/Songbird network has had it active from genesis. The
+// heights mirror coreth's SetEthUpgrades, which pins them in the chain config
+// the pre-Helicon node stores. When the transition VM starts the SAE VM at
+// Helicon, [verifyAndWriteBlock] checks the config derived here against that
+// stored config (ChainConfig.CheckCompatible), so they MUST match or the SAE
+// VM refuses to start on an existing Songbird/Coston database; SAE's replays
+// of pre-London blocks (tracing) would also run under the wrong rules.
+var (
+	songbirdChainID = corethparams.SongbirdChainID
+	costonChainID   = corethparams.CostonChainID
+)
+
 func berlinBlock(chainID *big.Int) int64 {
 	switch {
 	case utils.BigEqual(chainID, mainnetChainID):
@@ -155,6 +168,7 @@ func berlinBlock(chainID *big.Int) int64 {
 	case utils.BigEqual(chainID, corethparams.TestFixtureChainID):
 		return corethparams.TestFixtureBerlinBlock
 	default:
+		// Includes every Flare/Songbird network: AP2 has always been active.
 		return 0
 	}
 }
@@ -167,7 +181,13 @@ func londonBlock(chainID *big.Int) int64 {
 		return 805_078 // https://testnet.snowtrace.io/block/805078?chainid=43113, AP3 activation block
 	case utils.BigEqual(chainID, corethparams.TestFixtureChainID):
 		return corethparams.TestFixtureLondonBlock
+	case utils.BigEqual(chainID, songbirdChainID):
+		return 12_349_716 // https://songbird.flarescan.com/block/12349716, AP3 activation block
+	case utils.BigEqual(chainID, costonChainID):
+		return 55_188 // https://coston.testnet.flarescan.com/block/55188, AP3 activation block
 	default:
+		// Includes Flare, Coston2 and the local networks: AP3 has always been
+		// active.
 		return 0
 	}
 }
