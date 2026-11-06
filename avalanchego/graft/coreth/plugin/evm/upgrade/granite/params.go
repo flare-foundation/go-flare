@@ -1,40 +1,21 @@
 // Copyright (C) 2019-2025, Ava Labs, Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
-// Package granite defines the ACP-176 parameter set used on Flare-family
-// chains after the Granite upgrade. It equals the default acp176 parameter
-// set except for the two overrides defined below. These values are live
-// consensus parameters on all Flare-family networks; changing them requires
-// a coordinated network upgrade. This is the only place that ACP-176
-// parameters are defined for Granite.
+// Package granite defines the ACP-176 parameters that diverged on Flare-family
+// chains after the Granite upgrade. Pre-Helicon, coreth's dynamic fee logic
+// consumed a full parameter set from here (MinGasPrice and a shorter
+// TimeToFillCapacity); that VM was deleted together with the Granite fee
+// machinery in avalanchego v1.15.2, so only the base-fee floor remains. It is
+// still consensus-relevant: the SAE VM seeds the ACP-283 minimum gas price at
+// Helicon from it on Flare-family networks (see
+// vms/saevm/cchain/dynamic.FlareInitialPriceExponent). Changing it requires a
+// coordinated network upgrade.
 package granite
 
-import (
-	"github.com/ava-labs/avalanchego/graft/evm/utils"
-	"github.com/ava-labs/avalanchego/vms/components/gas"
-	"github.com/ava-labs/avalanchego/vms/evm/acp176"
-)
+import "github.com/ava-labs/avalanchego/graft/evm/utils"
 
-const (
-	// MinGasPrice (M) is the dynamic ACP-176 base fee floor. Diverges from
-	// the default acp176 MinGasPrice = 1 Wei.
-	MinGasPrice = 500 * utils.GWei
-
-	// TimeToFillCapacity is the seconds it takes to refill the gas capacity
-	// from zero to its maximum (C = R * TimeToFillCapacity).
-	// Diverges from the default acp176 value of 5.
-	TimeToFillCapacity gas.Gas = 4
-)
-
-// DefaultParams is the ACP-176 parameter set to use on Flare-family chains
-// after the Granite upgrade. All fields other than MinGasPrice and
-// TimeToFillCapacity equal the default acp176 values.
-var DefaultParams = &acp176.Params{
-	MinTargetPerSecond:            acp176.MinTargetPerSecond,
-	TargetConversion:              acp176.TargetConversion,
-	MaxTargetExcessDiff:           acp176.MaxTargetExcessDiff,
-	MinGasPrice:                   MinGasPrice,
-	TimeToFillCapacity:            TimeToFillCapacity,
-	TargetToMax:                   acp176.TargetToMax,
-	TargetToPriceUpdateConversion: acp176.TargetToPriceUpdateConversion,
-}
+// MinGasPrice (M) is the dynamic ACP-176 base-fee floor on Flare-family chains
+// from Granite until Helicon, and the ACP-283 minimum gas price the SAE VM
+// starts from at Helicon. Diverges from the default acp176 MinGasPrice of
+// 1 Wei.
+const MinGasPrice = 500 * utils.GWei

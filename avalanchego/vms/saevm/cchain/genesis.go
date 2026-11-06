@@ -21,11 +21,10 @@ import (
 
 	"github.com/ava-labs/avalanchego/graft/coreth/params/extras"
 	"github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/customtypes"
-	"github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/upgrade/ap3"
 	"github.com/ava-labs/avalanchego/graft/coreth/precompile/contracts/pchaingateway"
 	"github.com/ava-labs/avalanchego/graft/coreth/precompile/contracts/warp"
-	"github.com/ava-labs/avalanchego/graft/evm/utils"
 	"github.com/ava-labs/avalanchego/snow"
+	"github.com/ava-labs/avalanchego/upgrade"
 	"github.com/ava-labs/avalanchego/vms/evm/acp226"
 	"github.com/ava-labs/avalanchego/vms/saevm/cchain/dynamic"
 
@@ -97,26 +96,27 @@ func parseGenesis(ctx *snow.Context, b []byte) (*genesis, error) {
 			MuirGlacierBlock:    big.NewInt(0),
 			BerlinBlock:         big.NewInt(berlinBlock(chainID)),
 			LondonBlock:         big.NewInt(londonBlock(chainID)),
-			ShanghaiTime:        utils.TimeToNewUint64(u.DurangoTime),
-			CancunTime:          utils.TimeToNewUint64(u.EtnaTime),
+			ShanghaiTime:        new(upgrade.UnixTimestamp(u.DurangoTime)),
+			CancunTime:          new(upgrade.UnixTimestamp(u.EtnaTime)),
 		},
 		&extras.ChainConfig{
 			NetworkUpgrades: extras.NetworkUpgrades{
-				ApricotPhase1BlockTimestamp:     utils.TimeToNewUint64(u.ApricotPhase1Time),
-				ApricotPhase2BlockTimestamp:     utils.TimeToNewUint64(u.ApricotPhase2Time),
-				ApricotPhase3BlockTimestamp:     utils.TimeToNewUint64(u.ApricotPhase3Time),
-				ApricotPhase4BlockTimestamp:     utils.TimeToNewUint64(u.ApricotPhase4Time),
-				ApricotPhase5BlockTimestamp:     utils.TimeToNewUint64(u.ApricotPhase5Time),
-				ApricotPhasePre6BlockTimestamp:  utils.TimeToNewUint64(u.ApricotPhasePre6Time),
-				ApricotPhase6BlockTimestamp:     utils.TimeToNewUint64(u.ApricotPhase6Time),
-				ApricotPhasePost6BlockTimestamp: utils.TimeToNewUint64(u.ApricotPhasePost6Time),
-				BanffBlockTimestamp:             utils.TimeToNewUint64(u.BanffTime),
-				CortinaBlockTimestamp:           utils.TimeToNewUint64(u.CortinaTime),
-				DurangoBlockTimestamp:           utils.TimeToNewUint64(u.DurangoTime),
-				EtnaTimestamp:                   utils.TimeToNewUint64(u.EtnaTime),
-				FortunaTimestamp:                utils.TimeToNewUint64(u.FortunaTime),
-				GraniteTimestamp:                utils.TimeToNewUint64(u.GraniteTime),
-				HeliconTimestamp:                utils.TimeToNewUint64(u.HeliconTime),
+				ApricotPhase1BlockTimestamp:     new(upgrade.UnixTimestamp(u.ApricotPhase1Time)),
+				ApricotPhase2BlockTimestamp:     new(upgrade.UnixTimestamp(u.ApricotPhase2Time)),
+				ApricotPhase3BlockTimestamp:     new(upgrade.UnixTimestamp(u.ApricotPhase3Time)),
+				ApricotPhase4BlockTimestamp:     new(upgrade.UnixTimestamp(u.ApricotPhase4Time)),
+				ApricotPhase5BlockTimestamp:     new(upgrade.UnixTimestamp(u.ApricotPhase5Time)),
+				ApricotPhasePre6BlockTimestamp:  new(upgrade.UnixTimestamp(u.ApricotPhasePre6Time)),
+				ApricotPhase6BlockTimestamp:     new(upgrade.UnixTimestamp(u.ApricotPhase6Time)),
+				ApricotPhasePost6BlockTimestamp: new(upgrade.UnixTimestamp(u.ApricotPhasePost6Time)),
+				BanffBlockTimestamp:             new(upgrade.UnixTimestamp(u.BanffTime)),
+				CortinaBlockTimestamp:           new(upgrade.UnixTimestamp(u.CortinaTime)),
+				DurangoBlockTimestamp:           new(upgrade.UnixTimestamp(u.DurangoTime)),
+				EtnaTimestamp:                   new(upgrade.UnixTimestamp(u.EtnaTime)),
+				FortunaTimestamp:                new(upgrade.UnixTimestamp(u.FortunaTime)),
+				GraniteTimestamp:                new(upgrade.UnixTimestamp(u.GraniteTime)),
+				HeliconTimestamp:                new(upgrade.UnixTimestamp(u.HeliconTime)),
+				IglooTimestamp:                  new(upgrade.UnixTimestamp(u.IglooTime)),
 			},
 			AvalancheContext: extras.AvalancheContext{
 				SnowCtx: ctx,
@@ -125,13 +125,13 @@ func parseGenesis(ctx *snow.Context, b []byte) (*genesis, error) {
 				PrecompileUpgrades: []extras.PrecompileUpgrade{
 					{
 						Config: warp.NewDefaultConfig(
-							utils.TimeToNewUint64(u.DurangoTime),
+							new(upgrade.UnixTimestamp(u.DurangoTime)),
 						),
 					},
 					// Flare: the P-chain gateway is active from Helicon on.
 					{
 						Config: pchaingateway.NewDefaultConfig(
-							utils.TimeToNewUint64(u.HeliconTime),
+							new(upgrade.UnixTimestamp(u.HeliconTime)),
 						),
 					},
 				},
@@ -144,16 +144,16 @@ func parseGenesis(ctx *snow.Context, b []byte) (*genesis, error) {
 var (
 	mainnetChainID = big.NewInt(43114)
 	fujiChainID    = big.NewInt(43113)
+	// for use with the synchronoustest fixture
+	testFixtureChainID = big.NewInt(43110)
 )
 
 // Flare: Songbird and Coston activated Apricot Phase 3 (London) mid-chain;
-// every other Flare/Songbird network has had it active from genesis. The
-// heights mirror coreth's SetEthUpgrades, which pins them in the chain config
-// the pre-Helicon node stores. When the transition VM starts the SAE VM at
-// Helicon, [verifyAndWriteBlock] checks the config derived here against that
-// stored config (ChainConfig.CheckCompatible), so they MUST match or the SAE
-// VM refuses to start on an existing Songbird/Coston database; SAE's replays
-// of pre-London blocks (tracing) would also run under the wrong rules.
+// every other Flare/Songbird network has had it active from genesis. These
+// heights used to be pinned by coreth's SetEthUpgrades and MUST match the
+// chain config stored by the pre-Helicon node, or the SAE VM refuses to start
+// on an existing database (ChainConfig.CheckCompatible) and would replay
+// pre-London history under London rules.
 var (
 	songbirdChainID = corethparams.SongbirdChainID
 	costonChainID   = corethparams.CostonChainID
@@ -161,12 +161,12 @@ var (
 
 func berlinBlock(chainID *big.Int) int64 {
 	switch {
-	case utils.BigEqual(chainID, mainnetChainID):
+	case chainID.Cmp(mainnetChainID) == 0:
 		return 1_640_340 // https://snowtrace.io/block/1640340?chainid=43114, AP2 activation block
-	case utils.BigEqual(chainID, fujiChainID):
+	case chainID.Cmp(fujiChainID) == 0:
 		return 184_985 // https://testnet.snowtrace.io/block/184985?chainid=43113, AP2 activation block
-	case utils.BigEqual(chainID, corethparams.TestFixtureChainID):
-		return corethparams.TestFixtureBerlinBlock
+	case chainID.Cmp(testFixtureChainID) == 0:
+		return 3 // AP2 activation block of the synchronoustest fixture
 	default:
 		// Includes every Flare/Songbird network: AP2 has always been active.
 		return 0
@@ -175,15 +175,15 @@ func berlinBlock(chainID *big.Int) int64 {
 
 func londonBlock(chainID *big.Int) int64 {
 	switch {
-	case utils.BigEqual(chainID, mainnetChainID):
+	case chainID.Cmp(mainnetChainID) == 0:
 		return 3_308_552 // https://snowtrace.io/block/3308552?chainid=43114, AP3 activation block
-	case utils.BigEqual(chainID, fujiChainID):
+	case chainID.Cmp(fujiChainID) == 0:
 		return 805_078 // https://testnet.snowtrace.io/block/805078?chainid=43113, AP3 activation block
-	case utils.BigEqual(chainID, corethparams.TestFixtureChainID):
-		return corethparams.TestFixtureLondonBlock
-	case utils.BigEqual(chainID, songbirdChainID):
+	case chainID.Cmp(testFixtureChainID) == 0:
+		return 5 // AP3 activation block of the synchronoustest fixture
+	case chainID.Cmp(songbirdChainID) == 0:
 		return 12_349_716 // https://songbird.flarescan.com/block/12349716, AP3 activation block
-	case utils.BigEqual(chainID, costonChainID):
+	case chainID.Cmp(costonChainID) == 0:
 		return 55_188 // https://coston.testnet.flarescan.com/block/55188, AP3 activation block
 	default:
 		// Includes Flare, Coston2 and the local networks: AP3 has always been
@@ -232,9 +232,9 @@ func (g *genesis) verifyAndWriteBlock(db ethdb.Database) error {
 		return errNoHeadHeader
 	}
 	height, timestamp := head.Number.Uint64(), head.Time
-	// TODO(JonathanOppenheimer): coreth exposes a `skip-upgrade-check` config
-	// that bypasses this compatibility check; we need to make such a check
-	// unnecessary for the c-chain.
+	// TODO(JonathanOppenheimer): make this compatibility check unnecessary for
+	// the c-chain, rather than exposing a `skip-upgrade-check` config that
+	// bypasses it.
 	if err := prev.CheckCompatible(g.Config, height, timestamp); err != nil {
 		return fmt.Errorf("incompatible chain config: %w", err)
 	}
@@ -259,6 +259,8 @@ func writeGenesisBlock(db ethdb.Database, block *types.Block, config *ethparams.
 	rawdb.WriteChainConfig(b, hash, config)
 	return b.Write()
 }
+
+const ap3BaseFee = 225 * ethparams.GWei
 
 func (g *genesis) block() (*types.Block, error) {
 	root, err := g.root()
@@ -295,7 +297,7 @@ func (g *genesis) block() (*types.Block, error) {
 	if c.IsApricotPhase3(g.Timestamp) { // Also called London
 		h.BaseFee = g.BaseFee
 		if h.BaseFee == nil {
-			h.BaseFee = big.NewInt(ap3.InitialBaseFee)
+			h.BaseFee = big.NewInt(ap3BaseFee)
 		}
 	}
 

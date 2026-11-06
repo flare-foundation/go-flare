@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/rpc/v2"
 	"go.uber.org/zap"
 
 	"github.com/ava-labs/avalanchego/api/metrics"
@@ -28,8 +27,8 @@ import (
 	"github.com/ava-labs/avalanchego/snow/validators"
 	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/constants"
-	"github.com/ava-labs/avalanchego/utils/json"
 	"github.com/ava-labs/avalanchego/utils/logging"
+	"github.com/ava-labs/avalanchego/utils/rpc"
 	"github.com/ava-labs/avalanchego/utils/timer/mockable"
 	"github.com/ava-labs/avalanchego/version"
 	"github.com/ava-labs/avalanchego/vms/components/avax"
@@ -462,20 +461,20 @@ func (*VM) Version(context.Context) (string, error) {
 // * keys are API endpoint extensions
 // * values are API handlers
 func (vm *VM) CreateHandlers(context.Context) (map[string]http.Handler, error) {
-	server := rpc.NewServer()
-	server.RegisterCodec(json.NewCodec(), "application/json")
-	server.RegisterCodec(json.NewCodec(), "application/json;charset=UTF-8")
-	server.RegisterInterceptFunc(vm.metrics.InterceptRequest)
-	server.RegisterAfterFunc(vm.metrics.AfterRequest)
 	service := &Service{
 		vm:                    vm,
 		addrManager:           avax.NewAddressManager(vm.ctx),
 		stakerAttributesCache: lru.NewCache[ids.ID, *stakerAttributes](stakerAttributesCacheSize),
 	}
-	err := server.RegisterService(service, "platform")
+	server, err := rpc.NewHandler("platform", service)
+	if err != nil {
+		return nil, err
+	}
+	server.RegisterInterceptFunc(vm.metrics.InterceptRequest)
+	server.RegisterAfterFunc(vm.metrics.AfterRequest)
 	return map[string]http.Handler{
 		"": server,
-	}, err
+	}, nil
 }
 
 func (*VM) NewHTTPHandler(context.Context) (http.Handler, error) {

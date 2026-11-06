@@ -8,13 +8,9 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/ava-labs/libevm/common"
-
-	"github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/upgrade/granite"
 	"github.com/ava-labs/avalanchego/graft/evm/utils"
 	"github.com/ava-labs/avalanchego/snow"
 	"github.com/ava-labs/avalanchego/utils/constants"
-	"github.com/ava-labs/avalanchego/vms/evm/acp176"
 
 	ethparams "github.com/ava-labs/libevm/params"
 )
@@ -90,6 +86,10 @@ var (
 
 	TestHeliconChainConfig = copyAndSet(TestGraniteChainConfig, func(c *ChainConfig) {
 		c.NetworkUpgrades.HeliconTimestamp = utils.PointerTo[uint64](0)
+	})
+
+	TestIglooChainConfig = copyAndSet(TestHeliconChainConfig, func(c *ChainConfig) {
+		c.NetworkUpgrades.IglooTimestamp = utils.PointerTo[uint64](0)
 	})
 
 	TestChainConfig = copyConfig(TestGraniteChainConfig)
@@ -285,31 +285,16 @@ func checkForks(forks []fork) error {
 	return nil
 }
 
-// Verify verifies chain config.
-func (c *ChainConfig) Verify() error {
-	// Verify the precompile upgrades are internally consistent given the existing chainConfig.
-	if err := c.verifyPrecompileUpgrades(); err != nil {
-		return fmt.Errorf("invalid precompile upgrades: %w", err)
-	}
-
-	return nil
-}
-
-// IsPrecompileEnabled returns whether precompile with `address` is enabled at `timestamp`.
-func (c *ChainConfig) IsPrecompileEnabled(address common.Address, timestamp uint64) bool {
-	config := c.GetActivePrecompileConfig(address, timestamp)
-	return config != nil && !config.IsDisabled()
-}
-
 // requireSnowCtx returns the Avalanche context, panicking if it is nil.
 //
 // Network classification (Songbird / Flare-family) is consensus-relevant: it
-// selects gas targets and the ACP-176 base-fee floor. SnowCtx is populated
-// during VM initialization (see parseGenesis) and is intentionally not
-// serialized (json:"-"). A nil value here therefore means the config never went
-// through initialization or lost its context (e.g. a JSON/DB round-trip).
-// Rather than silently falling back to Avalanche semantics — which would
-// mis-activate consensus rules on a Flare/Songbird network — we fail loud.
+// selects the ACP-283 minimum gas price floor and the Flare/Songbird
+// transaction-application rules. SnowCtx is populated during VM initialization
+// (see parseGenesis) and is intentionally not serialized (json:"-"). A nil
+// value here therefore means the config never went through initialization or
+// lost its context (e.g. a JSON/DB round-trip). Rather than silently falling
+// back to Avalanche semantics — which would mis-activate consensus rules on a
+// Flare/Songbird network — we fail loud.
 func (c *ChainConfig) requireSnowCtx(caller string) *snow.Context {
 	if c.SnowCtx == nil {
 		panic("extras.ChainConfig." + caller + ": SnowCtx is nil; network classification requires the SnowCtx set during VM initialization")
@@ -335,16 +320,6 @@ func (c *ChainConfig) IsFlareFamilyCode() bool {
 	}
 	id := c.requireSnowCtx("IsFlareFamilyCode").NetworkID
 	return constants.IsFlareNetworkID(id) || constants.IsSgbNetworkID(id)
-}
-
-// ACP176Params returns the ACP-176 parameter set that applies at the given
-// block timestamp. On Flare-family networks past Granite, this is the
-// Granite parameter set; otherwise the default acp176 parameters apply.
-func (c *ChainConfig) ACP176Params(timestamp uint64) *acp176.Params {
-	if c.IsGranite(timestamp) && c.IsFlareFamilyCode() {
-		return granite.DefaultParams
-	}
-	return acp176.DefaultParams
 }
 
 // IsForkTransition returns true if `fork` activates during the transition from

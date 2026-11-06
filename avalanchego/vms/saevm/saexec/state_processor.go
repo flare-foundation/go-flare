@@ -18,7 +18,6 @@ import (
 	"github.com/ava-labs/libevm/log"
 	"github.com/ava-labs/libevm/params"
 
-	dconsensus "github.com/ava-labs/avalanchego/graft/coreth/consensus"
 	dcore "github.com/ava-labs/avalanchego/graft/coreth/core"
 	corethextras "github.com/ava-labs/avalanchego/graft/coreth/params/extras"
 )
@@ -87,18 +86,6 @@ func (e *daemonEvmCaller) GetGasLimit() uint64 {
 	return e.evm.Context.GasLimit
 }
 
-// legacyChainContext bridges SAE's libevm chain context to grafted coreth's
-// legacy context. Header lookup is the only operation used after the explicit
-// block author has been supplied; it preserves BLOCKHASH behavior. Engine is
-// deliberately nil because SAE always passes the header coinbase as author.
-type legacyChainContext struct {
-	core.ChainContext
-}
-
-var _ dcore.ChainContext = legacyChainContext{}
-
-func (legacyChainContext) Engine() dconsensus.Engine { return nil }
-
 // IsLegacyCorethBlock reports whether a block with the given timestamp is
 // applied through the legacy pre-Helicon coreth StateTransition (see
 // [ApplyTransaction]) rather than [ApplyTransactionWithExtras]. Only these
@@ -125,13 +112,15 @@ func IsLegacyCorethBlock(config *params.ChainConfig, blockTime uint64) bool {
 // primitive of the SAE rpc block-level tracers, which inject a tracer via cfg.
 func ApplyTransaction(config *params.ChainConfig, bc core.ChainContext, author *common.Address, gp *core.GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config) (*types.Receipt, error) {
 	if IsLegacyCorethBlock(config, header.Time) {
-		legacyBC := legacyChainContext{ChainContext: bc}
-		blockContext := dcore.NewEVMBlockContext(header, legacyBC, author)
+		// The block context comes from libevm, exactly as for SAE-era blocks:
+		// coreth's own copy no longer exists (deleted with the pre-SAE VM in
+		// v1.15.2) and was equivalent for difficulty-1 Avalanche headers,
+		// apart from exposing only a trimmed header to precompiles.
+		blockContext := core.NewEVMBlockContext(header, bc, author)
 		return dcore.ApplyTransaction(
 			config,
-			legacyBC,
 			blockContext,
-			(*dcore.GasPool)(gp),
+			gp,
 			statedb,
 			header,
 			tx,
@@ -244,6 +233,7 @@ func applyTransactionWithExtras(msg *core.Message, config *params.ChainConfig, g
 	}
 	receipt.TxHash = tx.Hash()
 	receipt.GasUsed = result.UsedGas
+	receipt.GasExecuted = result.GasExecuted //libevm
 
 	if tx.Type() == types.BlobTxType {
 		receipt.BlobGasUsed = uint64(len(tx.BlobHashes()) * params.BlobTxBlobGasPerBlob)

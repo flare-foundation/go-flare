@@ -43,6 +43,7 @@ var (
 		GraniteTime:               time.Date(2025, time.November, 19, 16, 0, 0, 0, time.UTC),
 		GraniteEpochDuration:      5 * time.Minute,
 		HeliconTime:               time.Date(2026, time.September, 22, 15, 0, 0, 0, time.UTC),
+		IglooTime:                 UnscheduledActivationTime,
 	}
 	// Fuji = Config{
 	// 	ApricotPhase1Time:            time.Date(2021, time.March, 26, 14, 0, 0, 0, time.UTC),
@@ -67,6 +68,7 @@ var (
 	// 	GraniteTime:               time.Date(2025, time.October, 29, 15, 0, 0, 0, time.UTC),
 	// 	GraniteEpochDuration:      5 * time.Minute,
 	//  HeliconTime:               time.Date(2026, time.July, 28, 15, 0, 0, 0, time.UTC),
+	//  IglooTime:                 UnscheduledActivationTime,
 	// }
 	Flare = Config{
 		ApricotPhase1Time:     ZeroTime,
@@ -85,6 +87,7 @@ var (
 		GraniteTime:           time.Date(2026, time.July, 14, 12, 0, 0, 0, time.UTC),
 		GraniteEpochDuration:  5 * time.Minute,
 		HeliconTime:           UnscheduledActivationTime,
+		IglooTime:             UnscheduledActivationTime,
 	}
 	Songbird = Config{
 		ApricotPhase1Time:      ZeroTime,
@@ -104,6 +107,7 @@ var (
 		GraniteTime:            time.Date(2026, time.July, 7, 12, 0, 0, 0, time.UTC),
 		GraniteEpochDuration:   5 * time.Minute,
 		HeliconTime:            UnscheduledActivationTime,
+		IglooTime:              UnscheduledActivationTime,
 	}
 	Costwo = Config{
 		ApricotPhase1Time:     ZeroTime,
@@ -122,6 +126,7 @@ var (
 		GraniteTime:           time.Date(2026, time.June, 16, 12, 0, 0, 0, time.UTC),
 		GraniteEpochDuration:  5 * time.Minute,
 		HeliconTime:           time.Date(2026, time.November, 3, 12, 0, 0, 0, time.UTC),
+		IglooTime:             UnscheduledActivationTime,
 	}
 	Coston = Config{
 		ApricotPhase1Time:      ZeroTime,
@@ -141,6 +146,7 @@ var (
 		GraniteTime:            time.Date(2026, time.June, 11, 12, 0, 0, 0, time.UTC),
 		GraniteEpochDuration:   5 * time.Minute,
 		HeliconTime:            UnscheduledActivationTime,
+		IglooTime:              UnscheduledActivationTime,
 	}
 	LocalFlare = Config{
 		ApricotPhase1Time:            ZeroTime,
@@ -161,6 +167,7 @@ var (
 		GraniteTime:                  ZeroTime,
 		GraniteEpochDuration:         5 * time.Minute,
 		HeliconTime:                  ZeroTime,
+		IglooTime:                    UnscheduledActivationTime,
 	}
 	Local = Config{
 		ApricotPhase1Time:            ZeroTime,
@@ -182,6 +189,7 @@ var (
 		GraniteTime:                  ZeroTime,
 		GraniteEpochDuration:         5 * time.Minute,
 		HeliconTime:                  ZeroTime,
+		IglooTime:                    UnscheduledActivationTime,
 	}
 	Default = Config{
 		ApricotPhase1Time:            InitiallyActiveTime,
@@ -202,6 +210,7 @@ var (
 		GraniteTime:                  InitiallyActiveTime,
 		GraniteEpochDuration:         30 * time.Second,
 		HeliconTime:                  InitiallyActiveTime,
+		IglooTime:                    UnscheduledActivationTime,
 	}
 
 	ErrInvalidUpgradeTimes = errors.New("invalid upgrade configuration")
@@ -227,6 +236,8 @@ type Config struct {
 	GraniteTime                  time.Time     `json:"graniteTime"`
 	GraniteEpochDuration         time.Duration `json:"graniteEpochDuration"`
 	HeliconTime                  time.Time     `json:"heliconTime"`
+	IglooTime                    time.Time     `json:"iglooTime"`
+	// When adding a new upgrade, follow new_upgrade_checklist.md.
 }
 
 func (c *Config) Validate() error {
@@ -251,6 +262,7 @@ func (c *Config) Validate() error {
 		c.FortunaTime,
 		c.GraniteTime,
 		c.HeliconTime,
+		c.IglooTime,
 	)
 	for i := 0; i < len(upgrades)-1; i++ {
 		if upgrades[i].After(upgrades[i+1]) {
@@ -326,6 +338,14 @@ func (c *Config) IsHeliconActivated(t time.Time) bool {
 	return !t.Before(c.HeliconTime)
 }
 
+func (c *Config) IsIglooActivated(t time.Time) bool {
+	return !t.Before(c.IglooTime)
+}
+
+func (c *Config) LatestTime() time.Time {
+	return c.IglooTime
+}
+
 func GetConfig(networkID uint32) Config {
 	switch networkID {
 	case constants.FlareID:
@@ -344,4 +364,10 @@ func GetConfig(networkID uint32) Config {
 	default:
 		return Default
 	}
+}
+
+// UnixTimestamp returns t as Unix seconds, the format EVM chain configs use for
+// fork activation times.
+func UnixTimestamp(t time.Time) uint64 {
+	return uint64(t.Unix()) //#nosec G115 -- Upgrade times are after the Unix epoch
 }

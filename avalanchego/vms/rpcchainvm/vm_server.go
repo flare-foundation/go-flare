@@ -906,6 +906,7 @@ func convertNetworkUpgrades(pbUpgrades *vmpb.NetworkUpgrades) (upgrade.Config, e
 	if err != nil {
 		return upgrade.Config{}, err
 	}
+	igloo, err := grpcutils.TimestampAsTime(pbUpgrades.IglooTime)
 	songbirdTransition, err := grpcutils.TimestampAsTime(pbUpgrades.SongbirdTransitionTime)
 	if err != nil {
 		return upgrade.Config{}, err
@@ -930,6 +931,7 @@ func convertNetworkUpgrades(pbUpgrades *vmpb.NetworkUpgrades) (upgrade.Config, e
 		GraniteTime:                  granite,
 		GraniteEpochDuration:         graniteEpochDuration,
 		HeliconTime:                  helicon,
+		IglooTime:                    igloo,
 		SongbirdTransitionTime:       songbirdTransition,
 	}, nil
 }

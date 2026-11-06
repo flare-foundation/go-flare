@@ -9,9 +9,5 @@ go_library(
     name = "granite",
     srcs = ["params.go"],
     importpath = "github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/upgrade/granite",
-    deps = [
-        "//graft/evm/utils",
-        "//vms/components/gas",
-        "//vms/evm/acp176",
-    ],
+    deps = ["//graft/evm/utils"],
 )
