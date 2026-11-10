@@ -7,10 +7,10 @@ Here are listed specific changes to the code for the Flare and Songbird networks
 This release updates the Flare and Songbird codebase to AvalancheGo v1.15.1 (Helicon upgrade). It supersedes the v1.15.1-coston2 pre-release.
 
 The changes go into effect
- * November 3, 2026 at 12 PM UTC for the Coston2 network (already active, as scheduled by the v1.15.1-coston2 pre-release),
- * November 11, 2026 at 1 PM UTC for the Coston network,
- * November 11, 2026 at 1 PM UTC for the Songbird network,
- * November 11, 2026 at 1 PM UTC for the Flare network.
+ * November 3, 2026 at 12:00:00 UTC for the Coston2 network (already active, as scheduled by the v1.15.1-coston2 pre-release),
+ * November 11, 2026 at 7:00:00 UTC for the Coston network,
+ * November 11, 2026 at 8:00:00 UTC for the Songbird network,
+ * November 11, 2026 at 14:00:00 UTC for the Flare network.
 
 Nodes should be updated to this version before these times.
 
