@@ -2,14 +2,17 @@
 
 Here are listed specific changes to the code for the Flare and Songbird networks. For a comprehensive list of general changes, see [here](./avalanchego/RELEASES.md) for the AvalancheGo project — which, since v1.14.x, also contains Coreth (grafted in at `avalanchego/graft/coreth`).
 
-## v1.15.1-coston2
+## v1.15.1
 
-This is a **pre-release for the Coston2 network only**. It updates the Flare and Songbird codebase to AvalancheGo v1.15.1 (Helicon upgrade). The node refuses to start on the Flare and Songbird networks (`mainnet is not supported`); the activation times for the Coston, Songbird and Flare networks will be scheduled in the final release.
+This release updates the Flare and Songbird codebase to AvalancheGo v1.15.1 (Helicon upgrade). It supersedes the v1.15.1-coston2 pre-release.
 
 The changes go into effect
- * November 3, 2026 at 12 PM UTC for the Coston2 network.
+ * November 3, 2026 at 12 PM UTC for the Coston2 network (already active, as scheduled by the v1.15.1-coston2 pre-release),
+ * November 11, 2026 at 1 PM UTC for the Coston network,
+ * November 11, 2026 at 1 PM UTC for the Songbird network,
+ * November 11, 2026 at 1 PM UTC for the Flare network.
 
-Coston2 nodes should be updated to this version before this time.
+Nodes should be updated to this version before these times.
 
 ### Helicon upgrade
 

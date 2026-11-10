@@ -1398,10 +1398,6 @@ func GetNodeConfig(v *viper.Viper) (node.Config, error) {
 		return node.Config{}, err
 	}
 
-	if nodeConfig.NetworkID == constants.FlareID || nodeConfig.NetworkID == constants.SongbirdID || nodeConfig.NetworkID == constants.CostonID {
-		return node.Config{}, errors.New("only local networks and coston2 are supported")
-	}
-
 	// Database
 	nodeConfig.DatabaseConfig, err = getDatabaseConfig(v, nodeConfig.NetworkID)
 	if err != nil {
