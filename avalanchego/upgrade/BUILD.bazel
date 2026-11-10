@@ -14,7 +14,10 @@ go_library(
 
 go_test(
     name = "upgrade_test",
-    srcs = ["upgrade_test.go"],
+    srcs = [
+        "upgrade_flare_test.go",
+        "upgrade_test.go",
+    ],
     deps = [
         ":upgrade",
         "//upgrade/upgradetest",

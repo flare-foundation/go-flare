@@ -80,7 +80,9 @@ func (b *preForkBlock) getInnerBlk() snowman.Block {
 
 func (b *preForkBlock) verifyPreForkChild(ctx context.Context, child *preForkBlock) error {
 	parentTimestamp := b.Timestamp()
-	if b.vm.Upgrades.IsApricotPhase4Activated(parentTimestamp) {
+	// Flare: IsProposerVMActivated rather than IsApricotPhase4Activated, here
+	// and below; see upgrade.Config.IsProposerVMActivated.
+	if b.vm.Upgrades.IsProposerVMActivated(parentTimestamp) {
 		if err := verifyIsOracleBlock(ctx, b.Block); err != nil {
 			return err
 		}
@@ -135,7 +137,7 @@ func (b *preForkBlock) verifyPostForkChild(ctx context.Context, child *postForkB
 	// if the *preForkBlock is the last *preForkBlock before activation takes effect
 	// (its timestamp is at or after the activation time)
 	parentTimestamp := b.Timestamp()
-	if !b.vm.Upgrades.IsApricotPhase4Activated(parentTimestamp) {
+	if !b.vm.Upgrades.IsProposerVMActivated(parentTimestamp) {
 		return errProposersNotActivated
 	}
 
@@ -175,7 +177,7 @@ func (b *preForkBlock) selectChildPChainHeight(ctx context.Context) (uint64, err
 
 func (b *preForkBlock) buildChild(ctx context.Context) (Block, error) {
 	parentTimestamp := b.Timestamp()
-	if !b.vm.Upgrades.IsApricotPhase4Activated(parentTimestamp) {
+	if !b.vm.Upgrades.IsProposerVMActivated(parentTimestamp) {
 		// The chain hasn't forked yet
 		innerBlock, err := b.vm.ChainVM.BuildBlock(ctx)
 		if err != nil {

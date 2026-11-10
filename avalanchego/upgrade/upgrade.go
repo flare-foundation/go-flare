@@ -294,6 +294,32 @@ func (c *Config) IsApricotPhase4Activated(t time.Time) bool {
 	return !t.Before(c.ApricotPhase4Time)
 }
 
+// IsProposerVMActivated reports whether the ProposerVM is active for the
+// children of a block with timestamp t: upstream activates it with Apricot
+// Phase 4, but never before InitiallyActiveTime.
+//
+// Flare: the Flare and Coston2 C-chain chain configs have the Apricot phases
+// at Unix 0, so since 2026-03 ApricotPhase4Time is ZeroTime on those networks
+// (the SAE VM derives the chain config from it, and the stored config must
+// not change). The node, however, activated the ProposerVM on them on
+// 2022-06-01, before their first block (go-flare's launch-era
+// ApricotPhase4Times; the local networks had the same date), and until
+// 2026-03 this package carried InitiallyActiveTime. ApricotPhase4Time alone
+// would therefore mis-classify the one block whose parent is older than that:
+// the child of the C-chain genesis (timestamp 0). Block 1 is a pre-fork
+// block on Flare and Coston2 (July and September 2022, so every later block
+// is post-fork), and a node bootstrapping from genesis must accept it as such;
+// with the genesis counted as activated, block 1 fails verification because
+// the genesis is not an oracle block. InitiallyActiveTime is the earliest
+// activation any network can have had (upgrade.Default), so this floor is
+// exact for every schedule; Songbird and Coston, with explicit later
+// ApricotPhase4Time, and the P-chains (genesis start times from 2021 on)
+// are unaffected. On the local networks block 1 is built pre-fork, as on
+// upstream's local networks with upgrade.Default.
+func (c *Config) IsProposerVMActivated(t time.Time) bool {
+	return c.IsApricotPhase4Activated(t) && !t.Before(InitiallyActiveTime)
+}
+
 func (c *Config) IsApricotPhase5Activated(t time.Time) bool {
 	return !t.Before(c.ApricotPhase5Time)
 }

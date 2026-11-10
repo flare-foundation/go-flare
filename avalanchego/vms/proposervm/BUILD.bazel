@@ -63,14 +63,15 @@ go_library(
 go_test(
     name = "proposervm_test",
     srcs = [
-        "block_flare_test.go",
         "batched_vm_test.go",
+        "block_flare_test.go",
         "block_test.go",
         "main_test.go",
         "mocks_generate_test.go",
         "mocks_test.go",
         "post_fork_block_test.go",
         "post_fork_option_test.go",
+        "pre_fork_block_flare_test.go",
         "pre_fork_block_test.go",
         "service_test.go",
         "state_syncable_vm_test.go",
