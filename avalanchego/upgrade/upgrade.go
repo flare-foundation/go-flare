@@ -86,7 +86,7 @@ var (
 		FortunaTime:           time.Date(2026, time.April, 14, 12, 0, 0, 0, time.UTC),
 		GraniteTime:           time.Date(2026, time.July, 14, 12, 0, 0, 0, time.UTC),
 		GraniteEpochDuration:  5 * time.Minute,
-		HeliconTime:           UnscheduledActivationTime,
+		HeliconTime:           time.Date(2026, time.November, 11, 14, 0, 0, 0, time.UTC),
 		IglooTime:             UnscheduledActivationTime,
 	}
 	Songbird = Config{
@@ -106,7 +106,7 @@ var (
 		FortunaTime:            time.Date(2026, time.March, 31, 12, 0, 0, 0, time.UTC),
 		GraniteTime:            time.Date(2026, time.July, 7, 12, 0, 0, 0, time.UTC),
 		GraniteEpochDuration:   5 * time.Minute,
-		HeliconTime:            UnscheduledActivationTime,
+		HeliconTime:            time.Date(2026, time.November, 11, 8, 0, 0, 0, time.UTC),
 		IglooTime:              UnscheduledActivationTime,
 	}
 	Costwo = Config{
@@ -145,7 +145,7 @@ var (
 		FortunaTime:            time.Date(2026, time.March, 17, 12, 0, 0, 0, time.UTC),
 		GraniteTime:            time.Date(2026, time.June, 11, 12, 0, 0, 0, time.UTC),
 		GraniteEpochDuration:   5 * time.Minute,
-		HeliconTime:            UnscheduledActivationTime,
+		HeliconTime:            time.Date(2026, time.November, 11, 7, 0, 0, 0, time.UTC),
 		IglooTime:              UnscheduledActivationTime,
 	}
 	LocalFlare = Config{

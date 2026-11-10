@@ -31,7 +31,7 @@ jobs:
     uses: ./.github/workflows/build-go-verification.yaml # zizmor: ignore[self-repository] actionlint does not yet support the $/ syntax
     with:
       go_version: "1.26.10"
-      ubuntu_version: "24.04"
+      ubuntu_version: "latest"
       build_artifact_name: "avalanchego-verification"
 
   release:
@@ -87,7 +87,7 @@ jobs:
           else
             echo "Hashes don't match"
 
-            diffoscope "${AVALANCHEGO_BINARY}" "${AVALANCHEGO_VERIFICATION_BINARY}" || true
+            timeout 300 diffoscope "${AVALANCHEGO_BINARY}" "${AVALANCHEGO_VERIFICATION_BINARY}" || true
 
             exit 1
           fi
