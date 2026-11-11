@@ -361,7 +361,8 @@ type applyTxEnv struct {
 }
 
 // testBlockTime is after every prioritised-contract activation time defined
-// in graft/coreth/core/daemon.go.
+// in graft/coreth/core/daemon.go, except the Songbird/Coston gas limit cap
+// activation (November 2026), which the cap tests set on the header explicitly.
 var testBlockTime = uint64(time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC).Unix())
 
 // newTestChainConfig returns a fresh all-forks-active config (mirroring
@@ -578,6 +579,74 @@ func testApplyTransactionWithExtrasSongbird(t *testing.T) {
 	assert.Equal(t, new(uint256.Int).Sub(initial, nominalFee), env.statedb.GetBalance(env.sender), "sender pays only the nominal fee")
 	assert.True(t, env.statedb.GetBalance(deadBurnAddress).IsZero(), "nothing burned to the dEaD address on Songbird")
 	assert.Equal(t, mint, env.statedb.GetBalance(daemonContractAddr), "daemon mint request honoured")
+
+	// Songbird (and Coston) get the Flare 3M gas limit cap for prioritised
+	// calls at a fixed block time: before it, any gas limit is refunded, which
+	// since Helicon (ACP-194 charges at least half of the gas limit, and the
+	// padding is refunded with the rest) made half of the block gas limit free
+	// block space for the nominal fee.
+	capActivation := dcore.PrioritisedGasLimitCapActivationTime(corethparams.SongbirdChainID)
+	require.NotZero(t, capActivation, "test setup: Songbird must schedule the gas limit cap")
+	require.Greater(t, capActivation, testBlockTime, "test setup: testBlockTime must predate the cap activation")
+
+	t.Run("gas_limit_above_cap_before_activation_is_prioritised", func(t *testing.T) {
+		env := newApplyTxEnv(t, corethparams.SongbirdChainID, mint)
+		env.header.Time = capActivation // the cap applies strictly after the activation time
+		initial := env.statedb.GetBalance(env.sender).Clone()
+
+		receipt, err := env.apply(t, &types.LegacyTx{
+			Nonce:    0,
+			To:       &ftsoContractAddr,
+			Gas:      3_000_001,
+			GasPrice: gasPrice,
+			Data:     ftsoData,
+		})
+		require.NoError(t, err, "ApplyTransactionWithExtras()")
+		require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status, "receipt status")
+
+		assert.Equal(t, nominalFee, env.statedb.GetBalance(blackhole.Address), "nominal fee stays on the Songbird coinbase")
+		assert.Equal(t, new(uint256.Int).Sub(initial, nominalFee), env.statedb.GetBalance(env.sender), "sender pays only the nominal fee before the cap activation")
+	})
+
+	t.Run("gas_limit_above_cap_after_activation_is_not_prioritised", func(t *testing.T) {
+		env := newApplyTxEnv(t, corethparams.SongbirdChainID, mint)
+		env.header.Time = capActivation + 1
+		initial := env.statedb.GetBalance(env.sender).Clone()
+
+		receipt, err := env.apply(t, &types.LegacyTx{
+			Nonce:    0,
+			To:       &ftsoContractAddr,
+			Gas:      3_000_001,
+			GasPrice: gasPrice,
+			Data:     ftsoData,
+		})
+		require.NoError(t, err, "ApplyTransactionWithExtras()")
+		require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status, "receipt status")
+		require.Less(t, receipt.GasUsed, uint64(3_000_000), "test setup: gas used must be below the cap")
+
+		actualFee := feeOf(t, receipt.GasUsed, gasPrice)
+		assert.Equal(t, actualFee, env.statedb.GetBalance(blackhole.Address), "full fee stays on the Songbird coinbase, no refund")
+		assert.Equal(t, new(uint256.Int).Sub(initial, actualFee), env.statedb.GetBalance(env.sender), "sender pays the full fee after the cap activation")
+		assert.Equal(t, mint, env.statedb.GetBalance(daemonContractAddr), "daemon still runs for successful txs")
+	})
+
+	t.Run("gas_limit_at_cap_after_activation_is_prioritised", func(t *testing.T) {
+		env := newApplyTxEnv(t, corethparams.SongbirdChainID, mint)
+		env.header.Time = capActivation + 1
+		initial := env.statedb.GetBalance(env.sender).Clone()
+
+		receipt, err := env.apply(t, &types.LegacyTx{
+			Nonce:    0,
+			To:       &ftsoContractAddr,
+			Gas:      3_000_000,
+			GasPrice: gasPrice,
+			Data:     ftsoData,
+		})
+		require.NoError(t, err, "ApplyTransactionWithExtras()")
+		require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status, "receipt status")
+
+		assert.Equal(t, new(uint256.Int).Sub(initial, nominalFee), env.statedb.GetBalance(env.sender), "sender pays only the nominal fee at the cap")
+	})
 }
 
 // TestApplyTransactionWithExtrasNonFlareChain asserts upstream-equivalent

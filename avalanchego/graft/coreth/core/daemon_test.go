@@ -532,3 +532,62 @@ func TestPrioritisedContract(t *testing.T) {
 		t.Errorf("Expected true for FTSO contract after prefix activation with correct data")
 	}
 }
+
+// TestPrioritisedContractGasLimitCapSongbirdNetworks pins the time-gated gas
+// limit cap of prioritised calls on Songbird and Coston: unlimited up to and
+// including the activation time, prioritisedMaxGasLimit (the Flare cap) after
+// it, for the FTSO and the submitter branch alike. Flare keeps its cap.
+func TestPrioritisedContractGasLimitCapSongbirdNetworks(t *testing.T) {
+	ret1 := [32]byte{}
+	ret1[31] = 1
+	ftsoData := []byte{0xc5, 0xad, 0xc5, 0x39, 0x05}      // submitPriceHashes selector (Songbird networks)
+	submitterData := []byte{0x6c, 0x53, 0x2f, 0xae, 0x05} // submit1 selector
+	const blockGasLimit = 70_000_000                      // the SAE block gas limit on Songbird at the time of writing
+
+	for _, test := range []struct {
+		name       string
+		chainID    *big.Int
+		activation uint64
+	}{
+		{"songbird", params.SongbirdChainID, prioritisedGasLimitCapActivationTimeSongbird},
+		{"coston", params.CostonChainID, prioritisedGasLimitCapActivationTimeCoston},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			for _, blockTime := range []uint64{test.activation - 1, test.activation} {
+				if !IsPrioritisedContractCall(test.chainID, blockTime, &prioritisedFTSOContractAddress, ftsoData, nil, blockGasLimit) {
+					t.Errorf("block time %d: expected true for FTSO call with gas limit %d before the cap activation", blockTime, blockGasLimit)
+				}
+				if !IsPrioritisedContractCall(test.chainID, blockTime, &prioritisedSubmitterContractAddress, submitterData, ret1[:], blockGasLimit) {
+					t.Errorf("block time %d: expected true for submitter call with gas limit %d before the cap activation", blockTime, blockGasLimit)
+				}
+			}
+
+			after := test.activation + 1
+			if IsPrioritisedContractCall(test.chainID, after, &prioritisedFTSOContractAddress, ftsoData, nil, blockGasLimit) {
+				t.Errorf("expected false for FTSO call with gas limit %d after the cap activation", blockGasLimit)
+			}
+			if IsPrioritisedContractCall(test.chainID, after, &prioritisedFTSOContractAddress, ftsoData, nil, prioritisedMaxGasLimit+1) {
+				t.Errorf("expected false for FTSO call with gas limit %d after the cap activation", prioritisedMaxGasLimit+1)
+			}
+			if !IsPrioritisedContractCall(test.chainID, after, &prioritisedFTSOContractAddress, ftsoData, nil, prioritisedMaxGasLimit) {
+				t.Errorf("expected true for FTSO call with gas limit %d after the cap activation", prioritisedMaxGasLimit)
+			}
+			if IsPrioritisedContractCall(test.chainID, after, &prioritisedSubmitterContractAddress, submitterData, ret1[:], prioritisedMaxGasLimit+1) {
+				t.Errorf("expected false for submitter call with gas limit %d after the cap activation", prioritisedMaxGasLimit+1)
+			}
+			if !IsPrioritisedContractCall(test.chainID, after, &prioritisedSubmitterContractAddress, submitterData, ret1[:], prioritisedMaxGasLimit) {
+				t.Errorf("expected true for submitter call with gas limit %d after the cap activation", prioritisedMaxGasLimit)
+			}
+		})
+	}
+
+	// Flare has had the cap since the beginning.
+	flareFTSOData := []byte{0x8f, 0xc6, 0xf6, 0x67, 0x05} // submitHash selector (Flare networks)
+	blockTime := uint64(time.Date(2027, time.January, 1, 0, 0, 0, 0, time.UTC).Unix())
+	if IsPrioritisedContractCall(params.FlareChainID, blockTime, &prioritisedFTSOContractAddress, flareFTSOData, nil, prioritisedMaxGasLimit+1) {
+		t.Errorf("expected false for Flare FTSO call with gas limit %d", prioritisedMaxGasLimit+1)
+	}
+	if !IsPrioritisedContractCall(params.FlareChainID, blockTime, &prioritisedFTSOContractAddress, flareFTSOData, nil, prioritisedMaxGasLimit) {
+		t.Errorf("expected true for Flare FTSO call with gas limit %d", prioritisedMaxGasLimit)
+	}
+}

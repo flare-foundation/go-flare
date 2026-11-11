@@ -29,6 +29,16 @@ var (
 	submitterContractActivationTimeSongbird = uint64(time.Date(2024, time.March, 15, 12, 0, 0, 0, time.UTC).Unix())
 	submitterContractActivationTimeCoston   = uint64(time.Date(2024, time.February, 29, 12, 0, 0, 0, time.UTC).Unix())
 
+	// Block times after which the prioritised-call gas limit cap of the Flare
+	// networks (prioritisedMaxGasLimit) applies on Songbird and Coston as well.
+	// Before Helicon an unlimited cap only let a prioritised call execute for
+	// free; since Helicon (ACP-194) a transaction is charged at least half of
+	// its gas limit and settleFees refunds that padding too, so without a cap
+	// any gas limit up to the block limit is free block space for the nominal
+	// fee. Consensus-relevant: every node must switch at the same block time.
+	prioritisedGasLimitCapActivationTimeSongbird = uint64(time.Date(2026, time.November, 26, 12, 0, 0, 0, time.UTC).Unix())
+	prioritisedGasLimitCapActivationTimeCoston   = uint64(time.Date(2026, time.November, 19, 12, 0, 0, 0, time.UTC).Unix())
+
 	// Define ftso and submitter contract addresses
 	prioritisedFTSOContractAddress = common.HexToAddress("0x1000000000000000000000000000000000000003")
 
@@ -57,6 +67,11 @@ var (
 
 const (
 	prioritisedCallDataCap = 4500 // 4500 bytes
+
+	// prioritisedMaxGasLimit is the gas limit cap of prioritised calls on the
+	// Flare networks and, from their cap activation time on, on Songbird and
+	// Coston. A call with a higher gas limit pays the full fee.
+	prioritisedMaxGasLimit = 3_000_000
 )
 
 type prioritisedParams struct {
@@ -66,59 +81,70 @@ type prioritisedParams struct {
 	dataPrefixActivationTime uint64
 	submitterDataPrefixes    [][4]byte
 	ftsoDataPrefixes         [][4]byte
+	// gasLimitCapActivationTime, when non-zero, is the block time after which
+	// maxGasLimit is lowered to prioritisedMaxGasLimit (Songbird and Coston).
+	gasLimitCapActivationTime uint64
+}
+
+// maxGasLimitAt returns the gas limit cap of prioritised calls in force at
+// blockTime.
+func (p *prioritisedParams) maxGasLimitAt(blockTime uint64) uint64 {
+	if p.gasLimitCapActivationTime != 0 && blockTime > p.gasLimitCapActivationTime {
+		return min(p.maxGasLimit, prioritisedMaxGasLimit)
+	}
+	return p.maxGasLimit
 }
 
 var (
 	prioritisedContractVariants = utils.NewChainValue(&prioritisedParams{
-		0, common.Address{}, 0, 0, [][4]byte{}, [][4]byte{},
+		submitterDataPrefixes: [][4]byte{},
+		ftsoDataPrefixes:      [][4]byte{},
 	}).
 		AddValue(params.FlareChainID, &prioritisedParams{
-			submitterContractActivationTimeFlare,
-			prioritisedSubmitterContractAddress,
-			3000000,
-			uint64(time.Date(2024, time.October, 10, 15, 0, 0, 0, time.UTC).Unix()),
-			submitterDataPrefixes,
-			prioritisedFTSOContractDataPrefixesFlareNetworks,
+			submitterActivationTime:  submitterContractActivationTimeFlare,
+			submitterAddress:         prioritisedSubmitterContractAddress,
+			maxGasLimit:              prioritisedMaxGasLimit,
+			dataPrefixActivationTime: uint64(time.Date(2024, time.October, 10, 15, 0, 0, 0, time.UTC).Unix()),
+			submitterDataPrefixes:    submitterDataPrefixes,
+			ftsoDataPrefixes:         prioritisedFTSOContractDataPrefixesFlareNetworks,
 		}).
 		AddValue(params.CostwoChainID, &prioritisedParams{
-			submitterContractActivationTimeCostwo,
-			prioritisedSubmitterContractAddress,
-			3000000,
-			uint64(time.Date(2024, time.October, 10, 10, 0, 0, 0, time.UTC).Unix()),
-			submitterDataPrefixes,
-			prioritisedFTSOContractDataPrefixesFlareNetworks,
+			submitterActivationTime:  submitterContractActivationTimeCostwo,
+			submitterAddress:         prioritisedSubmitterContractAddress,
+			maxGasLimit:              prioritisedMaxGasLimit,
+			dataPrefixActivationTime: uint64(time.Date(2024, time.October, 10, 10, 0, 0, 0, time.UTC).Unix()),
+			submitterDataPrefixes:    submitterDataPrefixes,
+			ftsoDataPrefixes:         prioritisedFTSOContractDataPrefixesFlareNetworks,
 		}).
 		AddValue(params.SongbirdChainID, &prioritisedParams{
-			submitterContractActivationTimeSongbird,
-			prioritisedSubmitterContractAddress,
-			math.MaxUint64,
-			uint64(time.Date(2024, time.October, 10, 13, 0, 0, 0, time.UTC).Unix()),
-			submitterDataPrefixes,
-			prioritisedFTSOContractDataPrefixesSongbirdNetworks,
+			submitterActivationTime:   submitterContractActivationTimeSongbird,
+			submitterAddress:          prioritisedSubmitterContractAddress,
+			maxGasLimit:               math.MaxUint64,
+			dataPrefixActivationTime:  uint64(time.Date(2024, time.October, 10, 13, 0, 0, 0, time.UTC).Unix()),
+			submitterDataPrefixes:     submitterDataPrefixes,
+			ftsoDataPrefixes:          prioritisedFTSOContractDataPrefixesSongbirdNetworks,
+			gasLimitCapActivationTime: prioritisedGasLimitCapActivationTimeSongbird,
 		}).
 		AddValue(params.CostonChainID, &prioritisedParams{
-			submitterContractActivationTimeCoston,
-			prioritisedSubmitterContractAddress,
-			math.MaxUint64,
-			uint64(time.Date(2024, time.October, 10, 8, 0, 0, 0, time.UTC).Unix()),
-			submitterDataPrefixes,
-			prioritisedFTSOContractDataPrefixesSongbirdNetworks,
+			submitterActivationTime:   submitterContractActivationTimeCoston,
+			submitterAddress:          prioritisedSubmitterContractAddress,
+			maxGasLimit:               math.MaxUint64,
+			dataPrefixActivationTime:  uint64(time.Date(2024, time.October, 10, 8, 0, 0, 0, time.UTC).Unix()),
+			submitterDataPrefixes:     submitterDataPrefixes,
+			ftsoDataPrefixes:          prioritisedFTSOContractDataPrefixesSongbirdNetworks,
+			gasLimitCapActivationTime: prioritisedGasLimitCapActivationTimeCoston,
 		}).
 		AddValue(params.LocalFlareChainID, &prioritisedParams{
-			0,
-			prioritisedSubmitterContractAddressEnv,
-			3000000,
-			0,
-			[][4]byte{},
-			[][4]byte{},
+			submitterAddress:      prioritisedSubmitterContractAddressEnv,
+			maxGasLimit:           prioritisedMaxGasLimit,
+			submitterDataPrefixes: [][4]byte{},
+			ftsoDataPrefixes:      [][4]byte{},
 		}).
 		AddValue(params.LocalChainID, &prioritisedParams{
-			0,
-			prioritisedSubmitterContractAddressEnv,
-			math.MaxUint64,
-			0,
-			[][4]byte{},
-			[][4]byte{},
+			submitterAddress:      prioritisedSubmitterContractAddressEnv,
+			maxGasLimit:           math.MaxUint64,
+			submitterDataPrefixes: [][4]byte{},
+			ftsoDataPrefixes:      [][4]byte{},
 		})
 )
 
@@ -179,7 +205,7 @@ func IsPrioritisedContractCall(chainID *big.Int, blockTime uint64, to *common.Ad
 	chainValue := prioritisedContractVariants.GetValue(chainID)
 
 	switch {
-	case initialGas > chainValue.maxGasLimit:
+	case initialGas > chainValue.maxGasLimitAt(blockTime):
 		return false
 	case *to == prioritisedFTSOContractAddress:
 		if blockTime > chainValue.dataPrefixActivationTime {
@@ -194,6 +220,13 @@ func IsPrioritisedContractCall(chainID *big.Int, blockTime uint64, to *common.Ad
 	default:
 		return false
 	}
+}
+
+// PrioritisedGasLimitCapActivationTime returns the block time after which the
+// chain's prioritised-call gas limit cap drops to prioritisedMaxGasLimit, or 0
+// when the chain's cap never changes.
+func PrioritisedGasLimitCapActivationTime(chainID *big.Int) uint64 {
+	return prioritisedContractVariants.GetValue(chainID).gasLimitCapActivationTime
 }
 
 func GetMaximumMintRequest(chainID *big.Int, blockTime uint64) *uint256.Int {
