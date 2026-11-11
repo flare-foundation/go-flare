@@ -81,6 +81,16 @@ func parseGenesis(ctx *snow.Context, b []byte) (*genesis, error) {
 	// schedule is configured by ctx.
 	chainID := g.Config.ChainID
 	u := &ctx.NetworkUpgrades
+	// Flare: the Songbird transition is an optional fork (nil = no fork) that
+	// only the Songbird-family networks schedule. It must be derived exactly as
+	// the pre-Helicon coreth VM did (extras.GetNetworkUpgrades) because that is
+	// the chain config stored on every existing Songbird and Coston database,
+	// and the CheckCompatible check in verifyAndWriteBlock refuses to start the
+	// SAE VM when the schedule here lacks the fork.
+	var songbirdTransitionTimestamp *uint64
+	if !u.SongbirdTransitionTime.IsZero() {
+		songbirdTransitionTimestamp = utils.TimeToNewUint64(u.SongbirdTransitionTime)
+	}
 	g.Config = corethparams.WithExtra(
 		&ethparams.ChainConfig{
 			ChainID:             chainID,
@@ -107,6 +117,7 @@ func parseGenesis(ctx *snow.Context, b []byte) (*genesis, error) {
 				ApricotPhase3BlockTimestamp:     utils.TimeToNewUint64(u.ApricotPhase3Time),
 				ApricotPhase4BlockTimestamp:     utils.TimeToNewUint64(u.ApricotPhase4Time),
 				ApricotPhase5BlockTimestamp:     utils.TimeToNewUint64(u.ApricotPhase5Time),
+				SongbirdTransitionTimestamp:     songbirdTransitionTimestamp, // Flare
 				ApricotPhasePre6BlockTimestamp:  utils.TimeToNewUint64(u.ApricotPhasePre6Time),
 				ApricotPhase6BlockTimestamp:     utils.TimeToNewUint64(u.ApricotPhase6Time),
 				ApricotPhasePost6BlockTimestamp: utils.TimeToNewUint64(u.ApricotPhasePost6Time),
