@@ -25,6 +25,7 @@ import (
 	"github.com/ava-labs/avalanchego/vms/proposervm/block"
 
 	pb "github.com/ava-labs/avalanchego/connectproto/pb/proposervm"
+	snowmanblock "github.com/ava-labs/avalanchego/snow/engine/snowman/block"
 	avajson "github.com/ava-labs/avalanchego/utils/json"
 )
 
@@ -155,6 +156,12 @@ type GetProposerByEVMBlockHashArgs struct {
 
 const blockNumberLatest = "latest"
 
+// errInnerBlockMismatch reports a proposerVM height index entry whose block
+// does not wrap the inner block that is canonical at that height. It cannot
+// happen on a consistent database (both are written in the same accept) and
+// indicates corruption, so it is an error rather than a [ProposerStatus].
+var errInnerBlockMismatch = errors.New("proposerVM block does not wrap the expected inner block")
+
 type GetProposerByEVMBlockNumberArgs struct {
 	// BlockNumber is one of:
 	//   - decimal number as JSON string, e.g. "12345"
@@ -218,13 +225,14 @@ func (j *jsonrpcService) GetProposerByEVMBlockNumber(r *http.Request, args *GetP
 	)
 	log.Debug("API called")
 
-	j.vm.ctx.Lock.Lock()
-	defer j.vm.ctx.Lock.Unlock()
-
-	var height uint64
+	// Parse the argument before taking the lock; only "latest" needs it.
+	var (
+		height uint64
+		latest bool
+	)
 	switch raw := strings.TrimSpace(args.BlockNumber); {
 	case strings.EqualFold(raw, blockNumberLatest):
-		height = j.vm.lastAcceptedHeight
+		latest = true
 	case strings.HasPrefix(raw, "0x") || strings.HasPrefix(raw, "0X"):
 		h, err := strconv.ParseUint(raw[2:], 16, 64)
 		if err != nil {
@@ -239,6 +247,12 @@ func (j *jsonrpcService) GetProposerByEVMBlockNumber(r *http.Request, args *GetP
 		height = h
 	}
 
+	j.vm.ctx.Lock.Lock()
+	defer j.vm.ctx.Lock.Unlock()
+
+	if latest {
+		height = j.vm.lastAcceptedHeight
+	}
 	resp, err := j.vm.getProposerByHeight(r.Context(), height)
 	if err != nil {
 		return err
@@ -252,7 +266,7 @@ func (j *jsonrpcService) GetProposerByEVMBlockNumber(r *http.Request, args *GetP
 // describing the outcome; only unexpected database errors return a non-nil
 // error.
 func (vm *VM) getProposerByInnerBlockID(ctx context.Context, innerID ids.ID) (GetProposerResponse, error) {
-	innerBlk, err := vm.ChainVM.GetBlock(ctx, innerID)
+	height, err := vm.innerBlockHeight(ctx, innerID)
 	if errors.Is(err, database.ErrNotFound) {
 		return GetProposerResponse{
 			Status:       ProposerStatusNotFound,
@@ -262,7 +276,6 @@ func (vm *VM) getProposerByInnerBlockID(ctx context.Context, innerID ids.ID) (Ge
 	if err != nil {
 		return GetProposerResponse{}, fmt.Errorf("failed to fetch inner block: %w", err)
 	}
-	height := innerBlk.Height()
 
 	canonicalID, err := vm.ChainVM.GetBlockIDAtHeight(ctx, height)
 	switch {
@@ -276,7 +289,24 @@ func (vm *VM) getProposerByInnerBlockID(ctx context.Context, innerID ids.ID) (Ge
 		return GetProposerResponse{}, fmt.Errorf("failed to fetch canonical block at height %d: %w", height, err)
 	}
 
-	return vm.resolveProposerAtHeight(height, innerID)
+	return vm.resolveProposerAtHeight(ctx, height, innerID)
+}
+
+// innerBlockHeight returns the height of the inner block with the given ID, or
+// [database.ErrNotFound]. It prefers the inner VM's optional
+// [snowmanblock.HeightByIDChainVM] (the SAE C-chain VM answers from its
+// header-number index) over [snowmanblock.ChainVM.GetBlock], which on SAE
+// restores the block's receipts from disk — too expensive to run under the
+// context lock on behalf of an unauthenticated API call.
+func (vm *VM) innerBlockHeight(ctx context.Context, innerID ids.ID) (uint64, error) {
+	if hvm, ok := vm.ChainVM.(snowmanblock.HeightByIDChainVM); ok {
+		return hvm.GetBlockHeight(ctx, innerID)
+	}
+	innerBlk, err := vm.ChainVM.GetBlock(ctx, innerID)
+	if err != nil {
+		return 0, err
+	}
+	return innerBlk.Height(), nil
 }
 
 // getProposerByHeight resolves the proposer for the canonical EVM block at
@@ -293,13 +323,14 @@ func (vm *VM) getProposerByHeight(ctx context.Context, height uint64) (GetPropos
 	if err != nil {
 		return GetProposerResponse{}, fmt.Errorf("failed to fetch canonical block at height %d: %w", height, err)
 	}
-	return vm.resolveProposerAtHeight(height, innerID)
+	return vm.resolveProposerAtHeight(ctx, height, innerID)
 }
 
 // resolveProposerAtHeight fills a GetProposerResponse for the canonical inner
 // block at the given height. evmBlockHash must already be the canonical inner
-// ID at that height (verified by the caller).
-func (vm *VM) resolveProposerAtHeight(height uint64, evmBlockHash ids.ID) (GetProposerResponse, error) {
+// ID at that height (verified by the caller); the proposerVM block found at
+// that height must wrap it, or [errInnerBlockMismatch] is returned.
+func (vm *VM) resolveProposerAtHeight(ctx context.Context, height uint64, evmBlockHash ids.ID) (GetProposerResponse, error) {
 	resp := GetProposerResponse{
 		EVMBlockHash: evmBlockHashString(evmBlockHash),
 		Height:       avajson.Uint64(height),
@@ -331,6 +362,19 @@ func (vm *VM) resolveProposerAtHeight(height uint64, evmBlockHash ids.ID) (GetPr
 	}
 	if err != nil {
 		return GetProposerResponse{}, fmt.Errorf("failed to fetch proposerVM block %s: %w", outerID, err)
+	}
+
+	// The height index and the block are written in the same accept, so they
+	// agree on a consistent database; never attribute a proposer to an inner
+	// block the indexed proposerVM block does not wrap. parseInnerBlock is an
+	// RLP decode on SAE (cached for recent blocks), not a disk restore.
+	innerBlk, err := vm.parseInnerBlock(ctx, outerID, outerBlock.Block())
+	if err != nil {
+		return GetProposerResponse{}, fmt.Errorf("failed to parse inner block of proposerVM block %s: %w", outerID, err)
+	}
+	if innerID := innerBlk.ID(); innerID != evmBlockHash {
+		return GetProposerResponse{}, fmt.Errorf("%w: proposerVM block %s at height %d wraps %s, expected %s",
+			errInnerBlockMismatch, outerID, height, evmBlockHashString(innerID), evmBlockHashString(evmBlockHash))
 	}
 
 	signedBlock, ok := outerBlock.(block.SignedBlock)
