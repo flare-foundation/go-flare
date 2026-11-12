@@ -170,17 +170,22 @@ export async function issueCChainTx(
   console.log(`Issued transaction with ID: ${txID}`);
 
   console.log(`Waiting for transaction ${txID} to be processed...`);
-  let txStatus;
-  do {
+  // avax.getAtomicTxStatus was removed in v1.15.2. avax.getAtomicTx fails
+  // until the transaction has been accepted, and there is no "Rejected"
+  // status to wait for anymore, so give up after a timeout.
+  const maxAttempts = 60;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     await delay(1000);
-    txStatus = await evmapi.getAtomicTxStatus(txID);
-  } while (txStatus.status !== "Accepted" && txStatus.status !== "Rejected");
-
-  if (txStatus.status === "Accepted") {
-    console.log(`Transaction ${txID} accepted`);
-  } else {
-    throw new Error(
-      `Transaction ${txID} failed with status: ${txStatus.status}`,
-    );
+    try {
+      await evmapi.getAtomicTx({ txID });
+      console.log(`Transaction ${txID} accepted`);
+      return;
+    } catch (e) {
+      lastError = e;
+    }
   }
+  throw new Error(
+    `Transaction ${txID} was not accepted within ${maxAttempts} seconds: ${lastError}`,
+  );
 }
