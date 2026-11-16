@@ -26,6 +26,7 @@ See the [AvalancheGo v1.15.2 release notes](./avalanchego/RELEASES.md) for the c
 ### Note:
 
  * The `eth-apis` C-chain config option, deprecated in v1.15.1, is removed. The node ignores it and logs a warning, as for any other unrecognized option. Set `apis` instead.
+ * Since the Helicon activation the C-chain serves the `trace` API (`debug_trace*`, `debug_intermediateRoots`, `debug_standardTrace*ToFile`) by default; before, tracing had to be enabled explicitly. It replays historical blocks and includes methods that read and write files on the node, so a node whose API is reachable by others should not serve it. To turn it off, set the `apis` option in the C-chain `config.json` to a list without `trace`, for example the [external API configuration](./README-docker.md#external-api-configuration). The names of all APIs are listed in the [C-chain config reference](./avalanchego/vms/saevm/cchain/config.md#available-apis).
  * The `avax.getAtomicTxStatus` C-chain RPC is removed. Use `avax.getAtomicTx`, which fails for a transaction that has not been accepted.
  * C-chain metrics no longer include the `transition` prefix; for example, `avalanche_evm_transition_sae_last_executed_height` is now `avalanche_evm_sae_last_executed_height`. Dashboards and alerts that use the old names must be updated.
  * The C-chain config option `api-max-duration` again limits every call to the `/rpc` and `/ws` endpoints; since the Helicon activation it limited only `eth_call`.
