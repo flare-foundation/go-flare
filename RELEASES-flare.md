@@ -6,7 +6,11 @@ Here are listed specific changes to the code for the Flare and Songbird networks
 
 This release updates the Flare and Songbird codebase to AvalancheGo v1.15.2.
 
-The upgrade is optional but encouraged. It is compatible with v1.15.1 and does not schedule any new fork times.
+On the Coston and Songbird networks it limits the fee refund for prioritized contracts (see below). The change goes into effect
+ * November 24, 2026 at 12:00:00 UTC for the Coston network,
+ * December 1, 2026 at 12:00:00 UTC for the Songbird network.
+
+Nodes on these two networks should be updated to this version before these times. On the Flare and Coston2 networks the upgrade is optional but encouraged. The release is compatible with v1.15.1 and does not schedule any new fork times.
 
 **Update to this version only from v1.15.1, on a node that has already passed the Helicon activation.** v1.15.2 no longer contains the pre-Helicon C-chain VM and cannot continue from a database that was last used before Helicon activated on its network. A node that still runs v1.14.x or older, or that has been offline since before the activation, must first run v1.15.1 until its C-chain has bootstrapped past the Helicon activation, and only then be updated to v1.15.2. Alternatively, such a node can be started on v1.15.2 with an empty database and synced from scratch.
 
@@ -14,6 +18,7 @@ See the [AvalancheGo v1.15.2 release notes](./avalanchego/RELEASES.md) for the c
 
 ### Flare-specific changes
 
+ * On the Coston and Songbird networks, the fee refund for prioritized contracts applies only to transactions with a gas limit of at most 3,000,000 after the activation, the same limit as on the Flare and Coston2 networks. A transaction with a higher gas limit is executed as before but pays the full fee, so data providers on these networks should keep the gas limit of their submission transactions at or below 3,000,000.
  * `--sybil-protection-enabled=false` is rejected on the Flare, Songbird, Coston and Coston2 networks, as it is on Avalanche mainnet; only local and custom networks can disable sybil protection.
  * Fixed bootstrapping the C-chain from genesis (an empty database with state sync disabled) on the Flare and Coston2 networks, where the first block was rejected.
  * The `proposervm.getProposerByEVMBlockHash` and `proposervm.getProposerByEVMBlockNumber` lookups hold the chain lock for a shorter time.
