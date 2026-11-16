@@ -36,8 +36,8 @@ var (
 	// its gas limit and settleFees refunds that padding too, so without a cap
 	// any gas limit up to the block limit is free block space for the nominal
 	// fee. Consensus-relevant: every node must switch at the same block time.
-	prioritisedGasLimitCapActivationTimeSongbird = uint64(time.Date(2026, time.November, 26, 12, 0, 0, 0, time.UTC).Unix())
-	prioritisedGasLimitCapActivationTimeCoston   = uint64(time.Date(2026, time.November, 19, 12, 0, 0, 0, time.UTC).Unix())
+	prioritisedGasLimitCapActivationTimeSongbird = uint64(time.Date(2026, time.December, 1, 12, 0, 0, 0, time.UTC).Unix())
+	prioritisedGasLimitCapActivationTimeCoston   = uint64(time.Date(2026, time.November, 24, 12, 0, 0, 0, time.UTC).Unix())
 
 	// Define ftso and submitter contract addresses
 	prioritisedFTSOContractAddress = common.HexToAddress("0x1000000000000000000000000000000000000003")

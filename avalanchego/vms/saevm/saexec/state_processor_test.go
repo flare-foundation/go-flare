@@ -362,7 +362,7 @@ type applyTxEnv struct {
 
 // testBlockTime is after every prioritised-contract activation time defined
 // in graft/coreth/core/daemon.go, except the Songbird/Coston gas limit cap
-// activation (November 2026), which the cap tests set on the header explicitly.
+// activation (November/December 2026), which the cap tests set on the header explicitly.
 var testBlockTime = uint64(time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC).Unix())
 
 // newTestChainConfig returns a fresh all-forks-active config (mirroring
