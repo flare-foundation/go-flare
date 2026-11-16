@@ -24,6 +24,7 @@ import (
 	"github.com/ava-labs/avalanchego/network/p2p"
 	"github.com/ava-labs/avalanchego/network/p2p/gossip"
 	"github.com/ava-labs/avalanchego/snow"
+	"github.com/ava-labs/avalanchego/snow/engine/snowman/block"
 	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/bloom"
 	"github.com/ava-labs/avalanchego/utils/rpc"
@@ -390,6 +391,24 @@ func (vm *VM) GetBlock(ctx context.Context, id ids.ID) (*blocks.Block, error) {
 // GetBlockIDAtHeight returns the ID of the block at the given height.
 func (vm *VM) GetBlockIDAtHeight(ctx context.Context, height uint64) (ids.ID, error) {
 	return vm.activeHandler().GetBlockIDAtHeight(ctx, height)
+}
+
+var _ block.HeightByIDChainVM = (*VM)(nil)
+
+// GetBlockHeight returns the height of the block with the given ID without
+// restoring the block; see [sae.VM.GetBlockHeight]. Flare addition
+// implementing [block.HeightByIDChainVM] for the proposervm proposer lookup
+// API. Before the SAE VM exists (state syncing) it falls back to
+// [VM.GetBlock].
+func (vm *VM) GetBlockHeight(ctx context.Context, id ids.ID) (uint64, error) {
+	if h, ok := vm.activeHandler().(block.HeightByIDChainVM); ok {
+		return h.GetBlockHeight(ctx, id)
+	}
+	blk, err := vm.GetBlock(ctx, id)
+	if err != nil {
+		return 0, err
+	}
+	return blk.Height(), nil
 }
 
 // LastAccepted returns the ID of the last accepted block.

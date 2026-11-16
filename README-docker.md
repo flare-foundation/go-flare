@@ -69,7 +69,7 @@ These are the environment variables you can edit and their default values:
 
 The flare node can be configured by specifying your own configuration for the different chains but mainly the C (aka. Contract) chain. The specified configuration determines which capabilities the node has and it affects how the node has to be set up. We mainly distinguish between the three standard configurations described below.
 
-Since v1.15.1 (Helicon upgrade), the C-chain API allowlist is set with the `apis` option; the available names are listed in the [C-chain config reference](https://github.com/flare-foundation/go-flare/blob/main/avalanchego/vms/saevm/cchain/config.md#available-apis). Until Helicon activates on a network, its C-chain still runs the previous VM, which reads the `eth-apis` option, so the examples below set both. After the activation, `apis` takes precedence, `eth-apis` is ignored, and it will be removed in a later release. The `admin-api-enabled` and `admin-api-dir` options are no longer supported.
+The C-chain API allowlist is set with the `apis` option; the available names are listed in the [C-chain config reference](https://github.com/flare-foundation/go-flare/blob/main/avalanchego/vms/saevm/cchain/config.md#available-apis). The former `eth-apis` option was replaced by `apis` in v1.15.1 (Helicon upgrade) and removed in v1.15.2: the node ignores it and logs a warning, as for any other unrecognized option. The `admin-api-enabled` and `admin-api-dir` options are no longer supported.
 
 ### External API configuration
 
@@ -85,15 +85,6 @@ The external API configuration is set to only respond to API calls so it offload
     "subscription",
     "tx",
     "web3"
-  ],
-  "eth-apis": [
-    "eth",
-    "eth-filter",
-    "net",
-    "web3",
-    "internal-eth",
-    "internal-blockchain",
-    "internal-transaction"
   ]
 }
 ```
@@ -115,22 +106,6 @@ Similarly to the external API configuration, this one also responds to API calls
     "tx",
     "txpool",
     "web3"
-  ],
-  "eth-apis": [
-    "eth",
-    "eth-filter",
-    "admin",
-    "debug",
-    "net",
-    "debug-tracer",
-    "web3",
-    "internal-eth",
-    "internal-blockchain",
-    "internal-transaction",
-    "internal-tx-pool",
-    "internal-debug",
-    "internal-account",
-    "internal-personal"
   ]
 }
 ```
@@ -142,9 +117,6 @@ The bootstrap configuration is meant for nodes that will accept and help provisi
 ```sh
 {
   "apis": [
-    "web3"
-  ],
-  "eth-apis": [
     "web3"
   ]
 }

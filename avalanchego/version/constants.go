@@ -47,7 +47,7 @@ var (
 	CurrentSgb = &Application{
 		Major: 0,
 		Minor: 13,
-		Patch: 0,
+		Patch: 2,
 	}
 	CurrentSgbApp = &Application{
 		Name:  Client,

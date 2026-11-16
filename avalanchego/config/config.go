@@ -782,7 +782,11 @@ func getStakingConfig(v *viper.Viper, networkID uint32) (node.StakingConfig, err
 		return node.StakingConfig{}, errSybilProtectionDisabledStakerWeights
 	}
 
-	if !config.SybilProtectionEnabled && networkID == constants.MainnetID {
+	// Disabling sybil protection makes the node treat every connected peer as a
+	// validator. Reject it on the public networks (upstream rejects Mainnet and
+	// Fuji; Fuji's ID is Songbird's here, so use the production set instead).
+	if !config.SybilProtectionEnabled &&
+		(networkID == constants.MainnetID || constants.ProductionNetworkIDs.Contains(networkID)) {
 		return node.StakingConfig{}, errSybilProtectionDisabledOnPublicNetwork
 	}
 

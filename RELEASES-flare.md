@@ -2,6 +2,33 @@
 
 Here are listed specific changes to the code for the Flare and Songbird networks. For a comprehensive list of general changes, see [here](./avalanchego/RELEASES.md) for the AvalancheGo project — which, since v1.14.x, also contains Coreth (grafted in at `avalanchego/graft/coreth`).
 
+## v1.15.2
+
+This release updates the Flare and Songbird codebase to AvalancheGo v1.15.2.
+
+The upgrade is optional but encouraged. It is compatible with v1.15.1 and does not schedule any new fork times.
+
+**Update to this version only from v1.15.1, on a node that has already passed the Helicon activation.** v1.15.2 no longer contains the pre-Helicon C-chain VM and cannot continue from a database that was last used before Helicon activated on its network. A node that still runs v1.14.x or older, or that has been offline since before the activation, must first run v1.15.1 until its C-chain has bootstrapped past the Helicon activation, and only then be updated to v1.15.2. Alternatively, such a node can be started on v1.15.2 with an empty database and synced from scratch.
+
+See the [AvalancheGo v1.15.2 release notes](./avalanchego/RELEASES.md) for the complete list of changes.
+
+### Flare-specific changes
+
+ * `--sybil-protection-enabled=false` is rejected on the Flare, Songbird, Coston and Coston2 networks, as it is on Avalanche mainnet; only local and custom networks can disable sybil protection.
+ * Fixed bootstrapping the C-chain from genesis (an empty database with state sync disabled) on the Flare and Coston2 networks, where the first block was rejected.
+ * The `proposervm.getProposerByEVMBlockHash` and `proposervm.getProposerByEVMBlockNumber` lookups hold the chain lock for a shorter time.
+
+### Note:
+
+ * The `eth-apis` C-chain config option, deprecated in v1.15.1, is removed. The node ignores it and logs a warning, as for any other unrecognized option. Set `apis` instead.
+ * The `avax.getAtomicTxStatus` C-chain RPC is removed. Use `avax.getAtomicTx`, which fails for a transaction that has not been accepted.
+ * C-chain metrics no longer include the `transition` prefix; for example, `avalanche_evm_transition_sae_last_executed_height` is now `avalanche_evm_sae_last_executed_height`. Dashboards and alerts that use the old names must be updated.
+ * The C-chain config option `api-max-duration` again limits every call to the `/rpc` and `/ws` endpoints; since the Helicon activation it limited only `eth_call`.
+ * The C-chain config option `api-max-blocks-per-request` is available again. It limits the number of blocks an `eth_getLogs` request can cover (default `0`, no limit).
+ * The P-chain config option `pull-gossip-requests-per-validator` is removed. It has had no effect since v1.14.2 and is ignored if a config still sets it.
+ * `platform.getCurrentValidators` returns the new fields `restakedValidationRewards` and `restakedDelegateeRewards` for auto-renewed validators. They are always 0 on the Flare and Songbird networks, where the P-chain pays no staking rewards.
+ * The plugin (RPCChainVM) protocol version is updated to `47`.
+
 ## v1.15.1
 
 This release updates the Flare and Songbird codebase to AvalancheGo v1.15.1 (Helicon upgrade). It supersedes the v1.15.1-coston2 pre-release.

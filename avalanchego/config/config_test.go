@@ -989,6 +989,41 @@ func TestGetStakingConfigPublicNetworksIgnoreFlags(t *testing.T) {
 	}
 }
 
+// TestGetStakingConfigSybilProtectionDisabledOnPublicNetworks checks that
+// sybil-protection-enabled=false is rejected on every public network (upstream
+// rejects Avalanche Mainnet and Fuji, whose network ID is Songbird's here) and
+// still accepted on the local networks.
+func TestGetStakingConfigSybilProtectionDisabledOnPublicNetworks(t *testing.T) {
+	tests := []struct {
+		networkID uint32
+		rejected  bool
+	}{
+		{networkID: constants.MainnetID, rejected: true},
+		{networkID: constants.FlareID, rejected: true},
+		{networkID: constants.SongbirdID, rejected: true},
+		{networkID: constants.CostwoID, rejected: true},
+		{networkID: constants.CostonID, rejected: true},
+		{networkID: constants.LocalFlareID},
+		{networkID: constants.LocalID},
+	}
+	for _, tt := range tests {
+		t.Run(constants.NetworkName(tt.networkID), func(t *testing.T) {
+			require := require.New(t)
+			v := setupViperFlags()
+			v.Set(DataDirKey, t.TempDir())
+			v.Set(SybilProtectionEnabledKey, false)
+
+			config, err := getStakingConfig(v, tt.networkID)
+			if tt.rejected {
+				require.ErrorIs(err, errSybilProtectionDisabledOnPublicNetwork)
+				return
+			}
+			require.NoError(err)
+			require.False(config.SybilProtectionEnabled)
+		})
+	}
+}
+
 func TestGetStakingConfigPublicNetworksPreserveDefaults(t *testing.T) {
 	v := setupViperFlags()
 	v.Set(DataDirKey, t.TempDir())

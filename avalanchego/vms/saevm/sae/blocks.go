@@ -208,6 +208,25 @@ func (vm *VM) GetBlockIDAtHeight(ctx context.Context, height uint64) (ids.ID, er
 	return id, nil
 }
 
+var _ block.HeightByIDChainVM = (*VM)(nil)
+
+// GetBlockHeight returns the height of the block with the given ID, or
+// [database.ErrNotFound], implementing [block.HeightByIDChainVM] (Flare
+// addition). Unlike [VM.GetBlock] it never restores the block's execution
+// artefacts from disk: it answers from the in-memory consensus-critical blocks
+// or from the header-number index alone.
+func (vm *VM) GetBlockHeight(_ context.Context, id ids.ID) (uint64, error) {
+	hash := common.Hash(id)
+	if b, ok := vm.chain().ConsensusCriticalBlock(hash); ok {
+		return b.NumberU64(), nil
+	}
+	num := rawdb.ReadHeaderNumber(vm.db, hash)
+	if num == nil {
+		return 0, database.ErrNotFound
+	}
+	return *num, nil
+}
+
 func ethBlockSource(m *syncMap[common.Hash, *blocks.Block], db ethdb.Database) saetypes.BlockSource {
 	return func(hash common.Hash, num uint64) (*types.Block, bool) {
 		return source(m, db, hash, num, (*blocks.Block).EthBlock, rawdb.ReadBlock)

@@ -4,7 +4,7 @@
 
 # go-flare
 
-go-flare is a modified version of [avalanchego@v1.15.1](https://github.com/ava-labs/avalanchego/releases/tag/v1.15.1) incorporating specific features for Flare and Songbird networks. These features include prioritized contract handling and the invocation of the daemon contract.
+go-flare is a modified version of [avalanchego@v1.15.2](https://github.com/ava-labs/avalanchego/releases/tag/v1.15.2) incorporating specific features for Flare and Songbird networks. These features include prioritized contract handling and the invocation of the daemon contract.
 
 See [release notes](./RELEASES-flare.md) for more info.
 
