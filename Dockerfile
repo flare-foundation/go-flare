@@ -11,7 +11,16 @@ WORKDIR /app/avalanchego/
 
 RUN /app/avalanchego/scripts/build.sh
 
+# Binaries laid out per architecture. CI replaces this stage with prebuilt release
+# binaries (--build-context binaries=<dir with amd64/ and arm64/>), so the source
+# build above only runs for local builds.
+FROM scratch AS binaries
+ARG TARGETARCH
+COPY --from=build /app/avalanchego/build /${TARGETARCH}/
+
 FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
+
+ARG TARGETARCH
 
 WORKDIR /app
 
@@ -41,7 +50,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* && \
     mkdir -p /app/conf/coston /app/conf/C /app/logs /app/db /app/db/chainData
 
-COPY --from=build /app/avalanchego/build /app/build
+COPY --from=binaries /${TARGETARCH}/ /app/build/
 COPY entrypoint.sh /app/entrypoint.sh
 
 EXPOSE ${STAKING_PORT}

@@ -23,6 +23,34 @@ jobs:
       ubuntu_version: "24.04"
       build_artifact_name: "avalanchego"
 
+  # The SLSA builder only runs on amd64, so arm64 is a plain native build for now.
+  build-arm64:
+    name: Build go-flare (arm64)
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-go-verification.yaml # zizmor: ignore[self-repository] actionlint does not yet support the $/ syntax
+    with:
+      go_version: "1.26.10"
+      ubuntu_version: "24.04-arm"
+      build_artifact_name: "avalanchego-arm64"
+
+  images:
+    name: Container images
+    needs: [build, build-arm64]
+    if: github.ref_type == 'tag' || github.ref_name == 'main'
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    uses: ./.github/workflows/build-container.yml # zizmor: ignore[self-repository] actionlint does not yet support the $/ syntax
+    with:
+      amd64_artifact_name: "avalanchego"
+      arm64_artifact_name: "avalanchego-arm64"
+    secrets:
+      DOCKER_HUB_UID: ${{ secrets.DOCKER_HUB_UID }}
+      DOCKER_HUB_PAT: ${{ secrets.DOCKER_HUB_PAT }}
+      DOCKER_HUB_REPO: ${{ secrets.DOCKER_HUB_REPO }}
+
   build-verification:
     if: github.ref_type == 'tag'
     name: Go Verification Build

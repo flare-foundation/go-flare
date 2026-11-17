@@ -34,12 +34,13 @@ Every release build produces a signed provenance file (`.build.slsa`) that crypt
 The final release artifact is signed using Cosign. The resulting .sig and .pem files are published alongside the release artifact and can be used to confirm there was no tampering with release files.
 
 ## Pipeline Architecture
-The build pipeline is split across three workflow files, orchestrated by `build-binary.yaml`.
+The build pipeline is split across four workflow files, orchestrated by `build-binary.yaml`.
 
 ```
 build-binary.yaml
-  ├── build-go-slsa3.yaml          (SLSA3 isolated build + provenance)
-  ├── build-go-verification.yaml   (independent verification/reproducible build)
+  ├── build-go-slsa3.yaml          (SLSA3 isolated build + provenance, amd64)
+  ├── build-go-verification.yaml   (independent verification/reproducible build; also the native arm64 build)
+  ├── build-container.yml          (standard and -dless images, built in parallel from the binaries above)
   └── release job                  (verify + sign + publish)
 ```
 
@@ -60,6 +61,10 @@ The framework introduces three components:
 `slsa-run` passes the token to the BYOB delegator, which takes over. It runs the TCA in an isolated VM, collects artifact digests from the SLSA layout file produced by `generate-layout.sh`, and generates a signed `.build.slsa` provenance file.
 
 `build-go-verification` runs in parallel. A plain second build using the same go-build composite action, producing an independent binary used only for the reproducibility check.
+
+`build-arm64` builds the arm64 binary natively on an `ubuntu-24.04-arm` runner (the SLSA builder only runs on amd64).
+
+`images` (`build-container.yml`) does not compile anything: it copies the SLSA-built amd64 binary and the arm64 binary into the images via `--build-context binaries=...`, smoke tests both architectures, then pushes and signs the images with Cosign. The amd64 image therefore contains the same binary as the release zip. Set the repository variable `USE_DOCKER_HUB=false` (e.g. on forks) to push to ghcr.io only. A local `docker build` without `--build-context` still builds from source.
 
 `release` pulls everything together:
 
