@@ -40,8 +40,6 @@ jobs:
     env:
       # Set the repository variable USE_DOCKER_HUB=false (e.g. on forks) to push to ghcr.io only.
       USE_DOCKER_HUB: ${{ vars.USE_DOCKER_HUB != 'false' }}
-      # TEMP (fork testing): build and smoke test only, no registry login/push/sign. Remove before MR.
-      DRY_RUN: true
     steps:
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       with:
@@ -96,7 +94,6 @@ jobs:
         done
 
     - name: Login to ghcr.io
-      if: ${{ env.DRY_RUN != 'true' }}
       uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
       with:
         registry: ghcr.io
@@ -104,14 +101,13 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Login to docker.io
-      if: ${{ env.DRY_RUN != 'true' && env.USE_DOCKER_HUB == 'true' }}
+      if: ${{ env.USE_DOCKER_HUB == 'true' }}
       uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
       with:
         username: ${{ secrets.DOCKER_HUB_UID }}
         password: ${{ secrets.DOCKER_HUB_PAT }}
 
     - name: Build image
-      if: ${{ env.DRY_RUN != 'true' }}
       env:
         USE_DOCKER_HUB: ${{ env.USE_DOCKER_HUB }}
         DOCKERFILE: ${{ matrix.dockerfile }}
@@ -133,17 +129,14 @@ jobs:
           .
 
     - name: Export image digest
-      if: ${{ env.DRY_RUN != 'true' }}
       run: |
         DIG=$(cat image.digest)
         echo "IMAGE_DIGEST=$DIG" >> "$GITHUB_ENV"
 
     - name: Install Cosign
-      if: ${{ env.DRY_RUN != 'true' }}
       uses: sigstore/cosign-installer@d7d6bc7722e3daa8354c50bcb52f4837da5e9b6a # v3.8.1
 
     - name: Sign ghcr image
-      if: ${{ env.DRY_RUN != 'true' }}
       shell: bash
       env:
         COSIGN_EXPERIMENTAL: 1
@@ -151,7 +144,7 @@ jobs:
           cosign sign --yes "ghcr.io/${{ github.repository }}@${IMAGE_DIGEST}"
 
     - name: Sign docker hub image
-      if: ${{ env.DRY_RUN != 'true' && env.USE_DOCKER_HUB == 'true' }}
+      if: ${{ env.USE_DOCKER_HUB == 'true' }}
       shell: bash
       env:
         COSIGN_EXPERIMENTAL: 1
@@ -159,7 +152,6 @@ jobs:
           cosign sign --yes "${{ secrets.DOCKER_HUB_REPO }}@${IMAGE_DIGEST}"
 
     - name: Verify ghcr image signature
-      if: ${{ env.DRY_RUN != 'true' }}
       shell: bash
       env:
         COSIGN_EXPERIMENTAL: 1
@@ -170,7 +162,7 @@ jobs:
           "ghcr.io/${{ github.repository }}@${IMAGE_DIGEST}"
 
     - name: Verify docker hub image signature
-      if: ${{ env.DRY_RUN != 'true' && env.USE_DOCKER_HUB == 'true' }}
+      if: ${{ env.USE_DOCKER_HUB == 'true' }}
       shell: bash
       env:
         COSIGN_EXPERIMENTAL: 1
