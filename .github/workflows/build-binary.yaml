@@ -6,7 +6,7 @@ permissions:
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "release/**", "feature/**", "feat/**" ]
+    branches: [ "main", "release/**", "feature/**" ]
     tags: [ "v*" ]
 
 jobs:
@@ -37,7 +37,7 @@ jobs:
   images:
     name: Container images
     needs: [build, build-arm64]
-    if: github.ref_type == 'tag' || github.ref_name == 'main' || startsWith(github.ref_name, 'feature/') || startsWith(github.ref_name, 'feat/')
+    if: github.ref_type == 'tag' || github.ref_name == 'main' || startsWith(github.ref_name, 'feature/')
     permissions:
       contents: read
       packages: write
