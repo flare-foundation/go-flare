@@ -1,24 +1,47 @@
 name: container-images
 
 on:
-  push:
-    branches: [ "main", "feature/**" ]
-    tags: [ "v*" ]
+  workflow_call:
+    inputs:
+      amd64_artifact_name:
+        description: "Artifact with the SLSA-built amd64 binaries (folder.tgz)"
+        required: true
+        type: string
+      arm64_artifact_name:
+        description: "Artifact with the arm64 binaries"
+        required: true
+        type: string
+    secrets:
+      DOCKER_HUB_UID:
+        required: false
+      DOCKER_HUB_PAT:
+        required: false
+      DOCKER_HUB_REPO:
+        required: false
 
 jobs:
   build-and-push:
-    name: Build & Push
+    name: Build & Push (${{ matrix.variant }})
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
       id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: standard
+            dockerfile: ./Dockerfile
+            tag_suffix: ""
+          - variant: distroless
+            dockerfile: ./Dockerfile.dless
+            tag_suffix: "-dless"
     env:
       USE_DOCKER_HUB: true
     steps:
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       with:
-        fetch-depth: 0
         persist-credentials: false
     - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
     - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -28,6 +51,29 @@ jobs:
 
     - run: echo "IMAGE_TAG=${GITHUB_REF##*/}" >> "$GITHUB_ENV"
       if: startsWith(github.ref, 'refs/tags/v')
+
+    - name: Download amd64 binaries
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+      with:
+        name: ${{ inputs.amd64_artifact_name }}
+        path: artifacts/amd64
+
+    - name: Download arm64 binaries
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+      with:
+        name: ${{ inputs.arm64_artifact_name }}
+        path: dist/arm64
+
+    - name: Prepare binaries
+      run: |
+        tar -xzf artifacts/amd64/folder.tgz -C artifacts/amd64/
+        mkdir -p dist/amd64
+        cp -r artifacts/amd64/binaries/. dist/amd64/
+
+        # upload-artifact does not preserve the executable bit
+        find dist -type f -exec chmod 755 {} +
+
+        sha256sum dist/*/avalanchego
 
     - name: Login to ghcr.io
       uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
@@ -43,73 +89,58 @@ jobs:
         username: ${{ secrets.DOCKER_HUB_UID }}
         password: ${{ secrets.DOCKER_HUB_PAT }}
 
-    - name: Build standard image
+    - name: Build image
       env:
         USE_DOCKER_HUB: ${{ env.USE_DOCKER_HUB }}
+        DOCKERFILE: ${{ matrix.dockerfile }}
+        TAG_SUFFIX: ${{ matrix.tag_suffix }}
       run: |
-        TAGS=(--tag "ghcr.io/${{ github.repository }}:${IMAGE_TAG}")
+        TAGS=(--tag "ghcr.io/${{ github.repository }}:${IMAGE_TAG}${TAG_SUFFIX}")
 
         if [ "${USE_DOCKER_HUB}" = "true" ]; then
-          TAGS+=(--tag "${{ secrets.DOCKER_HUB_REPO }}:${IMAGE_TAG}")
+          TAGS+=(--tag "${{ secrets.DOCKER_HUB_REPO }}:${IMAGE_TAG}${TAG_SUFFIX}")
         fi
 
         docker buildx build \
           --platform linux/amd64,linux/arm64 \
           "${TAGS[@]}" \
-          --file ./Dockerfile \
+          --file "${DOCKERFILE}" \
+          --build-context binaries=./dist \
           --output type=image,push=true \
-          --iidfile std.digest \
+          --iidfile image.digest \
           .
 
-    - name: Export standard image digest
+    - name: Export image digest
       run: |
-        DIG=$(cat std.digest)
+        DIG=$(cat image.digest)
         echo "IMAGE_DIGEST=$DIG" >> "$GITHUB_ENV"
 
-    - name: Build distroless image
-      env:
-        USE_DOCKER_HUB: ${{ env.USE_DOCKER_HUB }}
+    - name: Smoke test image
       run: |
-        TAGS=(--tag "ghcr.io/${{ github.repository }}:${IMAGE_TAG}-dless")
-
-        if [ "${USE_DOCKER_HUB}" = "true" ]; then
-          TAGS+=(--tag "${{ secrets.DOCKER_HUB_REPO }}:${IMAGE_TAG}-dless")
-        fi
-
-        docker buildx build \
-          --platform linux/amd64,linux/arm64 \
-          "${TAGS[@]}" \
-          --file ./Dockerfile.dless \
-          --output type=image,push=true \
-          --iidfile dless.digest \
-          .
-
-    - name: Export distroless image digest
-      run: |
-        DIG=$(cat dless.digest)
-        echo "DLESS_IMAGE_DIGEST=$DIG" >> "$GITHUB_ENV"
+        for arch in amd64 arm64; do
+          docker run --rm --platform "linux/${arch}" --entrypoint /app/build/avalanchego \
+            "ghcr.io/${{ github.repository }}@${IMAGE_DIGEST}" --version
+        done
 
     - name: Install Cosign
       uses: sigstore/cosign-installer@d7d6bc7722e3daa8354c50bcb52f4837da5e9b6a # v3.8.1
 
-    - name: Sign ghcr images
+    - name: Sign ghcr image
       shell: bash
       env:
         COSIGN_EXPERIMENTAL: 1
       run: |
           cosign sign --yes "ghcr.io/${{ github.repository }}@${IMAGE_DIGEST}"
-          cosign sign --yes "ghcr.io/${{ github.repository }}@${DLESS_IMAGE_DIGEST}"
 
-    - name: Sign docker hub images
+    - name: Sign docker hub image
       if: ${{ env.USE_DOCKER_HUB == 'true' }}
       shell: bash
       env:
         COSIGN_EXPERIMENTAL: 1
       run: |
           cosign sign --yes "${{ secrets.DOCKER_HUB_REPO }}@${IMAGE_DIGEST}"
-          cosign sign --yes "${{ secrets.DOCKER_HUB_REPO }}@${DLESS_IMAGE_DIGEST}"
 
-    - name: Verify ghcr image signatures
+    - name: Verify ghcr image signature
       shell: bash
       env:
         COSIGN_EXPERIMENTAL: 1
@@ -119,12 +150,7 @@ jobs:
           --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
           "ghcr.io/${{ github.repository }}@${IMAGE_DIGEST}"
 
-        cosign verify \
-          --certificate-identity="https://github.com/${{ github.repository }}/.github/workflows/build-container.yml@${GITHUB_REF}" \
-          --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
-          "ghcr.io/${{ github.repository }}@${DLESS_IMAGE_DIGEST}"
-
-    - name: Verify docker hub image signatures
+    - name: Verify docker hub image signature
       if: ${{ env.USE_DOCKER_HUB == 'true' }}
       shell: bash
       env:
@@ -134,8 +160,3 @@ jobs:
           --certificate-identity="https://github.com/${{ github.repository }}/.github/workflows/build-container.yml@${GITHUB_REF}" \
           --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
           "${{ secrets.DOCKER_HUB_REPO }}@${IMAGE_DIGEST}"
-
-        cosign verify \
-          --certificate-identity="https://github.com/${{ github.repository }}/.github/workflows/build-container.yml@${GITHUB_REF}" \
-          --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
-          "${{ secrets.DOCKER_HUB_REPO }}@${DLESS_IMAGE_DIGEST}"
