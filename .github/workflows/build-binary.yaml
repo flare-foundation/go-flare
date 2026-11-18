@@ -21,7 +21,7 @@ jobs:
     uses: ./.github/workflows/build-go-slsa3.yaml # zizmor: ignore[self-repository] actionlint does not yet support the $/ syntax
     with:
       go_version: "1.26.10"
-      ubuntu_version: "24.04"
+      ubuntu_version: "26.04"
       build_artifact_name: "avalanchego"
 
   # The SLSA builder only runs on amd64, so arm64 is a plain native build for now.
@@ -32,7 +32,7 @@ jobs:
     uses: ./.github/workflows/build-go.yaml # zizmor: ignore[self-repository] actionlint does not yet support the $/ syntax
     with:
       go_version: "1.26.10"
-      ubuntu_version: "24.04-arm"
+      ubuntu_version: "26.04-arm"
       build_artifact_name: "avalanchego-arm64"
 
   images:
@@ -66,7 +66,7 @@ jobs:
 
   release:
     name: Release
-    runs-on: "ubuntu-24.04"
+    runs-on: "ubuntu-26.04"
     needs: [build, build-verification]
     if: github.ref_type == 'tag'
     permissions:
