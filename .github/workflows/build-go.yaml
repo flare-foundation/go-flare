@@ -1,4 +1,4 @@
-name: Build Go Binaries For Verification
+name: Build Go Binaries
 
 on:
   workflow_call:

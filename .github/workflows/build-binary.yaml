@@ -6,7 +6,8 @@ permissions:
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "release/**", "feature/**" ]
+    # TEMP (fork testing): remove feat/remodeling-pipelines before merging.
+    branches: [ "main", "release/**", "feat/remodeling-pipelines" ]
     tags: [ "v*" ]
 
 jobs:
@@ -28,7 +29,7 @@ jobs:
     name: Build go-flare (arm64)
     permissions:
       contents: read
-    uses: ./.github/workflows/build-go-verification.yaml # zizmor: ignore[self-repository] actionlint does not yet support the $/ syntax
+    uses: ./.github/workflows/build-go.yaml # zizmor: ignore[self-repository] actionlint does not yet support the $/ syntax
     with:
       go_version: "1.26.10"
       ubuntu_version: "24.04-arm"
@@ -37,7 +38,7 @@ jobs:
   images:
     name: Container images
     needs: [build, build-arm64]
-    if: github.ref_type == 'tag' || github.ref_name == 'main' || startsWith(github.ref_name, 'feature/')
+    if: github.ref_type == 'tag' || github.ref_name == 'main' || github.ref_name == 'feat/remodeling-pipelines' # TEMP (fork testing)
     permissions:
       contents: read
       packages: write
@@ -45,6 +46,7 @@ jobs:
     uses: ./.github/workflows/build-container.yml # zizmor: ignore[self-repository] actionlint does not yet support the $/ syntax
     with:
       amd64_artifact_name: "avalanchego"
+      amd64_attestations_artifact_name: "avalanchego-attestations"
       arm64_artifact_name: "avalanchego-arm64"
     secrets:
       DOCKER_HUB_UID: ${{ secrets.DOCKER_HUB_UID }}
@@ -56,7 +58,7 @@ jobs:
     name: Go Verification Build
     permissions:
       contents: read
-    uses: ./.github/workflows/build-go-verification.yaml # zizmor: ignore[self-repository] actionlint does not yet support the $/ syntax
+    uses: ./.github/workflows/build-go.yaml # zizmor: ignore[self-repository] actionlint does not yet support the $/ syntax
     with:
       go_version: "1.26.10"
       ubuntu_version: "latest"

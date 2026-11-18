@@ -7,6 +7,10 @@ on:
         description: "Artifact with the SLSA-built amd64 binaries (folder.tgz)"
         required: true
         type: string
+      amd64_attestations_artifact_name:
+        description: "Artifact with the SLSA provenance for the amd64 binaries (folder.tgz)"
+        required: true
+        type: string
       arm64_artifact_name:
         description: "Artifact with the arm64 binaries"
         required: true
@@ -48,7 +52,7 @@ jobs:
     - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
     - run: echo "IMAGE_TAG=dev" >> "$GITHUB_ENV"
-      if: github.ref_name == 'main' || startsWith(github.ref_name, 'feature/')
+      if: github.ref_name == 'main' || github.ref_name == 'feat/remodeling-pipelines' # TEMP (fork testing)
 
     - run: echo "IMAGE_TAG=${GITHUB_REF##*/}" >> "$GITHUB_ENV"
       if: startsWith(github.ref, 'refs/tags/v')
@@ -75,6 +79,40 @@ jobs:
         find dist -type f -exec chmod 755 {} +
 
         sha256sum dist/*/avalanchego
+
+    - name: Download amd64 provenance
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+      with:
+        name: ${{ inputs.amd64_attestations_artifact_name }}
+        path: artifacts/amd64-attestations
+
+    - name: Install slsa-verifier
+      uses: slsa-framework/slsa-verifier/actions/installer@ea584f4502babc6f60d9bc799dbbb13c1caa9ee6 # v2.7.1
+
+    - name: Verify amd64 binary provenance
+      run: |
+        tar -xzf artifacts/amd64-attestations/folder.tgz -C artifacts/amd64-attestations/
+        PROVENANCE=$(echo artifacts/amd64-attestations/*-slsa-attestations/avalanchego-binaries.build.slsa)
+
+        # slsa-verifier only accepts provenance from vX.Y.Z tags. For other refs, at
+        # least check the binary against the digest recorded in the provenance.
+        if [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          slsa-verifier verify-artifact \
+            dist/amd64/avalanchego \
+            --provenance-path "${PROVENANCE}" \
+            --source-uri "github.com/${{ github.repository }}" \
+            --builder-id "https://github.com/${{ github.repository }}/.github/workflows/build-go-slsa3.yaml@refs/tags/${GITHUB_REF_NAME}"
+        else
+          EXPECTED=$(jq -r '.dsseEnvelope.payload' "${PROVENANCE}" | base64 -d \
+            | jq -r '.subject[] | select(.name == "avalanchego") | .digest.sha256')
+          ACTUAL=$(sha256sum dist/amd64/avalanchego | awk '{print $1}')
+          echo "provenance: ${EXPECTED}"
+          echo "binary:     ${ACTUAL}"
+          if [ -z "${EXPECTED}" ] || [ "${EXPECTED}" != "${ACTUAL}" ]; then
+            echo "amd64 binary does not match the SLSA provenance"
+            exit 1
+          fi
+        fi
 
     - name: Smoke test image
       env:
