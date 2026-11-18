@@ -18,7 +18,7 @@ FROM scratch AS binaries
 ARG TARGETARCH
 COPY --from=build /app/avalanchego/build /${TARGETARCH}/
 
-FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
+FROM ubuntu:26.04@sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db
 
 ARG TARGETARCH
 

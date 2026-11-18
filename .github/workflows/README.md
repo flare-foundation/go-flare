@@ -62,7 +62,7 @@ The framework introduces three components:
 
 `build-verification` (`build-go.yaml`) runs in parallel on tags. A plain second build using the same go-build composite action, producing an independent binary used only for the reproducibility check.
 
-`build-arm64` builds the arm64 binary natively on an `ubuntu-24.04-arm` runner (the SLSA builder only runs on amd64).
+`build-arm64` builds the arm64 binary natively on an `ubuntu-26.04-arm` runner (the SLSA builder only runs on amd64).
 
 `images` (`build-container.yml`) does not compile anything: it copies the SLSA-built amd64 binary and the arm64 binary into the images via `--build-context binaries=...`. Before that it checks the amd64 binary against its SLSA provenance (full `slsa-verifier` on `vX.Y.Z` tags, which is all slsa-verifier accepts; a digest comparison against the provenance subject on other refs). It then smoke tests both architectures, then pushes and signs the images with Cosign. The amd64 image therefore contains the same binary as the release zip. Set the repository variable `USE_DOCKER_HUB=false` (e.g. on forks) to push to ghcr.io only. A local `docker build` without `--build-context` still builds from source.
 
