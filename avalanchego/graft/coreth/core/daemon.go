@@ -36,6 +36,11 @@ var (
 	// its gas limit and settleFees refunds that padding too, so without a cap
 	// any gas limit up to the block limit is free block space for the nominal
 	// fee. Consensus-relevant: every node must switch at the same block time.
+	//
+	// From the same block times the FTSO v1 branch (prioritisedFTSOContractAddress)
+	// is retired on these two networks: their PriceSubmitter accepts a call with
+	// empty arrays from any sender, which would leave the capped refund open to
+	// everyone, and it has had no successful call since December 2024.
 	prioritisedGasLimitCapActivationTimeSongbird = uint64(time.Date(2026, time.December, 1, 12, 0, 0, 0, time.UTC).Unix())
 	prioritisedGasLimitCapActivationTimeCoston   = uint64(time.Date(2026, time.November, 24, 12, 0, 0, 0, time.UTC).Unix())
 
@@ -82,7 +87,9 @@ type prioritisedParams struct {
 	submitterDataPrefixes    [][4]byte
 	ftsoDataPrefixes         [][4]byte
 	// gasLimitCapActivationTime, when non-zero, is the block time after which
-	// maxGasLimit is lowered to prioritisedMaxGasLimit (Songbird and Coston).
+	// maxGasLimit is lowered to prioritisedMaxGasLimit and calls to
+	// prioritisedFTSOContractAddress are no longer prioritised (Songbird and
+	// Coston).
 	gasLimitCapActivationTime uint64
 }
 
@@ -208,6 +215,10 @@ func IsPrioritisedContractCall(chainID *big.Int, blockTime uint64, to *common.Ad
 	case initialGas > chainValue.maxGasLimitAt(blockTime):
 		return false
 	case *to == prioritisedFTSOContractAddress:
+		// Songbird and Coston retire the FTSO v1 branch together with the cap.
+		if chainValue.gasLimitCapActivationTime != 0 && blockTime > chainValue.gasLimitCapActivationTime {
+			return false
+		}
 		if blockTime > chainValue.dataPrefixActivationTime {
 			return checkDataPrefix(data, chainValue.ftsoDataPrefixes)
 		}

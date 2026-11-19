@@ -52,6 +52,7 @@ func withCChainExtras(t *testing.T, fn func(t *testing.T)) {
 var (
 	deadBurnAddress    = common.HexToAddress("0x000000000000000000000000000000000000dEaD")
 	ftsoContractAddr   = common.HexToAddress("0x1000000000000000000000000000000000000003")
+	submitterAddr      = common.HexToAddress("0x2cA6571Daa15ce734Bbd0Bf27D5C9D16787fc33f")
 	daemonContractAddr = common.HexToAddress("0x1000000000000000000000000000000000000002")
 	governanceAddr     = common.HexToAddress("0x1000000000000000000000000000000000000007")
 
@@ -608,7 +609,11 @@ func testApplyTransactionWithExtrasSongbird(t *testing.T) {
 		assert.Equal(t, new(uint256.Int).Sub(initial, nominalFee), env.statedb.GetBalance(env.sender), "sender pays only the nominal fee before the cap activation")
 	})
 
-	t.Run("gas_limit_above_cap_after_activation_is_not_prioritised", func(t *testing.T) {
+	// From the same block time the FTSO v1 branch is retired on Songbird (and
+	// Coston): its contract accepts empty arrays from any sender, so the cap
+	// alone would leave the refund open to everyone. Not even a call within
+	// the cap is refunded.
+	t.Run("ftso_call_after_activation_is_not_prioritised", func(t *testing.T) {
 		env := newApplyTxEnv(t, corethparams.SongbirdChainID, mint)
 		env.header.Time = capActivation + 1
 		initial := env.statedb.GetBalance(env.sender).Clone()
@@ -616,35 +621,69 @@ func testApplyTransactionWithExtrasSongbird(t *testing.T) {
 		receipt, err := env.apply(t, &types.LegacyTx{
 			Nonce:    0,
 			To:       &ftsoContractAddr,
-			Gas:      3_000_001,
+			Gas:      100_000,
 			GasPrice: gasPrice,
 			Data:     ftsoData,
+		})
+		require.NoError(t, err, "ApplyTransactionWithExtras()")
+		require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status, "receipt status")
+
+		actualFee := feeOf(t, receipt.GasUsed, gasPrice)
+		require.True(t, actualFee.Gt(nominalFee), "test setup: actual fee must exceed the nominal fee")
+		assert.Equal(t, actualFee, env.statedb.GetBalance(blackhole.Address), "full fee stays on the Songbird coinbase, no refund")
+		assert.Equal(t, new(uint256.Int).Sub(initial, actualFee), env.statedb.GetBalance(env.sender), "sender pays the full fee for an FTSO call after the activation")
+		assert.Equal(t, mint, env.statedb.GetBalance(daemonContractAddr), "daemon still runs for successful txs")
+	})
+
+	// After the activation the cap is therefore exercised on the submitter
+	// branch, which needs a non-zero return value from the submitter contract.
+	submitterData := []byte{0x6c, 0x53, 0x2f, 0xae} // submit1()
+	newSubmitterEnv := func(t *testing.T) *applyTxEnv {
+		t.Helper()
+		env := newApplyTxEnv(t, corethparams.SongbirdChainID, mint)
+		env.header.Time = capActivation + 1
+		env.statedb.SetCode(submitterAddr, mintReturnCode(uint256.NewInt(1)))
+		return env
+	}
+
+	t.Run("gas_limit_above_cap_after_activation_is_not_prioritised", func(t *testing.T) {
+		env := newSubmitterEnv(t)
+		initial := env.statedb.GetBalance(env.sender).Clone()
+
+		receipt, err := env.apply(t, &types.LegacyTx{
+			Nonce:    0,
+			To:       &submitterAddr,
+			Gas:      3_000_001,
+			GasPrice: gasPrice,
+			Data:     submitterData,
 		})
 		require.NoError(t, err, "ApplyTransactionWithExtras()")
 		require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status, "receipt status")
 		require.Less(t, receipt.GasUsed, uint64(3_000_000), "test setup: gas used must be below the cap")
 
 		actualFee := feeOf(t, receipt.GasUsed, gasPrice)
+		require.True(t, actualFee.Gt(nominalFee), "test setup: actual fee must exceed the nominal fee")
 		assert.Equal(t, actualFee, env.statedb.GetBalance(blackhole.Address), "full fee stays on the Songbird coinbase, no refund")
 		assert.Equal(t, new(uint256.Int).Sub(initial, actualFee), env.statedb.GetBalance(env.sender), "sender pays the full fee after the cap activation")
 		assert.Equal(t, mint, env.statedb.GetBalance(daemonContractAddr), "daemon still runs for successful txs")
 	})
 
 	t.Run("gas_limit_at_cap_after_activation_is_prioritised", func(t *testing.T) {
-		env := newApplyTxEnv(t, corethparams.SongbirdChainID, mint)
-		env.header.Time = capActivation + 1
+		env := newSubmitterEnv(t)
 		initial := env.statedb.GetBalance(env.sender).Clone()
 
 		receipt, err := env.apply(t, &types.LegacyTx{
 			Nonce:    0,
-			To:       &ftsoContractAddr,
+			To:       &submitterAddr,
 			Gas:      3_000_000,
 			GasPrice: gasPrice,
-			Data:     ftsoData,
+			Data:     submitterData,
 		})
 		require.NoError(t, err, "ApplyTransactionWithExtras()")
 		require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status, "receipt status")
+		require.True(t, feeOf(t, receipt.GasUsed, gasPrice).Gt(nominalFee), "test setup: actual fee must exceed the nominal fee")
 
+		assert.Equal(t, nominalFee, env.statedb.GetBalance(blackhole.Address), "nominal fee stays on the Songbird coinbase")
 		assert.Equal(t, new(uint256.Int).Sub(initial, nominalFee), env.statedb.GetBalance(env.sender), "sender pays only the nominal fee at the cap")
 	})
 }
