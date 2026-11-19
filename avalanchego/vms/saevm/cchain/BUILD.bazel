@@ -117,6 +117,7 @@ go_test(
     srcs = [
         "api_test.go",
         "config_test.go",
+        "factory_flare_test.go",
         "genesis_test.go",
         "gossip_test.go",
         "hooks_flare_test.go",

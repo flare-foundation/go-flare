@@ -28,9 +28,14 @@ func (*Factory) New(log logging.Logger) (interface{}, error) {
 	type fullVM struct {
 		adaptor.ChainVMWithContext
 		block.StateSyncableVM
+		// Flare: the two wrappers above are interface values and hide every
+		// other method of vm, so [VM.GetBlockHeight] is forwarded explicitly.
+		// Without it the proposervm proposer lookup falls back to GetBlock.
+		block.HeightByIDChainVM
 	}
 	return fullVM{
 		adaptor.Convert(vm),
 		adaptor.ConvertStateSync(vm),
+		vm,
 	}, nil
 }
