@@ -68,6 +68,16 @@ cosign verify \
   docker.io/flarefoundation/go-flare:<TAG>
 ```
 
+Images also carry a SLSA build provenance attestation, which can be verified with the [GitHub CLI](https://cli.github.com/):
+
+```bash
+gh attestation verify oci://ghcr.io/flare-foundation/go-flare:<TAG> \
+  --repo flare-foundation/go-flare \
+  --signer-workflow flare-foundation/go-flare/.github/workflows/build-container.yml
+```
+
+Release binaries are attested too, see [.github/workflows/README.md](.github/workflows/README.md#verification-guide).
+
 ### Container builds in CI
 
 CI builds on each:

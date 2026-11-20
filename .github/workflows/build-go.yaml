@@ -1,4 +1,4 @@
-name: Build Go Binaries For Verification
+name: Build Go Binaries
 
 on:
   workflow_call:
@@ -12,7 +12,12 @@ on:
       build_artifact_name:
         required: true
         type: string
-    
+      attest:
+        description: "Create a GitHub build provenance attestation for the binary"
+        required: false
+        default: false
+        type: boolean
+
     outputs:
       build_artifact_name:
         description: "Name of uploaded artifacts"
@@ -26,12 +31,21 @@ jobs:
       with:
         fetch-depth: 0
         persist-credentials: false
-  
+
     - name: Build
       uses: ./.github/actions/go-build # zizmor: ignore[self-repository] actionlint does not yet support the $/ syntax
       with:
         go_version: ${{ inputs.go_version }}
         working_directory: .
+
+    # Attesting inside this reusable workflow makes it the signer identity (SLSA Build L3).
+    # Verify with: gh attestation verify <binary> --repo <owner>/<repo> \
+    #   --signer-workflow <owner>/<repo>/.github/workflows/build-go.yaml
+    - name: Attest build provenance
+      if: inputs.attest
+      uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+      with:
+        subject-path: avalanchego/build/avalanchego
 
     - name: Upload build
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
