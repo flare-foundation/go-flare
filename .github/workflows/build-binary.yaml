@@ -59,8 +59,12 @@ jobs:
   build-verification:
     if: github.ref_type == 'tag'
     name: Go Verification Build
+    # id-token/attestations only because build-go.yaml declares an attest job; it is skipped
+    # here (attest: false) and the build job itself is limited to contents: read.
     permissions:
       contents: read
+      id-token: write
+      attestations: write
     uses: ./.github/workflows/build-go.yaml # zizmor: ignore[self-repository] actionlint does not yet support the $/ syntax
     with:
       go_version: "1.26.10"

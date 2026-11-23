@@ -47,7 +47,7 @@ build-binary.yaml
 
 ### Job Flow
 
-`build` and `build-arm64` (`build-go.yaml`) build the binaries natively on `ubuntu-26.04` and `ubuntu-26.04-arm` runners and attest them with `actions/attest`.
+`build` and `build-arm64` (`build-go.yaml`) build the binaries natively on `ubuntu-26.04` and `ubuntu-26.04-arm` runners. The build job only has a read-only token; a separate `attest` job in the same reusable workflow downloads the binary and attests it with `actions/attest`, so build steps never have access to the OIDC token used for signing.
 
 `build-verification` (`build-go.yaml`, tags only) runs in parallel. A plain second amd64 build using the same go-build composite action, producing an independent binary used only for the reproducibility check. It is not attested.
 
