@@ -47,6 +47,11 @@ jobs:
       with:
         persist-credentials: false
     - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      with:
+        # Pin the binfmt image (the action defaults to tonistiigi/binfmt:latest), it runs privileged.
+        image: docker.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+        # The runner is amd64, so only arm64 needs emulation.
+        platforms: arm64
     - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
     - run: echo "IMAGE_TAG=dev" >> "$GITHUB_ENV"
