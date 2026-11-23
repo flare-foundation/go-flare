@@ -96,8 +96,8 @@ jobs:
         run: |
           mkdir -p release/amd64 release/arm64
 
-          cp -r artifacts/avalanchego-amd64/. release/amd64/
-          cp -r artifacts/avalanchego-arm64/. release/arm64/
+          cp artifacts/avalanchego-amd64/avalanchego release/amd64/
+          cp artifacts/avalanchego-arm64/avalanchego release/arm64/
 
           # upload-artifact does not preserve the executable bit
           find release artifacts/avalanchego-verification -type f -exec chmod 755 {} +
@@ -127,7 +127,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           for arch in amd64 arm64; do
+            # Publish the single bundle created by this build, so it verifies on its own (cosign
+            # expects exactly one bundle per file).
+            shopt -s nullglob
+            BUNDLES=("artifacts/avalanchego-${arch}-attestation"/*)
+            if [ "${#BUNDLES[@]}" -ne 1 ]; then
+              echo "Expected one attestation bundle for ${arch}, found ${#BUNDLES[@]}"
+              exit 1
+            fi
+            cp "${BUNDLES[0]}" "release/${arch}.sigstore.json"
+
             gh attestation verify "release/${arch}/avalanchego" \
+              --bundle "release/${arch}.sigstore.json" \
               --repo "${{ github.repository }}" \
               --signer-workflow "${{ github.repository }}/.github/workflows/build-go.yaml" \
               --source-ref "${GITHUB_REF}" \
@@ -135,18 +146,15 @@ jobs:
           done
 
       - name: Package release
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           for arch in amd64 arm64; do
             ARTIFACT_NAME="go-flare-${GITHUB_REF_NAME}-linux-${arch}.zip"
 
-            (cd "release/${arch}" && zip -r "../../${ARTIFACT_NAME}" .)
+            # Only the binary, stored at the zip root.
+            zip -j "${ARTIFACT_NAME}" "release/${arch}/avalanchego"
 
             # Attestation bundle for the binary inside the zip, for offline verification.
-            gh attestation download "release/${arch}/avalanchego" --repo "${{ github.repository }}"
-            DIGEST=$(sha256sum "release/${arch}/avalanchego" | awk '{print $1}')
-            mv "sha256:${DIGEST}.jsonl" "${ARTIFACT_NAME}.intoto.jsonl"
+            mv "release/${arch}.sigstore.json" "${ARTIFACT_NAME}.sigstore.json"
           done
 
       - name: Sign release binaries
