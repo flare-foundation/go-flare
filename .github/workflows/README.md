@@ -118,6 +118,8 @@ This confirms the release zip was signed by the official release workflow and ha
 
 ### Verifying Container Images
 
+With the GitHub CLI (requires `gh auth login`), or without a login using the `cosign verify-attestation --new-bundle-format` command from the [README](../../README.md#container-image):
+
 ```
 gh attestation verify oci://ghcr.io/flare-foundation/go-flare:<tag> \
   --repo flare-foundation/go-flare \
