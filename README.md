@@ -15,7 +15,7 @@ See [release notes](./RELEASES-flare.md) for more info.
 - CPU: Equivalent of 8 AWS vCPU
 - RAM: 16 GiB
 - Storage: 1TB Flare / 3.5TB Songbird
-- OS: Ubuntu 24.04
+- OS: Ubuntu 24.04 or 26.04
 
 ## Compilation
 
@@ -67,6 +67,29 @@ cosign verify \
   --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
   docker.io/flarefoundation/go-flare:<TAG>
 ```
+
+Images also carry a SLSA build provenance attestation, which can be verified with the [GitHub CLI](https://cli.github.com/) (requires `gh auth login`):
+
+```bash
+gh attestation verify oci://ghcr.io/flare-foundation/go-flare:<TAG> \
+  --repo flare-foundation/go-flare \
+  --signer-workflow flare-foundation/go-flare/.github/workflows/build-container.yml
+```
+
+Add `--source-ref refs/tags/<TAG> --source-digest <commit>` to also pin the tag and its commit.
+
+Without a GitHub login, with cosign, which reads the attestation from the registry:
+
+```bash
+cosign verify-attestation \
+  --new-bundle-format \
+  --type slsaprovenance1 \
+  --certificate-identity-regexp="^https://github\.com/flare-foundation/go-flare/\.github/workflows/build-container\.yml@refs/tags/" \
+  --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+  ghcr.io/flare-foundation/go-flare:<TAG>
+```
+
+Release binaries are attested too, see [.github/workflows/README.md](.github/workflows/README.md#verification-guide).
 
 ### Container builds in CI
 

@@ -1,33 +1,113 @@
 name: container-images
 
 on:
-  push:
-    branches: [ "main", "feature/**" ]
-    tags: [ "v*" ]
+  workflow_call:
+    inputs:
+      amd64_artifact_name:
+        description: "Artifact with the attested amd64 binaries"
+        required: true
+        type: string
+      arm64_artifact_name:
+        description: "Artifact with the attested arm64 binaries"
+        required: true
+        type: string
+    secrets:
+      DOCKER_HUB_UID:
+        required: false
+      DOCKER_HUB_PAT:
+        required: false
+      DOCKER_HUB_REPO:
+        required: false
 
 jobs:
   build-and-push:
-    name: Build & Push
-    runs-on: ubuntu-24.04
+    name: Build & Push (${{ matrix.variant }})
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       packages: write
       id-token: write
+      attestations: write
+      artifact-metadata: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: standard
+            dockerfile: ./Dockerfile
+            tag_suffix: ""
+          - variant: distroless
+            dockerfile: ./Dockerfile.dless
+            tag_suffix: "-dless"
     env:
-      USE_DOCKER_HUB: true
+      # Set the repository variable USE_DOCKER_HUB=false (e.g. on forks) to push to ghcr.io only.
+      USE_DOCKER_HUB: ${{ vars.USE_DOCKER_HUB != 'false' }}
     steps:
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       with:
-        fetch-depth: 0
         persist-credentials: false
     - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      with:
+        # Pin the binfmt image (the action defaults to tonistiigi/binfmt:latest), it runs privileged.
+        image: docker.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+        # The runner is amd64, so only arm64 needs emulation.
+        platforms: arm64
     - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
     - run: echo "IMAGE_TAG=dev" >> "$GITHUB_ENV"
-      if: github.ref_name == 'main' || startsWith(github.ref_name, 'feature/')
+      if: github.ref_name == 'main' || github.ref_name == 'feat/remodeling-pipelines' # TEMP (fork testing)
 
     - run: echo "IMAGE_TAG=${GITHUB_REF##*/}" >> "$GITHUB_ENV"
       if: startsWith(github.ref, 'refs/tags/v')
+
+    - name: Download amd64 binaries
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+      with:
+        name: ${{ inputs.amd64_artifact_name }}
+        path: dist/amd64
+
+    - name: Download arm64 binaries
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+      with:
+        name: ${{ inputs.arm64_artifact_name }}
+        path: dist/arm64
+
+    - name: Prepare binaries
+      run: |
+        # upload-artifact does not preserve the executable bit
+        find dist -type f -exec chmod 755 {} +
+
+        sha256sum dist/*/avalanchego
+
+    - name: Verify binary attestations
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        for arch in amd64 arm64; do
+          gh attestation verify "dist/${arch}/avalanchego" \
+            --repo "${{ github.repository }}" \
+            --signer-workflow "${{ github.repository }}/.github/workflows/build-go.yaml" \
+            --source-ref "${GITHUB_REF}" \
+            --source-digest "${GITHUB_SHA}" \
+            --deny-self-hosted-runners
+        done
+
+    - name: Smoke test image
+      env:
+        DOCKERFILE: ${{ matrix.dockerfile }}
+      run: |
+        # Load each platform locally and run the binary before anything is pushed.
+        for arch in amd64 arm64; do
+          docker buildx build \
+            --platform "linux/${arch}" \
+            --file "${DOCKERFILE}" \
+            --build-context binaries=./dist \
+            --load \
+            --tag "smoke-test:${arch}" \
+            .
+          docker run --rm --platform "linux/${arch}" --entrypoint /app/build/avalanchego \
+            "smoke-test:${arch}" --version
+        done
 
     - name: Login to ghcr.io
       uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
@@ -43,73 +123,80 @@ jobs:
         username: ${{ secrets.DOCKER_HUB_UID }}
         password: ${{ secrets.DOCKER_HUB_PAT }}
 
-    - name: Build standard image
+    - name: Build image
       env:
         USE_DOCKER_HUB: ${{ env.USE_DOCKER_HUB }}
+        DOCKERFILE: ${{ matrix.dockerfile }}
+        TAG_SUFFIX: ${{ matrix.tag_suffix }}
       run: |
-        TAGS=(--tag "ghcr.io/${{ github.repository }}:${IMAGE_TAG}")
+        TAGS=(--tag "ghcr.io/${{ github.repository }}:${IMAGE_TAG}${TAG_SUFFIX}")
 
         if [ "${USE_DOCKER_HUB}" = "true" ]; then
-          TAGS+=(--tag "${{ secrets.DOCKER_HUB_REPO }}:${IMAGE_TAG}")
+          TAGS+=(--tag "${{ secrets.DOCKER_HUB_REPO }}:${IMAGE_TAG}${TAG_SUFFIX}")
         fi
 
         docker buildx build \
           --platform linux/amd64,linux/arm64 \
           "${TAGS[@]}" \
-          --file ./Dockerfile \
+          --file "${DOCKERFILE}" \
+          --build-context binaries=./dist \
           --output type=image,push=true \
-          --iidfile std.digest \
+          --iidfile image.digest \
           .
 
-    - name: Export standard image digest
+    - name: Export image digest
       run: |
-        DIG=$(cat std.digest)
+        DIG=$(cat image.digest)
         echo "IMAGE_DIGEST=$DIG" >> "$GITHUB_ENV"
 
-    - name: Build distroless image
+    # Storage records need an organization-owned repository, so skip them on personal forks.
+    - name: Attest ghcr image
+      uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+      with:
+        subject-name: ghcr.io/${{ github.repository }}
+        subject-digest: ${{ env.IMAGE_DIGEST }}
+        push-to-registry: true
+        create-storage-record: ${{ github.event.repository.owner.type == 'Organization' }}
+
+    - name: Attest docker hub image
+      if: ${{ env.USE_DOCKER_HUB == 'true' }}
+      uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+      with:
+        subject-name: index.docker.io/${{ secrets.DOCKER_HUB_REPO }}
+        subject-digest: ${{ env.IMAGE_DIGEST }}
+        push-to-registry: true
+        create-storage-record: ${{ github.event.repository.owner.type == 'Organization' }}
+
+    - name: Verify ghcr image attestation
       env:
-        USE_DOCKER_HUB: ${{ env.USE_DOCKER_HUB }}
+        GH_TOKEN: ${{ github.token }}
       run: |
-        TAGS=(--tag "ghcr.io/${{ github.repository }}:${IMAGE_TAG}-dless")
-
-        if [ "${USE_DOCKER_HUB}" = "true" ]; then
-          TAGS+=(--tag "${{ secrets.DOCKER_HUB_REPO }}:${IMAGE_TAG}-dless")
-        fi
-
-        docker buildx build \
-          --platform linux/amd64,linux/arm64 \
-          "${TAGS[@]}" \
-          --file ./Dockerfile.dless \
-          --output type=image,push=true \
-          --iidfile dless.digest \
-          .
-
-    - name: Export distroless image digest
-      run: |
-        DIG=$(cat dless.digest)
-        echo "DLESS_IMAGE_DIGEST=$DIG" >> "$GITHUB_ENV"
+        gh attestation verify "oci://ghcr.io/${{ github.repository }}@${IMAGE_DIGEST}" \
+          --repo "${{ github.repository }}" \
+          --signer-workflow "${{ github.repository }}/.github/workflows/build-container.yml" \
+          --source-ref "${GITHUB_REF}" \
+          --source-digest "${GITHUB_SHA}" \
+          --deny-self-hosted-runners
 
     - name: Install Cosign
       uses: sigstore/cosign-installer@d7d6bc7722e3daa8354c50bcb52f4837da5e9b6a # v3.8.1
 
-    - name: Sign ghcr images
+    - name: Sign ghcr image
       shell: bash
       env:
         COSIGN_EXPERIMENTAL: 1
       run: |
           cosign sign --yes "ghcr.io/${{ github.repository }}@${IMAGE_DIGEST}"
-          cosign sign --yes "ghcr.io/${{ github.repository }}@${DLESS_IMAGE_DIGEST}"
 
-    - name: Sign docker hub images
+    - name: Sign docker hub image
       if: ${{ env.USE_DOCKER_HUB == 'true' }}
       shell: bash
       env:
         COSIGN_EXPERIMENTAL: 1
       run: |
           cosign sign --yes "${{ secrets.DOCKER_HUB_REPO }}@${IMAGE_DIGEST}"
-          cosign sign --yes "${{ secrets.DOCKER_HUB_REPO }}@${DLESS_IMAGE_DIGEST}"
 
-    - name: Verify ghcr image signatures
+    - name: Verify ghcr image signature
       shell: bash
       env:
         COSIGN_EXPERIMENTAL: 1
@@ -119,12 +206,7 @@ jobs:
           --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
           "ghcr.io/${{ github.repository }}@${IMAGE_DIGEST}"
 
-        cosign verify \
-          --certificate-identity="https://github.com/${{ github.repository }}/.github/workflows/build-container.yml@${GITHUB_REF}" \
-          --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
-          "ghcr.io/${{ github.repository }}@${DLESS_IMAGE_DIGEST}"
-
-    - name: Verify docker hub image signatures
+    - name: Verify docker hub image signature
       if: ${{ env.USE_DOCKER_HUB == 'true' }}
       shell: bash
       env:
@@ -134,8 +216,3 @@ jobs:
           --certificate-identity="https://github.com/${{ github.repository }}/.github/workflows/build-container.yml@${GITHUB_REF}" \
           --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
           "${{ secrets.DOCKER_HUB_REPO }}@${IMAGE_DIGEST}"
-
-        cosign verify \
-          --certificate-identity="https://github.com/${{ github.repository }}/.github/workflows/build-container.yml@${GITHUB_REF}" \
-          --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
-          "${{ secrets.DOCKER_HUB_REPO }}@${DLESS_IMAGE_DIGEST}"

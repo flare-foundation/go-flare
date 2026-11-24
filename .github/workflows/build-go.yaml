@@ -1,0 +1,81 @@
+name: Build Go Binaries
+
+on:
+  workflow_call:
+    inputs:
+      go_version:
+        required: true
+        type: string
+      ubuntu_version:
+        required: true
+        type: string
+      build_artifact_name:
+        required: true
+        type: string
+      attest:
+        description: "Create a GitHub build provenance attestation for the binary"
+        required: false
+        default: false
+        type: boolean
+
+    outputs:
+      build_artifact_name:
+        description: "Name of uploaded artifacts"
+        value: ${{ inputs.build_artifact_name }}
+
+jobs:
+  # The build runs with a read-only token and cannot request OIDC tokens, so a compromised
+  # build step cannot sign provenance. Signing happens in the separate attest job below.
+  build:
+    runs-on: ubuntu-${{ inputs.ubuntu_version }}
+    permissions:
+      contents: read
+    steps:
+    - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+
+    - name: Build
+      uses: ./.github/actions/go-build # zizmor: ignore[self-repository] actionlint does not yet support the $/ syntax
+      with:
+        go_version: ${{ inputs.go_version }}
+        working_directory: .
+
+    - name: Upload build
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+      with:
+        name: ${{ inputs.build_artifact_name }}
+        path: avalanchego/build/avalanchego
+
+  # Attesting inside this reusable workflow makes it the signer identity (SLSA Build L3).
+  # Verify with: gh attestation verify <binary> --repo <owner>/<repo> \
+  #   --signer-workflow <owner>/<repo>/.github/workflows/build-go.yaml
+  attest:
+    if: inputs.attest
+    needs: build
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+    - name: Download build
+      uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
+      with:
+        name: ${{ inputs.build_artifact_name }}
+        path: dist
+
+    - name: Attest build provenance
+      id: attest
+      uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+      with:
+        subject-path: dist/avalanchego
+
+    # The bundle of exactly this build. `gh attestation download` would return every
+    # attestation for the digest, and reproducible builds of the same commit share it.
+    - name: Upload attestation bundle
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+      with:
+        name: ${{ inputs.build_artifact_name }}-attestation
+        path: ${{ steps.attest.outputs.bundle-path }}
