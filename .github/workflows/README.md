@@ -27,7 +27,7 @@ Where possible, GitHub Action and reusable workflow references in the pipeline a
 
 **SLSA3 Provenance Attestation**
 
-Every build of the amd64 and arm64 binaries produces a signed SLSA v1 provenance attestation that records what was built, from which exact source commit, and by which workflow. Attestations are signed via Sigstore (the public-good instance for public repositories), stored in the GitHub attestations API and published with each release as a Sigstore bundle (`.intoto.jsonl`), so they can be verified online or offline.
+Every build of the amd64 and arm64 binaries produces a signed SLSA v1 provenance attestation that records what was built, from which exact source commit, and by which workflow. Attestations are signed via Sigstore (the public-good instance for public repositories), stored in the GitHub attestations API and published with each release as a Sigstore bundle (`.sigstore.json`), so they can be verified online or offline.
 
 The container images are attested the same way, and the attestations are also pushed to the registry next to the image.
 
@@ -47,7 +47,7 @@ build-binary.yaml
 
 ### Job Flow
 
-`build` and `build-arm64` (`build-go.yaml`) build the binaries natively on `ubuntu-26.04` and `ubuntu-26.04-arm` runners and attest them with `actions/attest`.
+`build` and `build-arm64` (`build-go.yaml`) build the binaries natively on `ubuntu-26.04` and `ubuntu-26.04-arm` runners. The build job only has a read-only token; a separate `attest` job in the same reusable workflow downloads the binary and attests it with `actions/attest`, so build steps never have access to the OIDC token used for signing.
 
 `build-verification` (`build-go.yaml`, tags only) runs in parallel. A plain second amd64 build using the same go-build composite action, producing an independent binary used only for the reproducibility check. It is not attested.
 
@@ -57,8 +57,8 @@ build-binary.yaml
 
 * Compares the amd64 binary against the verification binary
 * Verifies the provenance of both binaries with `gh attestation verify`
-* Packages both architectures, downloads their attestation bundles, and signs and verifies the zips with Cosign
-* Publishes the release with the zips, `.intoto.jsonl` bundles, and Cosign .sig/.pem files
+* Packages both architectures with the attestation bundle created by each build, and signs and verifies the zips with Cosign
+* Publishes the release with the zips, `.sigstore.json` bundles, and Cosign .sig/.pem files
 
 ## Verification Guide
 
@@ -67,7 +67,7 @@ Each release publishes the following files, for both `amd64` and `arm64`:
 | File | Description |
 |------|-------------|
 | `go-flare-<tag>-linux-<arch>.zip` | Release binary |
-| `go-flare-<tag>-linux-<arch>.zip.intoto.jsonl` | SLSA provenance attestation (Sigstore bundle) for the binary in the zip |
+| `go-flare-<tag>-linux-<arch>.zip.sigstore.json` | SLSA provenance attestation (Sigstore bundle) for the binary in the zip |
 | `go-flare-<tag>-linux-<arch>.zip.sig` | Cosign signature |
 | `go-flare-<tag>-linux-<arch>.zip.pem` | Cosign certificate |
 
@@ -83,14 +83,14 @@ gh attestation verify avalanchego \
   --source-ref refs/tags/<tag>
 ```
 
-To verify against the published bundle instead of the GitHub API, add `--bundle go-flare-<tag>-linux-<arch>.zip.intoto.jsonl`.
+To verify against the published bundle instead of the GitHub API, add `--bundle go-flare-<tag>-linux-<arch>.zip.sigstore.json`. It holds only the attestation of the release build. `gh attestation download` can return several attestations for the same binary, because rebuilding the same commit reproduces it byte for byte; cosign accepts only a single bundle, so use the published file with cosign.
 
 Without the GitHub CLI, the bundle can be verified with [cosign](https://github.com/sigstore/cosign) (v2.4 or newer):
 
 ```
 cosign verify-blob-attestation \
   --new-bundle-format \
-  --bundle go-flare-<tag>-linux-<arch>.zip.intoto.jsonl \
+  --bundle go-flare-<tag>-linux-<arch>.zip.sigstore.json \
   --type slsaprovenance1 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp '^https://github\.com/flare-foundation/go-flare/\.github/workflows/build-go\.yaml@refs/tags/<tag>$' \
@@ -117,6 +117,8 @@ cosign verify-blob \
 This confirms the release zip was signed by the official release workflow and has not been tampered with since signing.
 
 ### Verifying Container Images
+
+With the GitHub CLI (requires `gh auth login`), or without a login using the `cosign verify-attestation --new-bundle-format` command from the [README](../../README.md#container-image):
 
 ```
 gh attestation verify oci://ghcr.io/flare-foundation/go-flare:<tag> \

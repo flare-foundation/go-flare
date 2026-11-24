@@ -3,4 +3,16 @@
   extends: [
     'gitlab>flarenetwork/infra-team/renovate:best-practices.json5',
   ],
+  customManagers: [
+    {
+      // Docker images passed as action inputs (e.g. the binfmt image of docker/setup-qemu-action)
+      // are not detected by the github-actions manager.
+      customType: 'regex',
+      managerFilePatterns: ['/^\\.github/workflows/.+\\.ya?ml$/'],
+      matchStrings: [
+        'image: docker\\.io/(?<depName>tonistiigi/binfmt):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]+)',
+      ],
+      datasourceTemplate: 'docker',
+    },
+  ],
 }
