@@ -51,7 +51,7 @@ build-binary.yaml
 
 `build-verification` (`build-go.yaml`, tags only) runs in parallel. A plain second amd64 build using the same go-build composite action, producing an independent binary used only for the reproducibility check. It is not attested.
 
-`images` (`build-container.yml`) does not compile anything: it copies the attested binaries into the images via `--build-context binaries=...`. Before that it verifies both binaries with `gh attestation verify` (signer `build-go.yaml`, same git ref, GitHub-hosted runners only). It then smoke tests both architectures, pushes the images, attests them (`push-to-registry`), verifies the image attestation and signs the images with Cosign. The images therefore contain the same binaries as the release zips. Set the repository variable `USE_DOCKER_HUB=false` (e.g. on forks) to push to ghcr.io only. A local `docker build` without `--build-context` still builds from source.
+`images` (`build-container.yml`) does not compile anything: it copies the attested binaries into the images via `--build-context binaries=...`. Before that it verifies both binaries with `gh attestation verify` (signer `build-go.yaml`, same git ref and commit, GitHub-hosted runners only). It then smoke tests both architectures, pushes the images, attests them (`push-to-registry`), verifies the image attestation and signs the images with Cosign. The images therefore contain the same binaries as the release zips. Set the repository variable `USE_DOCKER_HUB=false` (e.g. on forks) to push to ghcr.io only. A local `docker build` without `--build-context` still builds from source.
 
 `release` (tags only) pulls everything together:
 
@@ -82,6 +82,8 @@ gh attestation verify avalanchego \
   --signer-workflow flare-foundation/go-flare/.github/workflows/build-go.yaml \
   --source-ref refs/tags/<tag>
 ```
+
+To also pin the source commit (in case the tag is moved later), add `--source-digest <commit>`, taking the commit SHA from a source you trust, or from the repository with `git ls-remote https://github.com/flare-foundation/go-flare 'refs/tags/<tag>^{}' | cut -f1`. For an annotated tag, leaving out `^{}` returns the tag object SHA, which does not match.
 
 To verify against the published bundle instead of the GitHub API, add `--bundle go-flare-<tag>-linux-<arch>.zip.sigstore.json`. It holds only the attestation of the release build. `gh attestation download` can return several attestations for the same binary, because rebuilding the same commit reproduces it byte for byte; cosign accepts only a single bundle, so use the published file with cosign.
 
