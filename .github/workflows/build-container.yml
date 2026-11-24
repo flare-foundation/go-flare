@@ -88,6 +88,7 @@ jobs:
             --repo "${{ github.repository }}" \
             --signer-workflow "${{ github.repository }}/.github/workflows/build-go.yaml" \
             --source-ref "${GITHUB_REF}" \
+            --source-digest "${GITHUB_SHA}" \
             --deny-self-hosted-runners
         done
 
@@ -174,6 +175,7 @@ jobs:
           --repo "${{ github.repository }}" \
           --signer-workflow "${{ github.repository }}/.github/workflows/build-container.yml" \
           --source-ref "${GITHUB_REF}" \
+          --source-digest "${GITHUB_SHA}" \
           --deny-self-hosted-runners
 
     - name: Install Cosign

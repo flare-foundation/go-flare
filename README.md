@@ -15,7 +15,7 @@ See [release notes](./RELEASES-flare.md) for more info.
 - CPU: Equivalent of 8 AWS vCPU
 - RAM: 16 GiB
 - Storage: 1TB Flare / 3.5TB Songbird
-- OS: Ubuntu 24.04
+- OS: Ubuntu 24.04 or 26.04
 
 ## Compilation
 
@@ -76,7 +76,9 @@ gh attestation verify oci://ghcr.io/flare-foundation/go-flare:<TAG> \
   --signer-workflow flare-foundation/go-flare/.github/workflows/build-container.yml
 ```
 
-or, without a GitHub login, with cosign (tested with v3.1), which reads the attestation from the registry:
+Add `--source-ref refs/tags/<TAG> --source-digest <commit>` to also pin the tag and its commit.
+
+Without a GitHub login, with cosign, which reads the attestation from the registry:
 
 ```bash
 cosign verify-attestation \
