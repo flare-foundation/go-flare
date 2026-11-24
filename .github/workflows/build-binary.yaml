@@ -11,44 +11,78 @@ on:
 
 jobs:
   build:
-    name: Build go-flare with SLSA
+    name: Build go-flare (amd64)
     permissions:
-      contents: write
+      contents: read
       id-token: write
-      packages: write
-      actions: read
-    uses: ./.github/workflows/build-go-slsa3.yaml # zizmor: ignore[self-repository] actionlint does not yet support the $/ syntax
+      attestations: write
+    uses: ./.github/workflows/build-go.yaml # zizmor: ignore[self-repository] actionlint does not yet support the $/ syntax
     with:
       go_version: "1.26.10"
-      ubuntu_version: "24.04"
-      build_artifact_name: "avalanchego"
+      ubuntu_version: "26.04"
+      build_artifact_name: "avalanchego-amd64"
+      attest: true
+
+  build-arm64:
+    name: Build go-flare (arm64)
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/build-go.yaml # zizmor: ignore[self-repository] actionlint does not yet support the $/ syntax
+    with:
+      go_version: "1.26.10"
+      ubuntu_version: "26.04-arm"
+      build_artifact_name: "avalanchego-arm64"
+      attest: true
+
+  images:
+    name: Container images
+    needs: [build, build-arm64]
+    if: github.ref_type == 'tag' || github.ref_name == 'main'
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    uses: ./.github/workflows/build-container.yml # zizmor: ignore[self-repository] actionlint does not yet support the $/ syntax
+    with:
+      amd64_artifact_name: "avalanchego-amd64"
+      arm64_artifact_name: "avalanchego-arm64"
+    secrets:
+      DOCKER_HUB_UID: ${{ secrets.DOCKER_HUB_UID }}
+      DOCKER_HUB_PAT: ${{ secrets.DOCKER_HUB_PAT }}
+      DOCKER_HUB_REPO: ${{ secrets.DOCKER_HUB_REPO }}
 
   build-verification:
     if: github.ref_type == 'tag'
     name: Go Verification Build
+    # id-token/attestations only because build-go.yaml declares an attest job; it is skipped
+    # here (attest: false) and the build job itself is limited to contents: read.
     permissions:
       contents: read
-    uses: ./.github/workflows/build-go-verification.yaml # zizmor: ignore[self-repository] actionlint does not yet support the $/ syntax
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/build-go.yaml # zizmor: ignore[self-repository] actionlint does not yet support the $/ syntax
     with:
       go_version: "1.26.10"
-      ubuntu_version: "latest"
+      ubuntu_version: "26.04"
       build_artifact_name: "avalanchego-verification"
 
   release:
     name: Release
-    runs-on: "ubuntu-24.04"
-    needs: [build, build-verification]
+    runs-on: "ubuntu-26.04"
+    needs: [build, build-arm64, build-verification]
     if: github.ref_type == 'tag'
     permissions:
       contents: write
       id-token: write
+      attestations: read
     steps:
       - name: Install diffoscope
         run: sudo apt-get update -y && sudo apt-get install -y diffoscope-minimal
-      
-      - name: Install slsa-verifier
-        uses: slsa-framework/slsa-verifier/actions/installer@ea584f4502babc6f60d9bc799dbbb13c1caa9ee6 # v2.7.1
-      
+
       - name: Install Cosign
         uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac  # v3
 
@@ -63,18 +97,17 @@ jobs:
 
       - name: Extract artifacts
         run: |
-          mkdir -p release/
+          mkdir -p release/amd64 release/arm64
 
-          tar -xzf artifacts/avalanchego/folder.tgz -C artifacts/avalanchego/
-          mv artifacts/avalanchego/binaries/avalanchego release/
+          cp artifacts/avalanchego-amd64/avalanchego release/amd64/
+          cp artifacts/avalanchego-arm64/avalanchego release/arm64/
 
-          tar -xzf artifacts/avalanchego-attestations/folder.tgz -C artifacts/avalanchego-attestations/
-          mv artifacts/avalanchego-attestations/*-slsa-attestations/avalanchego-binaries.build.slsa artifacts/avalanchego.build.slsa
+          # upload-artifact does not preserve the executable bit
+          find release artifacts/avalanchego-verification -type f -exec chmod 755 {} +
 
           {
-            echo "AVALANCHEGO_BINARY=release/avalanchego"
+            echo "AVALANCHEGO_BINARY=release/amd64/avalanchego"
             echo "AVALANCHEGO_VERIFICATION_BINARY=artifacts/avalanchego-verification/avalanchego"
-            echo "SLSA_PROVENANCE=artifacts/avalanchego.build.slsa"
           } >> "$GITHUB_ENV"
 
       - name: Verify reproducible build
@@ -92,60 +125,76 @@ jobs:
             exit 1
           fi
 
-      - name: Verify SLSA provenance
+      - name: Verify build provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            slsa-verifier verify-artifact \
-              "${AVALANCHEGO_BINARY}" \
-              --provenance-path "${SLSA_PROVENANCE}" \
-              --source-uri "github.com/${{ github.repository }}" \
-              --builder-id "https://github.com/${{ github.repository }}/.github/workflows/build-go-slsa3.yaml@refs/tags/${GITHUB_REF_NAME}"
-          else
-            echo "Skipping SLSA verification for non-release tag: ${GITHUB_REF_NAME}"
-          fi
+          for arch in amd64 arm64; do
+            # Publish the single bundle created by this build, so it verifies on its own (cosign
+            # expects exactly one bundle per file).
+            shopt -s nullglob
+            BUNDLES=("artifacts/avalanchego-${arch}-attestation"/*)
+            if [ "${#BUNDLES[@]}" -ne 1 ]; then
+              echo "Expected one attestation bundle for ${arch}, found ${#BUNDLES[@]}"
+              exit 1
+            fi
+            cp "${BUNDLES[0]}" "release/${arch}.sigstore.json"
+
+            gh attestation verify "release/${arch}/avalanchego" \
+              --bundle "release/${arch}.sigstore.json" \
+              --repo "${{ github.repository }}" \
+              --signer-workflow "${{ github.repository }}/.github/workflows/build-go.yaml" \
+              --source-ref "${GITHUB_REF}" \
+              --source-digest "${GITHUB_SHA}" \
+              --deny-self-hosted-runners
+          done
 
       - name: Package release
         run: |
-          RELEASE_TAG="${GITHUB_REF_NAME}"
-          ARTIFACT_NAME="go-flare-${RELEASE_TAG}-linux-amd64.zip"
+          for arch in amd64 arm64; do
+            ARTIFACT_NAME="go-flare-${GITHUB_REF_NAME}-linux-${arch}.zip"
 
-          cd release
-          zip -r "../$ARTIFACT_NAME" .
+            # Only the binary, stored at the zip root.
+            zip -j "${ARTIFACT_NAME}" "release/${arch}/avalanchego"
 
-          mv "../${SLSA_PROVENANCE}" "../$ARTIFACT_NAME.build.slsa"
+            # Attestation bundle for the binary inside the zip, for offline verification.
+            mv "release/${arch}.sigstore.json" "${ARTIFACT_NAME}.sigstore.json"
+          done
 
-          echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> "$GITHUB_ENV"
-
-      - name: Sign release binary
+      - name: Sign release binaries
         shell: bash
         env:
           COSIGN_EXPERIMENTAL: 1
         run: |
-          cosign sign-blob --yes \
-            --output-signature "${ARTIFACT_NAME}.sig" \
-            --output-certificate "${ARTIFACT_NAME}.pem" \
-            "${ARTIFACT_NAME}"
+          for ARTIFACT_NAME in go-flare-"${GITHUB_REF_NAME}"-linux-*.zip; do
+            cosign sign-blob --yes \
+              --output-signature "${ARTIFACT_NAME}.sig" \
+              --output-certificate "${ARTIFACT_NAME}.pem" \
+              "${ARTIFACT_NAME}"
+          done
 
-      - name: Verify release binary signature
+      - name: Verify release binary signatures
         shell: bash
         env:
           COSIGN_EXPERIMENTAL: 1
         run: |
-          cosign verify-blob \
-            --certificate "${ARTIFACT_NAME}.pem" \
-            --certificate-identity="https://github.com/${{ github.repository }}/.github/workflows/build-binary.yaml@${GITHUB_REF}" \
-            --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
-            --signature "${ARTIFACT_NAME}.sig" \
-            "${ARTIFACT_NAME}"
+          for ARTIFACT_NAME in go-flare-"${GITHUB_REF_NAME}"-linux-*.zip; do
+            cosign verify-blob \
+              --certificate "${ARTIFACT_NAME}.pem" \
+              --certificate-identity="https://github.com/${{ github.repository }}/.github/workflows/build-binary.yaml@${GITHUB_REF}" \
+              --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+              --signature "${ARTIFACT_NAME}.sig" \
+              "${ARTIFACT_NAME}"
+          done
 
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release upload "${GITHUB_REF_NAME}" "${ARTIFACT_NAME}"* --clobber
+            gh release upload "${GITHUB_REF_NAME}" go-flare-"${GITHUB_REF_NAME}"-linux-* --clobber
           else
-            gh release create "${GITHUB_REF_NAME}" "${ARTIFACT_NAME}"* --verify-tag --notes "TODO"
+            gh release create "${GITHUB_REF_NAME}" go-flare-"${GITHUB_REF_NAME}"-linux-* --verify-tag --notes "TODO"
           fi
 
       - name: Archive production artifacts
@@ -153,4 +202,4 @@ jobs:
         with:
           name: dist-bin
           path: |
-            ${{ env.ARTIFACT_NAME }}
+            go-flare-${{ github.ref_name }}-linux-*.zip
