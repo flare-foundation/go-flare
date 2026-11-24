@@ -10,7 +10,7 @@ On the Coston and Songbird networks it limits the fee refund for prioritized con
  * November 24, 2026 at 12:00:00 UTC for the Coston network,
  * December 1, 2026 at 12:00:00 UTC for the Songbird network.
 
-Nodes on these two networks should be updated to this version before these times. On the Flare and Coston2 networks the upgrade is optional but encouraged. The release is compatible with v1.15.1 and does not schedule any new fork times.
+Songbird nodes should be updated to this version before that time, and Coston nodes that still run v1.15.1 should be updated now. On the Flare and Coston2 networks the upgrade is optional but encouraged. The release is compatible with v1.15.1 and does not schedule any new fork times.
 
 **Update to this version only from v1.15.1, on a node that has already passed the Helicon activation.** A node that still runs v1.14.x or older, or that has been offline since before the activation, must first run v1.15.1 until its C-chain has bootstrapped past the Helicon activation, and only then be updated to v1.15.2. Alternatively, such a node can be started on v1.15.2 with an empty database and synced from scratch.
 
@@ -19,10 +19,11 @@ See the [AvalancheGo v1.15.2 release notes](./avalanchego/RELEASES.md) for the c
 ### Flare-specific changes
 
  * On the Coston and Songbird networks, the fee refund for prioritized contracts applies only to transactions with a gas limit of at most 3,000,000 after the activation, the same limit as on the Flare and Coston2 networks. A transaction with a higher gas limit is executed as before but pays the full fee, so data providers on these networks should keep the gas limit of their submission transactions at or below 3,000,000.
+ * On the Coston and Songbird networks, calls to the FTSO v1 price submitter contract (`0x1000000000000000000000000000000000000003`) are no longer prioritized after the activation and pay the full fee, whatever their gas limit. The fee refund for the submission contract of the current FTSO protocol is not affected.
 
 ### Note:
 
- * The `eth-apis` C-chain config option, deprecated in v1.15.1, is removed. The node ignores it and logs a warning, as for any other unrecognized option. Set `apis` instead.
+ * The `eth-apis` C-chain config option, deprecated in v1.15.1, is removed. The node ignores it and logs a warning, as for any other unrecognized option. Set `apis` instead. A config that lists its APIs only under `eth-apis` now serves the default set, which includes `trace` and `txpool`.
  * Since the Helicon activation the C-chain serves the `trace` API (`debug_trace*`, `debug_intermediateRoots`, `debug_standardTrace*ToFile`) by default; before, tracing had to be enabled explicitly. It replays historical blocks and includes methods that read and write files on the node, so a node whose API is reachable by others should not serve it. To turn it off, set the `apis` option in the C-chain `config.json` to a list without `trace`, for example the [external API configuration](./README-docker.md#external-api-configuration). The names of all APIs are listed in the [C-chain config reference](./avalanchego/vms/saevm/cchain/config.md#available-apis).
  * The `avax.getAtomicTxStatus` C-chain RPC is removed. Use `avax.getAtomicTx`, which fails for a transaction that has not been accepted.
  * C-chain metrics no longer include the `transition` prefix; for example, `avalanche_evm_transition_sae_last_executed_height` is now `avalanche_evm_sae_last_executed_height`. Dashboards and alerts that use the old names must be updated.

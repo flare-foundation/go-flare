@@ -3,7 +3,7 @@
 Docker images for the go-flare node implementation found at [github](https://github.com/flare-foundation/go-flare).
 
 ## Variants
-Images with `-dless` postfix are build using distroless base and are rootless.  
+Images with `-dless` postfix are build using distroless base and are rootless.
 Process runs under user `nonroot` with UID `65532`. You should chown your volume mounts to match this UID using `chown -R 65532:65532 /mnt/my/db`.
 
 ## Quickstart
@@ -60,8 +60,8 @@ These are the environment variables you can edit and their default values:
 | `AUTOCONFIGURE_BOOTSTRAP` | `0` | Set to `1` to autoconfigure `BOOTSTRAP_IPS` and `BOOTSTRAP_IDS` |
 | `AUTOCONFIGURE_BOOTSTRAP_ENDPOINT` | `https://coston2-bootstrap.flare.network/ext/info` | Endpoint used for [bootstrapping](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#bootstrapping) when `AUTOCONFIGURE_BOOTSTRAP` is enabled. Possible values are `https://coston2-bootstrap.flare.network/ext/info`, `https://flare-bootstrap.flare.network/ext/info`, `https://coston-bootstrap.flare.network/ext/info` or `https://songbird-bootstrap.flare.network/ext/info`. |
 | `AUTOCONFIGURE_FALLBACK_ENDPOINTS` | _(empty)_ | Comma-divided fallback bootstrap endpoints, used if `AUTOCONFIGURE_BOOTSTRAP_ENDPOINT` is not valid (not whitelisted / unreachable / etc), tested from first-to-last until one is valid |
-| `BOOTSTRAP_BEACON_CONNECTION_TIMEOUT` | `1m` | Set the duration value (eg. `45s` / `5m` / `1h`) for [--bootstrap-beacon-connection-timeout](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#--bootstrap-beacon-connection-timeout-duration) AvalancheGo flag. | 
-| `HTTP_ALLOWED_HOSTS` | `*` | Blocks RPC calls unless they originate from these hostnames. | 
+| `BOOTSTRAP_BEACON_CONNECTION_TIMEOUT` | `1m` | Set the duration value (eg. `45s` / `5m` / `1h`) for [--bootstrap-beacon-connection-timeout](https://docs.avax.network/nodes/maintain/avalanchego-config-flags#--bootstrap-beacon-connection-timeout-duration) AvalancheGo flag. |
+| `HTTP_ALLOWED_HOSTS` | `*` | Blocks RPC calls unless they originate from these hostnames. |
 | `EXTRA_ARGUMENTS` | | Extra arguments passed to flare binary |
 
 
@@ -73,7 +73,7 @@ The C-chain API allowlist is set with the `apis` option; the available names are
 
 ### External API configuration
 
-The external API configuration is set to only respond to API calls so it offloads the other internal nodes. What makes it external is the relatively small set of functions that it exposes which are meant for public use. The node with this configuration exposes the HTTP port (default: 9650) and does not need any publicly open ports to work. The images tagged with the suffix `api` have this configuration preloaded by default.
+The external API configuration is set to only respond to API calls so it offloads the other internal nodes. What makes it external is the relatively small set of functions that it exposes which are meant for public use. The node with this configuration exposes the HTTP port (default: 9650) and does not need any publicly open ports to work.
 
 ```sh
 {
