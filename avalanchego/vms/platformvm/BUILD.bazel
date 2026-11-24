@@ -67,7 +67,6 @@ go_library(
         "//vms/secp256k1fx",
         "//vms/txs/mempool",
         "//vms/types",
-        "@com_github_gorilla_rpc//v2:rpc",
         "@org_uber_go_zap//:zap",
     ],
 )
@@ -75,6 +74,7 @@ go_library(
 go_test(
     name = "platformvm_test",
     srcs = [
+        "client_permissionless_validator_test.go",
         "main_test.go",
         "service_test.go",
         "validator_set_property_test.go",
@@ -96,6 +96,7 @@ go_test(
         "//message",
         "//network/p2p",
         "//network/p2p/gossip",
+        "//network/p2p/peertracker",
         "//proto/pb/p2p",
         "//snow",
         "//snow/consensus/snowball",
@@ -131,6 +132,7 @@ go_test(
         "//utils/logging",
         "//utils/math/meter",
         "//utils/resource",
+        "//utils/rpc",
         "//utils/set",
         "//utils/timer",
         "//utils/timer/mockable",

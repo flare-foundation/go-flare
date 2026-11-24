@@ -6,6 +6,7 @@ package saexec
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -80,7 +81,7 @@ func newGatedExecutor(t *testing.T, sut *SUT, gate *gatedHooks) (*Executor, func
 	last := sut.LastExecuted()
 	tr, err := saedb.NewTracker(sut.db, sut.saedbConfig, last.PostExecutionStateRoot(), sut.chainDataDir, log)
 	require.NoError(t, err, "saedb.NewTracker()")
-	e, err := New(last, src.AsHeaderSource(), sut.chainConfig, sut.db, sut.xdb, tr, gate, log, prometheus.NewRegistry())
+	e, err := New(last, new(atomic.Pointer[blocks.Block]), src.AsHeaderSource(), sut.chainConfig, sut.db, sut.xdb, tr, gate, log, prometheus.NewRegistry())
 	require.NoError(t, err, "New()")
 
 	closeOnce := sync.OnceFunc(func() {

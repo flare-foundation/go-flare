@@ -25,34 +25,34 @@ import (
 
 	"github.com/ava-labs/avalanchego/graft/coreth/nativeasset"
 	"github.com/ava-labs/avalanchego/graft/coreth/params/extras"
-	"github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/upgrade/ap4"
-	"github.com/ava-labs/avalanchego/graft/evm/constants"
 	"github.com/ava-labs/avalanchego/snow"
 	networkconstants "github.com/ava-labs/avalanchego/utils/constants"
+	"github.com/ava-labs/avalanchego/vms/evm/blackhole"
 
 	dcore "github.com/ava-labs/avalanchego/graft/coreth/core"
 	corethparams "github.com/ava-labs/avalanchego/graft/coreth/params"
-	corethevm "github.com/ava-labs/avalanchego/graft/coreth/plugin/evm"
+	cchainlibevm "github.com/ava-labs/avalanchego/vms/saevm/cchain/libevm"
 	ethparams "github.com/ava-labs/libevm/params"
 )
 
 // withCChainExtras runs fn with the libevm extras registered exactly as
-// main/main.go does for the production binary (RegisterAllLibEVMExtras),
+// main/main.go does for the production binary (cchain/libevm.RegisterExtras),
 // scoped to fn. [ApplyTransactionWithExtras] relies on this registration:
 // coreth's params.RulesExtra.ShouldCreditBaseFeeToCoinbase makes libevm credit
-// the base fee to the coinbase ([constants.BlackholeAddr]), without which
+// the base fee to the coinbase ([blackhole.Address]), without which
 // settleFees would find the coinbase underfunded.
 func withCChainExtras(t *testing.T, fn func(t *testing.T)) {
 	t.Helper()
-	require.NoError(t, corethevm.WithTempRegisteredLibEVMExtras(func() error {
+	require.NoError(t, cchainlibevm.WithTempRegisteredExtras(func() error {
 		fn(t)
 		return nil
-	}), "WithTempRegisteredLibEVMExtras()")
+	}), "WithTempRegisteredExtras()")
 }
 
 var (
 	deadBurnAddress    = common.HexToAddress("0x000000000000000000000000000000000000dEaD")
 	ftsoContractAddr   = common.HexToAddress("0x1000000000000000000000000000000000000003")
+	submitterAddr      = common.HexToAddress("0x2cA6571Daa15ce734Bbd0Bf27D5C9D16787fc33f")
 	daemonContractAddr = common.HexToAddress("0x1000000000000000000000000000000000000002")
 	governanceAddr     = common.HexToAddress("0x1000000000000000000000000000000000000007")
 
@@ -82,10 +82,10 @@ func TestNewExtrasConfig(t *testing.T) {
 		{
 			name:     "flare_burns_to_dead",
 			chainID:  corethparams.FlareChainID,
-			coinbase: constants.BlackholeAddr,
+			coinbase: blackhole.Address,
 			want: &ExtrasConfig{
 				BurnAddress:     deadBurnAddress,
-				NominalGasPrice: uint64(ap4.MinBaseFee),
+				NominalGasPrice: dcore.NominalGasPrice,
 				CallDaemon:      true,
 			},
 		},
@@ -95,16 +95,16 @@ func TestNewExtrasConfig(t *testing.T) {
 			coinbase: otherCoinbase,
 			want: &ExtrasConfig{
 				BurnAddress:     deadBurnAddress,
-				NominalGasPrice: uint64(ap4.MinBaseFee),
+				NominalGasPrice: dcore.NominalGasPrice,
 				CallDaemon:      true,
 			},
 		},
 		{
 			name:     "songbird_burns_to_coinbase",
 			chainID:  corethparams.SongbirdChainID,
-			coinbase: constants.BlackholeAddr,
+			coinbase: blackhole.Address,
 			want: &ExtrasConfig{
-				BurnAddress:     constants.BlackholeAddr,
+				BurnAddress:     blackhole.Address,
 				NominalGasPrice: 225 * ethparams.GWei,
 				CallDaemon:      true,
 			},
@@ -127,7 +127,7 @@ func TestNewExtrasConfig(t *testing.T) {
 			coinbase: otherCoinbase,
 			want: &ExtrasConfig{
 				BurnAddress:     otherCoinbase,
-				NominalGasPrice: uint64(ap4.MinBaseFee),
+				NominalGasPrice: dcore.NominalGasPrice,
 				CallDaemon:      false,
 			},
 		},
@@ -156,7 +156,7 @@ func TestSettleFees(t *testing.T) {
 			CallDaemon:      true,
 		}
 		songbirdExtras = &ExtrasConfig{
-			BurnAddress:     constants.BlackholeAddr,
+			BurnAddress:     blackhole.Address,
 			NominalGasPrice: 225 * ethparams.GWei,
 			CallDaemon:      true,
 		}
@@ -182,69 +182,69 @@ func TestSettleFees(t *testing.T) {
 	}{
 		{
 			name:        "flare_burns_full_fee",
-			coinbase:    constants.BlackholeAddr,
+			coinbase:    blackhole.Address,
 			extras:      flareExtras,
 			coinbaseBal: fee,
 			usedGas:     50_000,
 			gasPrice:    big.NewInt(100 * ethparams.GWei),
 			want: map[common.Address]*uint256.Int{
-				deadBurnAddress:         fee,
-				constants.BlackholeAddr: uint256.NewInt(0),
-				sender:                  uint256.NewInt(0),
+				deadBurnAddress:   fee,
+				blackhole.Address: uint256.NewInt(0),
+				sender:            uint256.NewInt(0),
 			},
 		},
 		{
 			name:        "flare_prioritised_refunds_excess",
-			coinbase:    constants.BlackholeAddr,
+			coinbase:    blackhole.Address,
 			extras:      flareExtras,
 			coinbaseBal: fee,
 			usedGas:     50_000,
 			gasPrice:    big.NewInt(100 * ethparams.GWei),
 			prioritised: true,
 			want: map[common.Address]*uint256.Int{
-				deadBurnAddress:         nominalFlare,
-				sender:                  new(uint256.Int).Sub(fee, nominalFlare),
-				constants.BlackholeAddr: uint256.NewInt(0),
+				deadBurnAddress:   nominalFlare,
+				sender:            new(uint256.Int).Sub(fee, nominalFlare),
+				blackhole.Address: uint256.NewInt(0),
 			},
 		},
 		{
 			name:        "flare_prioritised_fee_below_nominal_burns_all",
-			coinbase:    constants.BlackholeAddr,
+			coinbase:    blackhole.Address,
 			extras:      flareExtras,
 			coinbaseBal: uint256.NewInt(210_000_000_000_000), // 21,000 gas at 10 GWei
 			usedGas:     21_000,
 			gasPrice:    big.NewInt(10 * ethparams.GWei),
 			prioritised: true,
 			want: map[common.Address]*uint256.Int{
-				deadBurnAddress:         uint256.NewInt(210_000_000_000_000),
-				sender:                  uint256.NewInt(0),
-				constants.BlackholeAddr: uint256.NewInt(0),
+				deadBurnAddress:   uint256.NewInt(210_000_000_000_000),
+				sender:            uint256.NewInt(0),
+				blackhole.Address: uint256.NewInt(0),
 			},
 		},
 		{
 			name:        "songbird_fee_stays_on_coinbase",
-			coinbase:    constants.BlackholeAddr,
+			coinbase:    blackhole.Address,
 			extras:      songbirdExtras,
 			coinbaseBal: fee,
 			usedGas:     50_000,
 			gasPrice:    big.NewInt(100 * ethparams.GWei),
 			want: map[common.Address]*uint256.Int{
-				constants.BlackholeAddr: fee,
-				deadBurnAddress:         uint256.NewInt(0),
-				sender:                  uint256.NewInt(0),
+				blackhole.Address: fee,
+				deadBurnAddress:   uint256.NewInt(0),
+				sender:            uint256.NewInt(0),
 			},
 		},
 		{
 			name:        "songbird_prioritised_refunds_excess",
-			coinbase:    constants.BlackholeAddr,
+			coinbase:    blackhole.Address,
 			extras:      songbirdExtras,
 			coinbaseBal: fee,
 			usedGas:     50_000,
 			gasPrice:    big.NewInt(100 * ethparams.GWei),
 			prioritised: true,
 			want: map[common.Address]*uint256.Int{
-				constants.BlackholeAddr: nominalSongbird,
-				sender:                  new(uint256.Int).Sub(fee, nominalSongbird),
+				blackhole.Address: nominalSongbird,
+				sender:            new(uint256.Int).Sub(fee, nominalSongbird),
 			},
 		},
 		{
@@ -253,32 +253,32 @@ func TestSettleFees(t *testing.T) {
 			// the coinbase holds less than the full fee (libevm without
 			// coreth's ShouldCreditBaseFeeToCoinbase hook credits only the tip).
 			name:        "burn_address_is_coinbase_noop_even_underfunded",
-			coinbase:    constants.BlackholeAddr,
+			coinbase:    blackhole.Address,
 			extras:      songbirdExtras,
 			coinbaseBal: uint256.NewInt(1), // far below the full fee
 			usedGas:     50_000,
 			gasPrice:    big.NewInt(100 * ethparams.GWei),
 			want: map[common.Address]*uint256.Int{
-				constants.BlackholeAddr: uint256.NewInt(1),
-				deadBurnAddress:         uint256.NewInt(0),
-				sender:                  uint256.NewInt(0),
+				blackhole.Address: uint256.NewInt(1),
+				deadBurnAddress:   uint256.NewInt(0),
+				sender:            uint256.NewInt(0),
 			},
 		},
 		{
 			name:     "zero_fee_leaves_state_untouched",
-			coinbase: constants.BlackholeAddr,
+			coinbase: blackhole.Address,
 			extras:   flareExtras,
 			usedGas:  50_000,
 			gasPrice: big.NewInt(0),
 			want: map[common.Address]*uint256.Int{
-				constants.BlackholeAddr: uint256.NewInt(0),
-				deadBurnAddress:         uint256.NewInt(0),
-				sender:                  uint256.NewInt(0),
+				blackhole.Address: uint256.NewInt(0),
+				deadBurnAddress:   uint256.NewInt(0),
+				sender:            uint256.NewInt(0),
 			},
 		},
 		{
 			name:        "underfunded_coinbase_errors",
-			coinbase:    constants.BlackholeAddr,
+			coinbase:    blackhole.Address,
 			extras:      flareExtras,
 			coinbaseBal: new(uint256.Int).SubUint64(fee, 1),
 			usedGas:     50_000,
@@ -362,7 +362,8 @@ type applyTxEnv struct {
 }
 
 // testBlockTime is after every prioritised-contract activation time defined
-// in graft/coreth/core/daemon.go.
+// in graft/coreth/core/daemon.go, except the Songbird/Coston gas limit cap
+// activation (November/December 2026), which the cap tests set on the header explicitly.
 var testBlockTime = uint64(time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC).Unix())
 
 // newTestChainConfig returns a fresh all-forks-active config (mirroring
@@ -396,7 +397,7 @@ func newTestChainConfig(chainID *big.Int) *ethparams.ChainConfig {
 
 // newApplyTxEnv returns an environment on the given chain ID with a funded
 // sender and the daemon contract (0x…02) coded to request `mintRequestWei`.
-// The coinbase is [constants.BlackholeAddr], as guaranteed for verified SAE
+// The coinbase is [blackhole.Address], as guaranteed for verified SAE
 // blocks.
 func newApplyTxEnv(t *testing.T, chainID *big.Int, mintRequestWei *uint256.Int) *applyTxEnv {
 	t.Helper()
@@ -416,7 +417,7 @@ func newApplyTxEnv(t *testing.T, chainID *big.Int, mintRequestWei *uint256.Int) 
 		Time:          testBlockTime,
 		BaseFee:       big.NewInt(25 * ethparams.GWei),
 		GasLimit:      8_000_000,
-		Coinbase:      constants.BlackholeAddr,
+		Coinbase:      blackhole.Address,
 		Difficulty:    big.NewInt(0),
 		BlobGasUsed:   new(uint64),
 		ExcessBlobGas: new(uint64),
@@ -468,7 +469,7 @@ func testApplyTransactionWithExtrasFlare(t *testing.T) {
 		gasPrice   = big.NewInt(100 * ethparams.GWei)
 		nominalFee = new(uint256.Int).Mul(
 			uint256.NewInt(ethparams.TxGas),
-			uint256.NewInt(uint64(ap4.MinBaseFee)),
+			uint256.NewInt(dcore.NominalGasPrice),
 		)
 		ftsoData = append(append([]byte{}, flareFTSOPrefix...), make([]byte, 32)...)
 	)
@@ -492,7 +493,7 @@ func testApplyTransactionWithExtrasFlare(t *testing.T) {
 
 		assert.Equal(t, nominalFee, env.statedb.GetBalance(deadBurnAddress), "burn address receives only the nominal fee")
 		assert.Equal(t, new(uint256.Int).Sub(initial, nominalFee), env.statedb.GetBalance(env.sender), "sender pays only the nominal fee")
-		assert.True(t, env.statedb.GetBalance(constants.BlackholeAddr).IsZero(), "coinbase fully drained on Flare")
+		assert.True(t, env.statedb.GetBalance(blackhole.Address).IsZero(), "coinbase fully drained on Flare")
 		assert.Equal(t, mint, env.statedb.GetBalance(daemonContractAddr), "daemon mint request honoured")
 	})
 
@@ -575,10 +576,116 @@ func testApplyTransactionWithExtrasSongbird(t *testing.T) {
 	actualFee := feeOf(t, receipt.GasUsed, gasPrice)
 	require.True(t, actualFee.Gt(nominalFee), "test setup: actual fee must exceed the nominal fee")
 
-	assert.Equal(t, nominalFee, env.statedb.GetBalance(constants.BlackholeAddr), "nominal fee stays on the Songbird coinbase")
+	assert.Equal(t, nominalFee, env.statedb.GetBalance(blackhole.Address), "nominal fee stays on the Songbird coinbase")
 	assert.Equal(t, new(uint256.Int).Sub(initial, nominalFee), env.statedb.GetBalance(env.sender), "sender pays only the nominal fee")
 	assert.True(t, env.statedb.GetBalance(deadBurnAddress).IsZero(), "nothing burned to the dEaD address on Songbird")
 	assert.Equal(t, mint, env.statedb.GetBalance(daemonContractAddr), "daemon mint request honoured")
+
+	// Songbird (and Coston) get the Flare 3M gas limit cap for prioritised
+	// calls at a fixed block time: before it, any gas limit is refunded, which
+	// since Helicon (ACP-194 charges at least half of the gas limit, and the
+	// padding is refunded with the rest) made half of the block gas limit free
+	// block space for the nominal fee.
+	capActivation := dcore.PrioritisedGasLimitCapActivationTime(corethparams.SongbirdChainID)
+	require.NotZero(t, capActivation, "test setup: Songbird must schedule the gas limit cap")
+	require.Greater(t, capActivation, testBlockTime, "test setup: testBlockTime must predate the cap activation")
+
+	t.Run("gas_limit_above_cap_before_activation_is_prioritised", func(t *testing.T) {
+		env := newApplyTxEnv(t, corethparams.SongbirdChainID, mint)
+		env.header.Time = capActivation // the cap applies strictly after the activation time
+		initial := env.statedb.GetBalance(env.sender).Clone()
+
+		receipt, err := env.apply(t, &types.LegacyTx{
+			Nonce:    0,
+			To:       &ftsoContractAddr,
+			Gas:      3_000_001,
+			GasPrice: gasPrice,
+			Data:     ftsoData,
+		})
+		require.NoError(t, err, "ApplyTransactionWithExtras()")
+		require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status, "receipt status")
+
+		assert.Equal(t, nominalFee, env.statedb.GetBalance(blackhole.Address), "nominal fee stays on the Songbird coinbase")
+		assert.Equal(t, new(uint256.Int).Sub(initial, nominalFee), env.statedb.GetBalance(env.sender), "sender pays only the nominal fee before the cap activation")
+	})
+
+	// From the same block time the FTSO v1 branch is retired on Songbird (and
+	// Coston): its contract accepts empty arrays from any sender, so the cap
+	// alone would leave the refund open to everyone. Not even a call within
+	// the cap is refunded.
+	t.Run("ftso_call_after_activation_is_not_prioritised", func(t *testing.T) {
+		env := newApplyTxEnv(t, corethparams.SongbirdChainID, mint)
+		env.header.Time = capActivation + 1
+		initial := env.statedb.GetBalance(env.sender).Clone()
+
+		receipt, err := env.apply(t, &types.LegacyTx{
+			Nonce:    0,
+			To:       &ftsoContractAddr,
+			Gas:      100_000,
+			GasPrice: gasPrice,
+			Data:     ftsoData,
+		})
+		require.NoError(t, err, "ApplyTransactionWithExtras()")
+		require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status, "receipt status")
+
+		actualFee := feeOf(t, receipt.GasUsed, gasPrice)
+		require.True(t, actualFee.Gt(nominalFee), "test setup: actual fee must exceed the nominal fee")
+		assert.Equal(t, actualFee, env.statedb.GetBalance(blackhole.Address), "full fee stays on the Songbird coinbase, no refund")
+		assert.Equal(t, new(uint256.Int).Sub(initial, actualFee), env.statedb.GetBalance(env.sender), "sender pays the full fee for an FTSO call after the activation")
+		assert.Equal(t, mint, env.statedb.GetBalance(daemonContractAddr), "daemon still runs for successful txs")
+	})
+
+	// After the activation the cap is therefore exercised on the submitter
+	// branch, which needs a non-zero return value from the submitter contract.
+	submitterData := []byte{0x6c, 0x53, 0x2f, 0xae} // submit1()
+	newSubmitterEnv := func(t *testing.T) *applyTxEnv {
+		t.Helper()
+		env := newApplyTxEnv(t, corethparams.SongbirdChainID, mint)
+		env.header.Time = capActivation + 1
+		env.statedb.SetCode(submitterAddr, mintReturnCode(uint256.NewInt(1)))
+		return env
+	}
+
+	t.Run("gas_limit_above_cap_after_activation_is_not_prioritised", func(t *testing.T) {
+		env := newSubmitterEnv(t)
+		initial := env.statedb.GetBalance(env.sender).Clone()
+
+		receipt, err := env.apply(t, &types.LegacyTx{
+			Nonce:    0,
+			To:       &submitterAddr,
+			Gas:      3_000_001,
+			GasPrice: gasPrice,
+			Data:     submitterData,
+		})
+		require.NoError(t, err, "ApplyTransactionWithExtras()")
+		require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status, "receipt status")
+		require.Less(t, receipt.GasUsed, uint64(3_000_000), "test setup: gas used must be below the cap")
+
+		actualFee := feeOf(t, receipt.GasUsed, gasPrice)
+		require.True(t, actualFee.Gt(nominalFee), "test setup: actual fee must exceed the nominal fee")
+		assert.Equal(t, actualFee, env.statedb.GetBalance(blackhole.Address), "full fee stays on the Songbird coinbase, no refund")
+		assert.Equal(t, new(uint256.Int).Sub(initial, actualFee), env.statedb.GetBalance(env.sender), "sender pays the full fee after the cap activation")
+		assert.Equal(t, mint, env.statedb.GetBalance(daemonContractAddr), "daemon still runs for successful txs")
+	})
+
+	t.Run("gas_limit_at_cap_after_activation_is_prioritised", func(t *testing.T) {
+		env := newSubmitterEnv(t)
+		initial := env.statedb.GetBalance(env.sender).Clone()
+
+		receipt, err := env.apply(t, &types.LegacyTx{
+			Nonce:    0,
+			To:       &submitterAddr,
+			Gas:      3_000_000,
+			GasPrice: gasPrice,
+			Data:     submitterData,
+		})
+		require.NoError(t, err, "ApplyTransactionWithExtras()")
+		require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status, "receipt status")
+		require.True(t, feeOf(t, receipt.GasUsed, gasPrice).Gt(nominalFee), "test setup: actual fee must exceed the nominal fee")
+
+		assert.Equal(t, nominalFee, env.statedb.GetBalance(blackhole.Address), "nominal fee stays on the Songbird coinbase")
+		assert.Equal(t, new(uint256.Int).Sub(initial, nominalFee), env.statedb.GetBalance(env.sender), "sender pays only the nominal fee at the cap")
+	})
 }
 
 // TestApplyTransactionWithExtrasNonFlareChain asserts upstream-equivalent
@@ -607,7 +714,7 @@ func testApplyTransactionWithExtrasNonFlareChain(t *testing.T) {
 	require.Equal(t, types.ReceiptStatusSuccessful, receipt.Status, "receipt status")
 
 	actualFee := feeOf(t, receipt.GasUsed, gasPrice)
-	assert.Equal(t, actualFee, env.statedb.GetBalance(constants.BlackholeAddr), "coinbase keeps the full fee, matching upstream")
+	assert.Equal(t, actualFee, env.statedb.GetBalance(blackhole.Address), "coinbase keeps the full fee, matching upstream")
 	assert.True(t, env.statedb.GetBalance(deadBurnAddress).IsZero(), "nothing burned")
 	assert.True(t, env.statedb.GetBalance(daemonContractAddr).IsZero(), "daemon must not run on non-Flare chains")
 	assert.Equal(t, new(uint256.Int).Sub(initial, actualFee), env.statedb.GetBalance(env.sender), "sender pays the full fee")
@@ -686,7 +793,7 @@ func testApplyTransactionHeliconBoundary(t *testing.T) {
 		{
 			name:         "at_helicon_uses_reduced_extras",
 			blockTime:    heliconTime,
-			wantCoinbase: constants.BlackholeAddr,
+			wantCoinbase: blackhole.Address,
 		},
 	}
 

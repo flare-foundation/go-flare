@@ -54,6 +54,11 @@ type ExecutionResult struct {
 	RefundedGas uint64 // Total gas refunded after execution
 	Err         error  // Any error encountered during the execution(listed in core/vm/errors.go)
 	ReturnData  []byte // Returned data from evm(function result or data supplied with revert opcode)
+
+	// GasExecuted mirrors libevm's field (gas used before any minimum-gas
+	// enforcement, after refunds). The legacy transition has no minimum gas
+	// consumption, so it always equals UsedGas. Metrics only.
+	GasExecuted uint64
 }
 
 // Unwrap returns the internal evm error which allows us for further
@@ -588,6 +593,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		RefundedGas: gasRefund,
 		Err:         vmerr,
 		ReturnData:  ret,
+		GasExecuted: st.gasUsed(),
 	}, nil
 }
 

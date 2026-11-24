@@ -532,3 +532,85 @@ func TestPrioritisedContract(t *testing.T) {
 		t.Errorf("Expected true for FTSO contract after prefix activation with correct data")
 	}
 }
+
+// TestPrioritisedContractGasLimitCapSongbirdNetworks pins the time-gated rules
+// of prioritised calls on Songbird and Coston. Up to and including the
+// activation time any gas limit is refunded, on the FTSO and the submitter
+// branch alike. After it the submitter branch is capped at
+// prioritisedMaxGasLimit (the Flare cap) and the FTSO v1 branch is retired: no
+// call to the FTSO contract is prioritised any more, whatever its gas limit.
+// Flare keeps its cap and its FTSO branch. The local networks define no FTSO
+// prefixes, so the branch never matches there.
+func TestPrioritisedContractGasLimitCapSongbirdNetworks(t *testing.T) {
+	ret1 := [32]byte{}
+	ret1[31] = 1
+	ftsoData := []byte{0xc5, 0xad, 0xc5, 0x39, 0x05}       // submitPriceHashes selector (Songbird networks)
+	ftsoRevealData := []byte{0x60, 0x84, 0x8b, 0x44, 0x05} // revealPrices selector (Songbird networks)
+	submitterData := []byte{0x6c, 0x53, 0x2f, 0xae, 0x05}  // submit1 selector
+	const blockGasLimit = 70_000_000                       // the SAE block gas limit on Songbird at the time of writing
+
+	for _, test := range []struct {
+		name       string
+		chainID    *big.Int
+		activation uint64
+	}{
+		{"songbird", params.SongbirdChainID, prioritisedGasLimitCapActivationTimeSongbird},
+		{"coston", params.CostonChainID, prioritisedGasLimitCapActivationTimeCoston},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			for _, blockTime := range []uint64{test.activation - 1, test.activation} {
+				for _, data := range [][]byte{ftsoData, ftsoRevealData} {
+					if !IsPrioritisedContractCall(test.chainID, blockTime, &prioritisedFTSOContractAddress, data, nil, blockGasLimit) {
+						t.Errorf("block time %d: expected true for FTSO call %x with gas limit %d before the cap activation", blockTime, data[:4], blockGasLimit)
+					}
+				}
+				if !IsPrioritisedContractCall(test.chainID, blockTime, &prioritisedSubmitterContractAddress, submitterData, ret1[:], blockGasLimit) {
+					t.Errorf("block time %d: expected true for submitter call with gas limit %d before the cap activation", blockTime, blockGasLimit)
+				}
+			}
+
+			// The FTSO v1 branch is retired at the activation: not even a call
+			// within the cap is prioritised.
+			after := test.activation + 1
+			for _, data := range [][]byte{ftsoData, ftsoRevealData} {
+				for _, gasLimit := range []uint64{blockGasLimit, prioritisedMaxGasLimit + 1, prioritisedMaxGasLimit, 100_000} {
+					if IsPrioritisedContractCall(test.chainID, after, &prioritisedFTSOContractAddress, data, nil, gasLimit) {
+						t.Errorf("expected false for FTSO call %x with gas limit %d after the cap activation", data[:4], gasLimit)
+					}
+				}
+			}
+			if IsPrioritisedContractCall(test.chainID, after, &prioritisedSubmitterContractAddress, submitterData, ret1[:], prioritisedMaxGasLimit+1) {
+				t.Errorf("expected false for submitter call with gas limit %d after the cap activation", prioritisedMaxGasLimit+1)
+			}
+			if !IsPrioritisedContractCall(test.chainID, after, &prioritisedSubmitterContractAddress, submitterData, ret1[:], prioritisedMaxGasLimit) {
+				t.Errorf("expected true for submitter call with gas limit %d after the cap activation", prioritisedMaxGasLimit)
+			}
+		})
+	}
+
+	// Flare and Coston2 have had the cap since the beginning and keep their
+	// FTSO branch (their PriceSubmitter rejects senders that are not
+	// whitelisted).
+	flareFTSOData := []byte{0x8f, 0xc6, 0xf6, 0x67, 0x05} // submitHash selector (Flare networks)
+	blockTime := uint64(time.Date(2027, time.January, 1, 0, 0, 0, 0, time.UTC).Unix())
+	for _, chainID := range []*big.Int{params.FlareChainID, params.CostwoChainID} {
+		if IsPrioritisedContractCall(chainID, blockTime, &prioritisedFTSOContractAddress, flareFTSOData, nil, prioritisedMaxGasLimit+1) {
+			t.Errorf("chain %s: expected false for Flare FTSO call with gas limit %d", chainID, prioritisedMaxGasLimit+1)
+		}
+		if !IsPrioritisedContractCall(chainID, blockTime, &prioritisedFTSOContractAddress, flareFTSOData, nil, prioritisedMaxGasLimit) {
+			t.Errorf("chain %s: expected true for Flare FTSO call with gas limit %d", chainID, prioritisedMaxGasLimit)
+		}
+	}
+
+	// The local networks define no FTSO prefixes, so no call to the FTSO
+	// contract is prioritised there at any block time above zero.
+	for _, chainID := range []*big.Int{params.LocalChainID, params.LocalFlareChainID} {
+		for _, data := range [][]byte{ftsoData, ftsoRevealData, flareFTSOData} {
+			for _, localTime := range []uint64{1, blockTime} {
+				if IsPrioritisedContractCall(chainID, localTime, &prioritisedFTSOContractAddress, data, nil, 100_000) {
+					t.Errorf("chain %s, block time %d: expected false for FTSO call %x on a local network", chainID, localTime, data[:4])
+				}
+			}
+		}
+	}
+}

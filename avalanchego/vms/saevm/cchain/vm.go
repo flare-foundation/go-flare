@@ -20,13 +20,14 @@ import (
 
 	"github.com/ava-labs/avalanchego/api"
 	"github.com/ava-labs/avalanchego/database/prefixdb"
-	"github.com/ava-labs/avalanchego/graft/evm/utils/rpc"
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/network/p2p"
 	"github.com/ava-labs/avalanchego/network/p2p/gossip"
 	"github.com/ava-labs/avalanchego/snow"
+	"github.com/ava-labs/avalanchego/snow/engine/snowman/block"
 	"github.com/ava-labs/avalanchego/utils"
 	"github.com/ava-labs/avalanchego/utils/bloom"
+	"github.com/ava-labs/avalanchego/utils/rpc"
 	"github.com/ava-labs/avalanchego/vms/evm/sync/customrawdb"
 	"github.com/ava-labs/avalanchego/vms/saevm/adaptor"
 	"github.com/ava-labs/avalanchego/vms/saevm/blocks"
@@ -159,9 +160,8 @@ func (vm *VM) Initialize(
 		return fmt.Errorf("creating network: %w", err)
 	}
 
-	// [prefixdb.NewNested] is used because coreth used to be run as a plugin.
-	// This meant that the database's prefix was not compacted, because the
-	// provided database was wrapped by the rpcchainvm.
+	// The use of [prefixdb.NewNested] rather than [prefixdb.New] is part of the
+	// on-disk format and MUST NOT change.
 	ethDB := types.NewEthDB(prefixdb.NewNested(ethDBPrefix, avaDB))
 
 	if err := genesis.verifyAndWriteBlock(ethDB); err != nil {
@@ -391,6 +391,24 @@ func (vm *VM) GetBlock(ctx context.Context, id ids.ID) (*blocks.Block, error) {
 // GetBlockIDAtHeight returns the ID of the block at the given height.
 func (vm *VM) GetBlockIDAtHeight(ctx context.Context, height uint64) (ids.ID, error) {
 	return vm.activeHandler().GetBlockIDAtHeight(ctx, height)
+}
+
+var _ block.HeightByIDChainVM = (*VM)(nil)
+
+// GetBlockHeight returns the height of the block with the given ID without
+// restoring the block; see [sae.VM.GetBlockHeight]. Flare addition
+// implementing [block.HeightByIDChainVM] for the proposervm proposer lookup
+// API. Before the SAE VM exists (state syncing) it falls back to
+// [VM.GetBlock].
+func (vm *VM) GetBlockHeight(ctx context.Context, id ids.ID) (uint64, error) {
+	if h, ok := vm.activeHandler().(block.HeightByIDChainVM); ok {
+		return h.GetBlockHeight(ctx, id)
+	}
+	blk, err := vm.GetBlock(ctx, id)
+	if err != nil {
+		return 0, err
+	}
+	return blk.Height(), nil
 }
 
 // LastAccepted returns the ID of the last accepted block.

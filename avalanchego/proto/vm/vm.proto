@@ -139,8 +139,11 @@ message NetworkUpgrades {
   google.protobuf.Timestamp granite_time = 16;
   google.protobuf.Duration granite_epoch_duration = 17;
   google.protobuf.Timestamp helicon_time = 18;
+  google.protobuf.Timestamp igloo_time = 19;
   // Flare: Songbird transition fork time (Songbird/Coston/Local networks).
-  google.protobuf.Timestamp songbird_transition_time = 19;
+  // Numbered well above upstream's sequence so that future upstream upgrades,
+  // which take the next free number, never collide with it.
+  google.protobuf.Timestamp songbird_transition_time = 100;
 }
 
 message InitializeResponse {

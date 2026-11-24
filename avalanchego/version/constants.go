@@ -17,7 +17,7 @@ const (
 	// RPCChainVMProtocol should be bumped anytime changes are made which
 	// require the plugin vm to upgrade to latest avalanchego release to be
 	// compatible.
-	RPCChainVMProtocol uint = 46
+	RPCChainVMProtocol uint = 47
 
 	CurrentDatabase = "v1.4.5"
 	PrevDatabase    = "v1.0.0"
@@ -29,7 +29,7 @@ var (
 		Name:  Client,
 		Major: 1,
 		Minor: 15,
-		Patch: 1,
+		Patch: 2,
 	}
 	MinimumCompatibleVersion = &Application{
 		Name:  Client,
@@ -47,7 +47,7 @@ var (
 	CurrentSgb = &Application{
 		Major: 0,
 		Minor: 13,
-		Patch: 0,
+		Patch: 2,
 	}
 	CurrentSgbApp = &Application{
 		Name:  Client,

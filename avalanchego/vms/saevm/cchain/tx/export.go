@@ -10,9 +10,6 @@ import (
 
 	"github.com/ava-labs/libevm/common"
 
-	// Imported for [atomic.UnsignedExportTx.Burned] comment resolution.
-	_ "github.com/ava-labs/avalanchego/graft/coreth/plugin/evm/atomic"
-
 	"github.com/ava-labs/avalanchego/graft/coreth/core/extstate"
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow"
@@ -41,6 +38,11 @@ type Export struct {
 	DestinationChain ids.ID                     `serialize:"true" json:"destinationChain"`
 	Ins              []Input                    `serialize:"true" json:"inputs"`
 	ExportedOutputs  []*avax.TransferableOutput `serialize:"true" json:"exportedOutputs"`
+}
+
+// SortExportedOutputs calls [avax.SortTransferableOutputs] with the local codec.
+func SortExportedOutputs(outs []*avax.TransferableOutput) {
+	avax.SortTransferableOutputs(outs, c)
 }
 
 // Input identifies an account + nonce pair on the C-Chain that authorizes the
@@ -82,9 +84,8 @@ func AccountInputID(address common.Address, nonce uint64) ids.ID {
 	return id
 }
 
-// Like [atomic.UnsignedExportTx.Burned], burned will error if the sum of the
-// inputs exceeds MaxUint64, even if the total amount burned could be
-// represented as a uint64.
+// burned will error if the sum of the inputs exceeds MaxUint64, even if the
+// total amount burned could be represented as a uint64.
 //
 // Because the total supply of AVAX fits in a uint64, this doesn't matter in
 // practice and allows for easier fuzzing.
@@ -154,9 +155,9 @@ func (e *Export) sanityCheck(ctx *snow.Context) error {
 	if !utils.IsSortedAndUnique(e.Ins) {
 		return errInputsNotSortedUnique
 	}
-	// Like [atomic.UnsignedExportTx.Verify], outputs aren't enforced to be
-	// unique. This is safe because each output's UTXO is keyed by txID and
-	// outputIndex, so duplicate outputs still produce distinct UTXOs.
+	// Outputs aren't enforced to be unique. This is safe because each output's
+	// UTXO is keyed by txID and outputIndex, so duplicate outputs still produce
+	// distinct UTXOs.
 	if !avax.IsSortedTransferableOutputs(e.ExportedOutputs, c) {
 		return errOutputsNotSorted
 	}

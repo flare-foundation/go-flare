@@ -8,6 +8,7 @@ import (
 	"github.com/ava-labs/avalanchego/graft/coreth/params"
 	"github.com/ava-labs/avalanchego/graft/evm/core/state/snapshot"
 	"github.com/ava-labs/libevm/common"
+	ethcore "github.com/ava-labs/libevm/core"
 	"github.com/ava-labs/libevm/core/rawdb"
 	"github.com/ava-labs/libevm/core/state"
 	"github.com/ava-labs/libevm/core/types"
@@ -47,8 +48,8 @@ func TestStateTransitionPrioritizedContract(t *testing.T) {
 			GasPrice: tx.GasPrice(),
 		}
 		context := vm.BlockContext{
-			CanTransfer: CanTransfer,
-			Transfer:    Transfer,
+			CanTransfer: ethcore.CanTransfer,
+			Transfer:    ethcore.Transfer,
 			Coinbase:    common.HexToAddress("0x0100000000000000000000000000000000000000"),
 			BlockNumber: big.NewInt(5),
 			Time:        uint64(time.Date(2024, time.May, 1, 0, 0, 0, 0, time.UTC).Unix()), // Time after setting Submitter contract address on all chains
@@ -56,20 +57,20 @@ func TestStateTransitionPrioritizedContract(t *testing.T) {
 			GasLimit:    gas,
 			BaseFee:     big.NewInt(8),
 		}
-		alloc := GenesisAlloc{}
+		alloc := types.GenesisAlloc{}
 		balance := new(big.Int)
 		balance.SetString("10000000000000000000000000000000000", 10)
-		alloc[from] = GenesisAccount{
+		alloc[from] = types.Account{
 			Nonce:   1,
 			Code:    []byte{},
 			Balance: balance,
 		}
-		alloc[to] = GenesisAccount{
+		alloc[to] = types.Account{
 			Nonce:   2,
 			Code:    code,
 			Balance: balance,
 		}
-		alloc[daemon] = GenesisAccount{
+		alloc[daemon] = types.Account{
 			Nonce:   3,
 			Code:    daemonCode,
 			Balance: balance,
@@ -136,8 +137,8 @@ func TestStateTransitionDaemon(t *testing.T) {
 			GasPrice: tx.GasPrice(),
 		}
 		context := vm.BlockContext{
-			CanTransfer: CanTransfer,
-			Transfer:    Transfer,
+			CanTransfer: ethcore.CanTransfer,
+			Transfer:    ethcore.Transfer,
 			Coinbase:    common.HexToAddress("0x0100000000000000000000000000000000000000"),
 			BlockNumber: big.NewInt(5),
 			Time:        uint64(time.Date(2024, time.May, 1, 0, 0, 0, 0, time.UTC).Unix()),
@@ -145,20 +146,20 @@ func TestStateTransitionDaemon(t *testing.T) {
 			GasLimit:    gas,
 			BaseFee:     big.NewInt(8),
 		}
-		alloc := GenesisAlloc{}
+		alloc := types.GenesisAlloc{}
 		balance := new(big.Int)
 		balance.SetString("10000000000000000000000000000000000", 10)
-		alloc[from] = GenesisAccount{
+		alloc[from] = types.Account{
 			Nonce:   1,
 			Code:    []byte{},
 			Balance: balance,
 		}
-		alloc[to] = GenesisAccount{
+		alloc[to] = types.Account{
 			Nonce:   2,
 			Code:    code, // Reuse the code from the previous test
 			Balance: balance,
 		}
-		alloc[daemon] = GenesisAccount{
+		alloc[daemon] = types.Account{
 			Nonce:   3,
 			Code:    daemonCode,
 			Balance: balance,
@@ -193,7 +194,7 @@ func TestStateTransitionDaemon(t *testing.T) {
 
 // This is a copy of the function from tests/state_test_util.go, to create a starting state for the test EVM
 // We need to copy it here due to import cycle.
-func makePreState(db ethdb.Database, accounts GenesisAlloc, snapshotter bool) (*snapshot.Tree, *state.StateDB) {
+func makePreState(db ethdb.Database, accounts types.GenesisAlloc, snapshotter bool) (*snapshot.Tree, *state.StateDB) {
 	sdb := state.NewDatabase(db)
 	statedb, _ := state.New(common.Hash{}, sdb, nil)
 	for addr, a := range accounts {

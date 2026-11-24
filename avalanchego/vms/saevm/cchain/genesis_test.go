@@ -31,7 +31,6 @@ import (
 
 	avalanchegenesis "github.com/ava-labs/avalanchego/genesis"
 	corethparams "github.com/ava-labs/avalanchego/graft/coreth/params"
-	evmutils "github.com/ava-labs/avalanchego/graft/evm/utils"
 	ethparams "github.com/ava-labs/libevm/params"
 )
 
@@ -71,8 +70,9 @@ func TestParseGenesis(t *testing.T) {
 		costwoCtx  = &snow.Context{NetworkUpgrades: upgrade.Costwo}
 		localCtx   = &snow.Context{NetworkUpgrades: upgrade.Default}
 
-		initiallyActive = evmutils.TimeToNewUint64(upgrade.InitiallyActiveTime)
-		zeroTime        = evmutils.TimeToNewUint64(upgrade.ZeroTime)
+		initiallyActive = new(upgrade.UnixTimestamp(upgrade.InitiallyActiveTime))
+		unscheduled     = new(upgrade.UnixTimestamp(upgrade.UnscheduledActivationTime))
+		zeroTime        = new(upgrade.UnixTimestamp(upgrade.ZeroTime))
 	)
 	tests := []struct {
 		name    string
@@ -122,6 +122,7 @@ func TestParseGenesis(t *testing.T) {
 							FortunaTimestamp:                new(uint64(1744124400)),
 							GraniteTimestamp:                new(uint64(1763568000)),
 							HeliconTimestamp:                new(uint64(1790089200)),
+							IglooTimestamp:                  unscheduled,
 						},
 						AvalancheContext: extras.AvalancheContext{
 							SnowCtx: mainnetCtx,
@@ -194,6 +195,7 @@ func TestParseGenesis(t *testing.T) {
 							FortunaTimestamp:                new(uint64(1774353600)),
 							GraniteTimestamp:                new(uint64(1781611200)),
 							HeliconTimestamp:                new(uint64(1793707200)),
+							IglooTimestamp:                  unscheduled,
 						},
 						AvalancheContext: extras.AvalancheContext{
 							SnowCtx: costwoCtx,
@@ -265,6 +267,7 @@ func TestParseGenesis(t *testing.T) {
 							FortunaTimestamp:                initiallyActive,
 							GraniteTimestamp:                initiallyActive,
 							HeliconTimestamp:                initiallyActive,
+							IglooTimestamp:                  unscheduled,
 						},
 						AvalancheContext: extras.AvalancheContext{
 							SnowCtx: localCtx,
@@ -470,6 +473,7 @@ func TestHistoricalGenesisHashes(t *testing.T) {
 		// price exponent, and the settlement markers.
 		// Added the P-chain gateway precompile (Flare).
 		upgradetest.Helicon: "0x5770c0a49d60be8790f3e7d9b911a414c676cec7fec92cba00b30ac2be8a5392",
+		upgradetest.Igloo:   "0x5770c0a49d60be8790f3e7d9b911a414c676cec7fec92cba00b30ac2be8a5392",
 	}
 	_ = hashes[upgradetest.Latest] // Enforce completeness at compile time.
 

@@ -14,7 +14,13 @@ go_library(
 
 go_test(
     name = "upgrade_test",
-    srcs = ["upgrade_test.go"],
-    embed = [":upgrade"],
-    deps = ["@com_github_stretchr_testify//require"],
+    srcs = [
+        "upgrade_flare_test.go",
+        "upgrade_test.go",
+    ],
+    deps = [
+        ":upgrade",
+        "//upgrade/upgradetest",
+        "@com_github_stretchr_testify//require",
+    ],
 )
